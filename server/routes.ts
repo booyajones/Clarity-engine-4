@@ -309,9 +309,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Prepare CSV data - start with original data, then append classification results
       const csvData = classifications.map(c => {
         const originalData = (c.originalData as Record<string, any>) || {};
+        
+        // Check if this is a duplicate by looking at the reasoning
+        const isDuplicate = c.reasoning && c.reasoning.includes('Duplicate payee detected');
+        
         return {
           ...originalData, // Original columns come first
-          // Append classification results
+          // Append classification results with all relevant information
           clarity_payee_type: c.payeeType,
           clarity_confidence: Math.round(c.confidence * 100) + "%",
           clarity_sic_code: c.sicCode || "",
@@ -319,6 +323,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           clarity_reasoning: c.reasoning || "",
           clarity_status: c.status,
           clarity_cleaned_name: c.cleanedName,
+          clarity_duplicate_detected: isDuplicate ? "Yes" : "No",
+          clarity_original_name: c.originalName,
+          clarity_address: c.address || "",
+          clarity_city: c.city || "",
+          clarity_state: c.state || "",
+          clarity_zip_code: c.zipCode || "",
         };
       });
 

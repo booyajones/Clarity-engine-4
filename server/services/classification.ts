@@ -371,10 +371,26 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
             const isDuplicate = await duplicateDetector.isDuplicate(payee.originalName, payee.address);
             
             if (isDuplicate) {
-              return { 
-                type: 'skipped' as const, 
-                name: payee.originalName, 
-                reason: "Duplicate payee detected (advanced normalization + OpenAI verification)" 
+              // Save duplicates to database with duplicate status and reasoning
+              const cleanedName = normalizePayeeName(payee.originalName);
+              return {
+                type: 'classified' as const,
+                classification: {
+                  batchId,
+                  originalName: payee.originalName,
+                  cleanedName,
+                  address: payee.address,
+                  city: payee.city,
+                  state: payee.state,
+                  zipCode: payee.zipCode,
+                  payeeType: "Business" as const, // Default for duplicates
+                  confidence: 1.0, // High confidence for duplicate detection
+                  sicCode: undefined,
+                  sicDescription: undefined,
+                  reasoning: "Duplicate payee detected (advanced normalization + OpenAI verification). This payee appears to be a duplicate of a previously processed entry based on normalized name and address matching.",
+                  status: "auto-classified" as const,
+                  originalData: payee.originalData,
+                }
               };
             }
             
@@ -425,20 +441,21 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
       }
 
       // Process chunk results
-      
       for (const result of chunkResults) {
         if (result.status === 'fulfilled') {
           if (result.value.type === 'classified') {
             classificationsBuffer.push(result.value.classification);
+            totalProcessed++; // Count as processed
           } else {
             totalSkipped++;
+            totalProcessed++; // Count as processed but skipped
             skippedPayees.push({ name: result.value.name, reason: result.value.reason });
           }
         } else {
           totalSkipped++;
+          totalProcessed++; // Count as processed but failed
           skippedPayees.push({ name: 'Unknown', reason: 'Processing failed' });
         }
-        totalProcessed++;
       }
 
       // Save classifications buffer when it gets large or at end of chunk
