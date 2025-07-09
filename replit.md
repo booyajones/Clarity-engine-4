@@ -114,18 +114,28 @@ Preferred communication style: Simple, everyday language.
 
 ### Smart Classification
 - Multi-layered AI classification engine
-- Confidence-based review routing
-- Manual override capabilities
-- Learning from user corrections
+- 95%+ confidence threshold with automatic skipping
+- OpenAI GPT-4o integration for accurate classification
+- SIC code assignment for business categorization
 
 ### User Experience
 - Drag-and-drop file uploads
-- Real-time processing status
+- Real-time processing status with detailed progress tracking
 - Responsive design with mobile support
 - Accessible UI components
 
 ### Data Management
-- Bulk data processing
-- Export capabilities
-- Audit trail for all changes
-- Data validation and cleanup
+- Bulk data processing with progress tracking
+- Export capabilities preserving original data structure
+- Original columns first, followed by clarity_* classification columns
+- Comprehensive error handling and recovery
+
+## Recent Changes
+
+### July 9, 2025 - Progress Tracking & Export Fix
+- Added comprehensive progress tracking stored in database
+- Real-time progress updates every 2 seconds during processing
+- Fixed export functionality to preserve original field order
+- Export now shows: [Original Fields] + [clarity_payee_type, clarity_confidence, clarity_sic_code, clarity_sic_description, clarity_status, clarity_cleaned_name]
+- Enhanced ProgressTracker component with detailed status messages
+- Database schema updated with skippedRecords, currentStep, progressMessage fields

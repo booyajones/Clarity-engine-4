@@ -180,8 +180,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Export classifications
-  app.get("/api/export/batch/:id", async (req, res) => {
+  // Export classifications  
+  app.get("/api/classifications/export/:id", async (req, res) => {
     try {
       const batchId = parseInt(req.params.id);
       const classifications = await storage.getBatchClassifications(batchId);
@@ -191,21 +191,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Batch not found" });
       }
 
-      // Prepare CSV data
-      const csvData = classifications.map(c => ({
-        original_name: c.originalName,
-        cleaned_name: c.cleanedName,
-        address: c.address || "",
-        city: c.city || "",
-        state: c.state || "",
-        zip_code: c.zipCode || "",
-        payee_type: c.payeeType,
-        payee_type_confidence: c.confidence,
-        sic_code: c.sicCode || "",
-        sic_description: c.sicDescription || "",
-        clarity_status: c.status,
-        ...(c.originalData as Record<string, any> || {}) // Include original columns
-      }));
+      // Prepare CSV data - start with original data, then append classification results
+      const csvData = classifications.map(c => {
+        const originalData = (c.originalData as Record<string, any>) || {};
+        return {
+          ...originalData, // Original columns come first
+          // Append classification results
+          clarity_payee_type: c.payeeType,
+          clarity_confidence: Math.round(c.confidence * 100) + "%",
+          clarity_sic_code: c.sicCode || "",
+          clarity_sic_description: c.sicDescription || "",
+          clarity_status: c.status,
+          clarity_cleaned_name: c.cleanedName,
+        };
+      });
 
       res.setHeader("Content-Type", "text/csv");
       res.setHeader("Content-Disposition", `attachment; filename="classified_${batch.originalFilename}"`);
