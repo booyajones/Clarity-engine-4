@@ -82,6 +82,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Enhanced batch monitoring for large datasets
+  app.get("/api/dashboard/batch-performance", async (req, res) => {
+    try {
+      const userId = 1; // TODO: Get from session/auth
+      const batches = await storage.getUserUploadBatches(userId);
+      
+      const performance = batches.map(batch => ({
+        id: batch.id,
+        filename: batch.filename,
+        totalRecords: batch.totalRecords,
+        processedRecords: batch.processedRecords,
+        skippedRecords: batch.skippedRecords || 0,
+        accuracy: batch.accuracy || 0,
+        status: batch.status,
+        processingTime: batch.completedAt && batch.createdAt ? 
+          Math.round((new Date(batch.completedAt).getTime() - new Date(batch.createdAt).getTime()) / 1000) : null,
+        throughput: batch.completedAt && batch.createdAt && batch.processedRecords ? 
+          Math.round(batch.processedRecords / ((new Date(batch.completedAt).getTime() - new Date(batch.createdAt).getTime()) / 60000) * 100) / 100 : null,
+        currentStep: batch.currentStep,
+        progressMessage: batch.progressMessage
+      }));
+      
+      res.json(performance);
+    } catch (error) {
+      console.error("Error fetching batch performance:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Upload and preview file headers
   app.post("/api/upload/preview", upload.single("file"), async (req: MulterRequest, res) => {
     try {

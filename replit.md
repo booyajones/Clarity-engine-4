@@ -140,8 +140,20 @@ Preferred communication style: Simple, everyday language.
 - **Financial Batch Names**: Creative financial-themed random names (e.g., "Dynamic Dividend 717", "Bullish Portfolio 342")
 - **Best-in-Class Normalization**: Advanced payee name normalization removing punctuation, standardizing business suffixes
 - **Duplicate Detection**: Intelligent duplicate flagging based on normalized names and addresses
+- **Large Batch Processing**: Optimized for handling massive datasets with chunked processing, memory management, and rate limiting
+- **Enhanced Error Handling**: Exponential backoff retry logic, controlled concurrency, and comprehensive failure recovery
+- **Performance Monitoring**: Detailed batch performance metrics including throughput, processing time, and success rates
 - **Database Updates**: Added reasoning, skippedRecords, currentStep, progressMessage fields
 - **Export Format**: [Original Fields] + [clarity_payee_type, clarity_confidence, clarity_sic_code, clarity_sic_description, clarity_reasoning, clarity_status, clarity_cleaned_name]
+
+### Large Data Processing Features
+- **Chunked Processing**: Processes data in 100-record chunks to manage memory efficiently
+- **Controlled Concurrency**: Limits to 5 concurrent OpenAI API calls to prevent rate limiting
+- **Rate Limiting**: Built-in 50 requests/minute limit with automatic backoff
+- **Retry Logic**: Exponential backoff (1s, 2s, 4s) for failed classifications
+- **Memory Management**: Automatic cleanup and buffer management for large datasets
+- **Progress Monitoring**: Real-time tracking of chunk progress, throughput metrics, and detailed status updates
+- **Cancellation Support**: Can stop large batch processing mid-stream with proper cleanup
 
 ### Classification System Changes
 - Removed rule-based and ML classification fallbacks - now uses OpenAI exclusively

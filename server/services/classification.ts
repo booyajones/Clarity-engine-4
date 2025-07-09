@@ -2,8 +2,38 @@ import { storage } from "../storage";
 import { type InsertPayeeClassification } from "@shared/schema";
 import OpenAI from 'openai';
 
+// Rate limiting for OpenAI API calls
+class RateLimiter {
+  private requests: number[] = [];
+  private readonly maxRequests: number;
+  private readonly timeWindow: number;
+
+  constructor(maxRequests: number = 50, timeWindowMs: number = 60000) { // 50 requests per minute
+    this.maxRequests = maxRequests;
+    this.timeWindow = timeWindowMs;
+  }
+
+  async waitIfNeeded(): Promise<void> {
+    const now = Date.now();
+    // Remove old requests outside time window
+    this.requests = this.requests.filter(time => now - time < this.timeWindow);
+    
+    if (this.requests.length >= this.maxRequests) {
+      const oldestRequest = this.requests[0];
+      const waitTime = this.timeWindow - (now - oldestRequest);
+      if (waitTime > 0) {
+        console.log(`Rate limit reached, waiting ${waitTime}ms...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
+    }
+    
+    this.requests.push(now);
+  }
+}
+
 // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const rateLimiter = new RateLimiter();
 
 export interface ClassificationResult {
   payeeType: "Individual" | "Business" | "Government";
@@ -202,6 +232,9 @@ export class ClassificationService {
 
   private async classifyWithOpenAI(name: string, address?: string): Promise<ClassificationResult> {
     try {
+      // Apply rate limiting for large batches
+      await rateLimiter.waitIfNeeded();
+      
       const prompt = `Classify this payee as Individual, Business, or Government with high accuracy.
 
 Payee Name: ${name}
@@ -269,10 +302,14 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
       originalData: any;
     }>
   ): Promise<void> {
-    const classifications: InsertPayeeClassification[] = [];
-    const skippedPayees: Array<{ name: string; reason: string }> = [];
     const totalRecords = payeeData.length;
     const duplicateTracker = new Map<string, boolean>();
+    const BATCH_SIZE = 100; // Process in chunks to manage memory
+    const PROGRESS_UPDATE_INTERVAL = 10; // Update progress every 10 records
+    
+    let totalProcessed = 0;
+    let totalSkipped = 0;
+    let classificationsBuffer: InsertPayeeClassification[] = [];
 
     // Initialize progress tracking
     await storage.updateUploadBatch(batchId, {
@@ -280,116 +317,184 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
       processedRecords: 0,
       skippedRecords: 0,
       currentStep: "Starting classification",
-      progressMessage: "Initializing OpenAI classification...",
+      progressMessage: `Initializing batch processing for ${totalRecords} records...`,
       status: "processing"
     });
 
-    for (let i = 0; i < payeeData.length; i++) {
-      const payee = payeeData[i];
+    // Process data in chunks for large batches
+    for (let chunkStart = 0; chunkStart < payeeData.length; chunkStart += BATCH_SIZE) {
+      const chunkEnd = Math.min(chunkStart + BATCH_SIZE, payeeData.length);
+      const chunk = payeeData.slice(chunkStart, chunkEnd);
       
-      // Check if job was cancelled
+      // Check cancellation before each chunk
       const currentBatch = await storage.getUploadBatch(batchId);
       if (currentBatch?.status === "cancelled") {
         console.log(`Job ${batchId} was cancelled, stopping processing`);
         return;
       }
+
+      console.log(`Processing chunk ${Math.floor(chunkStart/BATCH_SIZE) + 1}/${Math.ceil(payeeData.length/BATCH_SIZE)} (records ${chunkStart + 1}-${chunkEnd})`);
       
-      // Update progress
+      // Update chunk progress
       await storage.updateUploadBatch(batchId, {
-        processedRecords: i,
-        currentStep: "Classifying payees",
-        progressMessage: `Processing ${payee.originalName} (${i + 1} of ${totalRecords})`,
+        currentStep: "Processing batch",
+        progressMessage: `Processing chunk ${Math.floor(chunkStart/BATCH_SIZE) + 1}/${Math.ceil(payeeData.length/BATCH_SIZE)} (${chunkStart + 1}-${chunkEnd} of ${totalRecords})`,
       });
 
-      try {
-        // Generate duplicate key for this payee
-        const duplicateKey = generateDuplicateKey(payee.originalName, payee.address);
-        
-        // Check for duplicates
-        if (duplicateTracker.has(duplicateKey)) {
-          skippedPayees.push({ 
-            name: payee.originalName, 
-            reason: "Duplicate payee detected" 
-          });
-          continue;
-        }
-        
-        const result = await this.classifyPayee(payee.originalName, payee.address);
-        
-        // Only add if confidence is 95% or higher
-        if (result.confidence >= 0.95) {
-          const cleanedName = normalizePayeeName(payee.originalName);
+      // Process chunk with controlled concurrency (limit concurrent OpenAI calls)
+      const CONCURRENT_LIMIT = 5; // Limit concurrent API calls to prevent overwhelming OpenAI
+      const chunkResults = [];
+      
+      for (let i = 0; i < chunk.length; i += CONCURRENT_LIMIT) {
+        const batch = chunk.slice(i, i + CONCURRENT_LIMIT);
+        const batchPromises = batch.map(async (payee, batchIndex) => {
+          const globalIndex = chunkStart + i + batchIndex;
           
-          classifications.push({
-            batchId,
-            originalName: payee.originalName,
-            cleanedName,
-            address: payee.address,
-            city: payee.city,
-            state: payee.state,
-            zipCode: payee.zipCode,
-            payeeType: result.payeeType,
-            confidence: result.confidence,
-            sicCode: result.sicCode,
-            sicDescription: result.sicDescription,
-            reasoning: result.reasoning,
-            status: "auto-classified",
-            originalData: payee.originalData,
-          });
-          
-          // Mark as seen to prevent duplicates
-          duplicateTracker.set(duplicateKey, true);
-        } else {
-          skippedPayees.push({
-            name: payee.originalName,
-            reason: `Confidence ${(result.confidence * 100).toFixed(1)}% below 95% threshold`
-          });
-        }
-      } catch (error) {
-        skippedPayees.push({
-          name: payee.originalName,
-          reason: (error as Error).message
+          try {
+            // Generate duplicate key
+            const duplicateKey = generateDuplicateKey(payee.originalName, payee.address);
+            
+            // Check for duplicates
+            if (duplicateTracker.has(duplicateKey)) {
+              return { 
+                type: 'skipped' as const, 
+                name: payee.originalName, 
+                reason: "Duplicate payee detected" 
+              };
+            }
+            
+            const result = await this.classifyPayeeWithRetry(payee.originalName, payee.address);
+            
+            // Only process if confidence is 95% or higher
+            if (result.confidence >= 0.95) {
+              const cleanedName = normalizePayeeName(payee.originalName);
+              
+              // Mark as seen to prevent duplicates
+              duplicateTracker.set(duplicateKey, true);
+              
+              return {
+                type: 'classified' as const,
+                classification: {
+                  batchId,
+                  originalName: payee.originalName,
+                  cleanedName,
+                  address: payee.address,
+                  city: payee.city,
+                  state: payee.state,
+                  zipCode: payee.zipCode,
+                  payeeType: result.payeeType,
+                  confidence: result.confidence,
+                  sicCode: result.sicCode,
+                  sicDescription: result.sicDescription,
+                  reasoning: result.reasoning,
+                  status: "auto-classified" as const,
+                  originalData: payee.originalData,
+                }
+              };
+            } else {
+              return {
+                type: 'skipped' as const,
+                name: payee.originalName,
+                reason: `Confidence ${(result.confidence * 100).toFixed(1)}% below 95% threshold`
+              };
+            }
+          } catch (error) {
+            return {
+              type: 'skipped' as const,
+              name: payee.originalName,
+              reason: (error as Error).message
+            };
+          }
         });
+
+        // Wait for this batch and collect results
+        const batchResults = await Promise.allSettled(batchPromises);
+        chunkResults.push(...batchResults);
       }
 
-      // Update progress with skipped count
+      // Process chunk results
+      
+      for (const result of chunkResults) {
+        if (result.status === 'fulfilled') {
+          if (result.value.type === 'classified') {
+            classificationsBuffer.push(result.value.classification);
+          } else {
+            totalSkipped++;
+          }
+        } else {
+          totalSkipped++;
+        }
+        totalProcessed++;
+      }
+
+      // Save classifications buffer when it gets large or at end of chunk
+      if (classificationsBuffer.length >= BATCH_SIZE || chunkEnd === payeeData.length) {
+        if (classificationsBuffer.length > 0) {
+          await storage.updateUploadBatch(batchId, {
+            currentStep: "Saving classifications",
+            progressMessage: `Saving ${classificationsBuffer.length} classifications...`,
+          });
+          
+          await storage.createPayeeClassifications(classificationsBuffer);
+          classificationsBuffer = []; // Clear buffer after saving
+        }
+      }
+
+      // Update progress every chunk
       await storage.updateUploadBatch(batchId, {
-        processedRecords: i + 1,
-        skippedRecords: skippedPayees.length,
+        processedRecords: totalProcessed,
+        skippedRecords: totalSkipped,
+        currentStep: totalProcessed >= totalRecords ? "Finalizing" : "Processing batch",
+        progressMessage: totalProcessed >= totalRecords ? 
+          "Finalizing batch processing..." : 
+          `Processed ${totalProcessed}/${totalRecords} records (${totalSkipped} skipped)`,
       });
     }
 
-    // Final update - save classifications
-    await storage.updateUploadBatch(batchId, {
-      currentStep: "Saving results",
-      progressMessage: "Saving classification results...",
-    });
-
-    // Only save high-confidence classifications
-    if (classifications.length > 0) {
-      await storage.createPayeeClassifications(classifications);
-    }
-
-    // Final batch statistics
-    const processedRecords = classifications.length;
-    const avgConfidence = classifications.length > 0 
-      ? classifications.reduce((sum, c) => sum + c.confidence, 0) / classifications.length
+    // Calculate final statistics
+    const savedClassifications = await storage.getBatchClassifications(batchId);
+    const processedRecords = savedClassifications.length;
+    const avgConfidence = processedRecords > 0 
+      ? savedClassifications.reduce((sum, c) => sum + c.confidence, 0) / processedRecords
       : 0;
 
+    // Final completion update
     await storage.updateUploadBatch(batchId, {
-      status: classifications.length > 0 ? "completed" : "failed",
-      processedRecords,
-      skippedRecords: skippedPayees.length,
+      status: processedRecords > 0 ? "completed" : "failed",
+      processedRecords: totalProcessed,
+      skippedRecords: totalSkipped,
       accuracy: avgConfidence,
       currentStep: "Completed",
-      progressMessage: `Processing complete. ${processedRecords} payees classified, ${skippedPayees.length} skipped.`,
+      progressMessage: `Batch processing complete. ${processedRecords} payees classified, ${totalSkipped} skipped from ${totalRecords} total records.`,
       completedAt: new Date(),
     });
 
-    // Log skipped payees for debugging
-    if (skippedPayees.length > 0) {
-      console.log(`Skipped ${skippedPayees.length} payees due to low confidence:`, skippedPayees);
+    console.log(`Batch ${batchId} completed: ${processedRecords} classified, ${totalSkipped} skipped, ${((processedRecords/totalRecords)*100).toFixed(1)}% success rate`);
+    
+    // Memory cleanup
+    duplicateTracker.clear();
+  }
+
+  // Enhanced classify with retry and exponential backoff
+  private async classifyPayeeWithRetry(name: string, address?: string, maxRetries: number = 3): Promise<ClassificationResult> {
+    let lastError: Error | null = null;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await this.classifyPayee(name, address);
+      } catch (error) {
+        lastError = error as Error;
+        
+        if (attempt < maxRetries) {
+          // Exponential backoff: 1s, 2s, 4s
+          const backoffMs = Math.pow(2, attempt) * 1000;
+          console.log(`Classification attempt ${attempt + 1} failed for "${name}", retrying in ${backoffMs}ms...`);
+          await new Promise(resolve => setTimeout(resolve, backoffMs));
+        }
+      }
     }
+    
+    throw lastError || new Error("Classification failed after all retries");
   }
 }
 
