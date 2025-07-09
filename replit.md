@@ -162,3 +162,12 @@ Preferred communication style: Simple, everyday language.
 - Enhanced error handling with meaningful error messages for failed classifications
 - Intelligent duplicate detection prevents processing the same payee multiple times
 - Advanced normalization handles periods, commas, case variations, and business entity suffixes
+
+### Advanced Duplicate Detection System
+- **Three-Layer Detection**: Basic normalization → Advanced normalization → OpenAI comparison
+- **Business Entity Normalization**: Removes LLC, INC, CORP, CO, LTD, LP, LLP, PLLC, ENTERPRISES, etc.
+- **Address Normalization**: Handles ST/STREET, AVE/AVENUE, RD/ROAD, BLVD/BOULEVARD variations
+- **Fuzzy Matching**: Uses Levenshtein distance with 80% similarity threshold for potential duplicates
+- **OpenAI Verification**: Final verification step using GPT-4o for ambiguous cases
+- **Caching System**: Prevents re-processing of already determined duplicates
+- **Detailed Logging**: Comprehensive reporting of duplicate detection results and reasoning

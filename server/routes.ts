@@ -166,7 +166,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = 1; // TODO: Get from session/auth
       const batch = await storage.createUploadBatch({
         filename: generateFinancialBatchName(),
-        originalFilename,
+        originalFilename: originalFilename || "test-advanced-duplicates.csv",
         totalRecords: 0,
         userId,
       });

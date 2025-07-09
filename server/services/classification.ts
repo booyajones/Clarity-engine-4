@@ -303,13 +303,14 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
     }>
   ): Promise<void> {
     const totalRecords = payeeData.length;
-    const duplicateTracker = new Map<string, boolean>();
+    const duplicateDetector = new AdvancedDuplicateDetector();
     const BATCH_SIZE = 100; // Process in chunks to manage memory
     const PROGRESS_UPDATE_INTERVAL = 10; // Update progress every 10 records
     
     let totalProcessed = 0;
     let totalSkipped = 0;
     let classificationsBuffer: InsertPayeeClassification[] = [];
+    const skippedPayees: Array<{ name: string; reason: string }> = [];
 
     // Initialize progress tracking
     await storage.updateUploadBatch(batchId, {
@@ -351,15 +352,14 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
           const globalIndex = chunkStart + i + batchIndex;
           
           try {
-            // Generate duplicate key
-            const duplicateKey = generateDuplicateKey(payee.originalName, payee.address);
+            // Advanced duplicate detection with OpenAI comparison
+            const isDuplicate = await duplicateDetector.isDuplicate(payee.originalName, payee.address);
             
-            // Check for duplicates
-            if (duplicateTracker.has(duplicateKey)) {
+            if (isDuplicate) {
               return { 
                 type: 'skipped' as const, 
                 name: payee.originalName, 
-                reason: "Duplicate payee detected" 
+                reason: "Duplicate payee detected (advanced normalization + OpenAI verification)" 
               };
             }
             
@@ -368,9 +368,6 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
             // Only process if confidence is 95% or higher
             if (result.confidence >= 0.95) {
               const cleanedName = normalizePayeeName(payee.originalName);
-              
-              // Mark as seen to prevent duplicates
-              duplicateTracker.set(duplicateKey, true);
               
               return {
                 type: 'classified' as const,
@@ -420,9 +417,11 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
             classificationsBuffer.push(result.value.classification);
           } else {
             totalSkipped++;
+            skippedPayees.push({ name: result.value.name, reason: result.value.reason });
           }
         } else {
           totalSkipped++;
+          skippedPayees.push({ name: 'Unknown', reason: 'Processing failed' });
         }
         totalProcessed++;
       }
@@ -471,8 +470,17 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
 
     console.log(`Batch ${batchId} completed: ${processedRecords} classified, ${totalSkipped} skipped, ${((processedRecords/totalRecords)*100).toFixed(1)}% success rate`);
     
+    // Log detailed duplicate detection results
+    const duplicateCount = skippedPayees.filter(p => p.reason.includes('Duplicate')).length;
+    const lowConfidenceCount = skippedPayees.filter(p => p.reason.includes('Confidence')).length;
+    console.log(`Duplicate detection results: ${duplicateCount} duplicates found, ${lowConfidenceCount} low confidence, ${skippedPayees.length - duplicateCount - lowConfidenceCount} other skips`);
+    
+    if (skippedPayees.length > 0) {
+      console.log(`Skipped payees:`, skippedPayees.slice(0, 10)); // Show first 10 for debugging
+    }
+    
     // Memory cleanup
-    duplicateTracker.clear();
+    duplicateDetector.clear();
   }
 
   // Enhanced classify with retry and exponential backoff
@@ -514,6 +522,213 @@ function normalizePayeeName(name: string): string {
     .replace(/\s+/g, ' ')           // Clean up spaces again
     .toUpperCase()
     .trim();
+}
+
+// Advanced normalization that removes business suffixes for duplicate comparison
+function advancedNormalizeForDuplicates(name: string): string {
+  if (!name || typeof name !== 'string') return '';
+  
+  let normalized = name.toUpperCase().trim();
+  
+  // Remove common punctuation and special characters
+  normalized = normalized.replace(/[.,;:!?'"()-]/g, ' ');
+  
+  // Remove articles and common words
+  normalized = normalized.replace(/\b(THE|A|AN|AND|&)\b/g, ' ');
+  
+  // Remove business entity suffixes for comparison
+  const businessSuffixes = [
+    'LLC', 'L.L.C.', 'L.L.C', 'L L C',
+    'INC', 'INC.', 'INCORPORATED', 'INCORPORATION',
+    'CORP', 'CORP.', 'CORPORATION',
+    'CO', 'CO.', 'COMPANY', 'COMPANIES',
+    'LTD', 'LTD.', 'LIMITED',
+    'LP', 'L.P.', 'LLP', 'L.L.P.',
+    'PLLC', 'P.L.L.C.',
+    'ENTERPRISES', 'ENTERPRISE',
+    'GROUP', 'GROUPS',
+    'HOLDINGS', 'HOLDING',
+    'SOLUTIONS', 'SOLUTION',
+    'SERVICES', 'SERVICE',
+    'TECHNOLOGIES', 'TECHNOLOGY', 'TECH',
+    'SYSTEMS', 'SYSTEM',
+    'PARTNERS', 'PARTNER',
+    'ASSOCIATES', 'ASSOCIATE',
+    'CONSULTING', 'CONSULTANTS',
+    'MANAGEMENT', 'MGMT'
+  ];
+  
+  // Remove suffixes (word boundaries to avoid partial matches)
+  for (const suffix of businessSuffixes) {
+    const regex = new RegExp(`\\b${suffix.replace(/\./g, '\\.')}\\b`, 'g');
+    normalized = normalized.replace(regex, ' ');
+  }
+  
+  // Clean up extra spaces and return
+  return normalized.replace(/\s+/g, ' ').trim();
+}
+
+// Advanced duplicate detection with OpenAI comparison
+class AdvancedDuplicateDetector {
+  private seenPayees: Map<string, { name: string; address?: string }> = new Map();
+  private duplicateCache: Map<string, boolean> = new Map();
+  
+  async isDuplicate(name: string, address?: string): Promise<boolean> {
+    const basicKey = this.generateBasicKey(name, address);
+    const advancedKey = this.generateAdvancedKey(name, address);
+    
+    // Check if we've already determined this is a duplicate
+    if (this.duplicateCache.has(basicKey)) {
+      return this.duplicateCache.get(basicKey)!;
+    }
+    
+    // First check: exact match after basic normalization
+    if (this.seenPayees.has(basicKey)) {
+      this.duplicateCache.set(basicKey, true);
+      return true;
+    }
+    
+    // Second check: advanced normalization match
+    for (const [existingKey, existingPayee] of this.seenPayees.entries()) {
+      const existingAdvancedKey = this.generateAdvancedKey(existingPayee.name, existingPayee.address);
+      
+      if (advancedKey === existingAdvancedKey && advancedKey.length > 0) {
+        this.duplicateCache.set(basicKey, true);
+        return true;
+      }
+    }
+    
+    // Third check: OpenAI comparison for potential duplicates
+    const potentialDuplicates = await this.findPotentialDuplicates(name, address);
+    if (potentialDuplicates.length > 0) {
+      const isDupe = await this.compareWithOpenAI(name, address, potentialDuplicates);
+      this.duplicateCache.set(basicKey, isDupe);
+      if (isDupe) return true;
+    }
+    
+    // Not a duplicate, add to seen payees
+    this.seenPayees.set(basicKey, { name, address });
+    this.duplicateCache.set(basicKey, false);
+    return false;
+  }
+  
+  private generateBasicKey(name: string, address?: string): string {
+    const normalizedName = normalizePayeeName(name);
+    const normalizedAddress = address ? 
+      address.trim().replace(/\s+/g, ' ').replace(/[.,#]/g, '').toUpperCase() : '';
+    return `${normalizedName}|${normalizedAddress}`;
+  }
+  
+  private generateAdvancedKey(name: string, address?: string): string {
+    const normalizedName = advancedNormalizeForDuplicates(name);
+    const normalizedAddress = address ? 
+      address.trim().replace(/\s+/g, ' ').replace(/[.,#]/g, '').replace(/\b(ST|STREET|AVE|AVENUE|RD|ROAD|BLVD|BOULEVARD|DR|DRIVE|WAY|LANE|LN|CT|COURT|PL|PLACE)\b/gi, '').toUpperCase() : '';
+    return `${normalizedName}|${normalizedAddress}`;
+  }
+  
+  private async findPotentialDuplicates(name: string, address?: string): Promise<Array<{ name: string; address?: string }>> {
+    const currentAdvanced = advancedNormalizeForDuplicates(name);
+    const potentials: Array<{ name: string; address?: string }> = [];
+    
+    for (const [key, payee] of this.seenPayees.entries()) {
+      const existingAdvanced = advancedNormalizeForDuplicates(payee.name);
+      
+      // Check for similar names (using fuzzy matching)
+      const similarity = this.calculateSimilarity(currentAdvanced, existingAdvanced);
+      if (similarity > 0.8) { // 80% similarity threshold
+        potentials.push(payee);
+      }
+    }
+    
+    return potentials;
+  }
+  
+  private calculateSimilarity(str1: string, str2: string): number {
+    if (str1 === str2) return 1.0;
+    if (str1.length === 0 || str2.length === 0) return 0.0;
+    
+    const longer = str1.length > str2.length ? str1 : str2;
+    const shorter = str1.length > str2.length ? str2 : str1;
+    
+    if (longer.length === 0) return 1.0;
+    
+    const editDistance = this.levenshteinDistance(longer, shorter);
+    return (longer.length - editDistance) / longer.length;
+  }
+  
+  private levenshteinDistance(str1: string, str2: string): number {
+    const matrix = [];
+    
+    for (let i = 0; i <= str2.length; i++) {
+      matrix[i] = [i];
+    }
+    
+    for (let j = 0; j <= str1.length; j++) {
+      matrix[0][j] = j;
+    }
+    
+    for (let i = 1; i <= str2.length; i++) {
+      for (let j = 1; j <= str1.length; j++) {
+        if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j - 1] + 1,
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j] + 1
+          );
+        }
+      }
+    }
+    
+    return matrix[str2.length][str1.length];
+  }
+  
+  private async compareWithOpenAI(name: string, address?: string, potentials: Array<{ name: string; address?: string }>): Promise<boolean> {
+    try {
+      await rateLimiter.waitIfNeeded();
+      
+      const prompt = `You are an expert at identifying duplicate payees in financial records. 
+      
+Compare this payee:
+Name: "${name}"
+Address: "${address || 'N/A'}"
+
+Against these existing payees:
+${potentials.map((p, i) => `${i + 1}. Name: "${p.name}", Address: "${p.address || 'N/A'}"`).join('\n')}
+
+Are any of these the same entity? Consider:
+- Business name variations (Apple Inc vs Apple Inc. vs Apple Incorporated)
+- Address variations (123 Main St vs 123 Main Street)
+- Common abbreviations and spellings
+- Different business entity types for the same company
+
+Respond with JSON: {"isDuplicate": true/false, "reasoning": "brief explanation"}`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        temperature: 0.1,
+      });
+
+      const result = JSON.parse(response.choices[0].message.content || '{"isDuplicate": false, "reasoning": "No response"}');
+      
+      if (result.isDuplicate) {
+        console.log(`OpenAI identified duplicate: ${name} matches existing payee. Reasoning: ${result.reasoning}`);
+      }
+      
+      return result.isDuplicate;
+    } catch (error) {
+      console.error(`OpenAI duplicate comparison failed for ${name}:`, error);
+      return false; // Default to not duplicate if OpenAI fails
+    }
+  }
+  
+  clear() {
+    this.seenPayees.clear();
+    this.duplicateCache.clear();
+  }
 }
 
 function generateDuplicateKey(name: string, address?: string): string {

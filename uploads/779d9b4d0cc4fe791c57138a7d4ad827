@@ -1,0 +1,22 @@
+Name,Amount,Address
+Apple Inc.,1000,1 Apple Park Way
+Apple Inc,1500,1 Apple Park Way
+Apple Incorporated,2000,1 Apple Park Way
+Microsoft Corporation,3000,1 Microsoft Way
+Microsoft Corp.,3500,1 Microsoft Way
+Microsoft Corp,4000,1 Microsoft Way
+Google LLC,5000,1600 Amphitheatre Parkway
+Google L.L.C.,5500,1600 Amphitheatre Parkway
+Alphabet Inc.,6000,1600 Amphitheatre Parkway
+John Smith,100,123 Main St
+John Smith,150,123 Main Street
+Jane Doe,200,456 Oak Ave
+Jane Doe,250,456 Oak Avenue
+City of San Francisco,5000,1 Dr Carlton B Goodlett Pl
+San Francisco City,5500,1 Dr Carlton B Goodlett Place
+Facebook Inc.,7000,1 Hacker Way
+Meta Platforms Inc.,7500,1 Hacker Way
+Tesla Inc.,8000,1 Tesla Road
+Tesla Motors Inc.,8500,1 Tesla Road
+Amazon.com Inc.,9000,410 Terry Ave N
+Amazon Inc.,9500,410 Terry Avenue North
