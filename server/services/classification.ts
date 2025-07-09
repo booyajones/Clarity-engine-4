@@ -272,6 +272,7 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
     const classifications: InsertPayeeClassification[] = [];
     const skippedPayees: Array<{ name: string; reason: string }> = [];
     const totalRecords = payeeData.length;
+    const duplicateTracker = new Map<string, boolean>();
 
     // Initialize progress tracking
     await storage.updateUploadBatch(batchId, {
@@ -301,14 +302,28 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
       });
 
       try {
+        // Generate duplicate key for this payee
+        const duplicateKey = generateDuplicateKey(payee.originalName, payee.address);
+        
+        // Check for duplicates
+        if (duplicateTracker.has(duplicateKey)) {
+          skippedPayees.push({ 
+            name: payee.originalName, 
+            reason: "Duplicate payee detected" 
+          });
+          continue;
+        }
+        
         const result = await this.classifyPayee(payee.originalName, payee.address);
         
         // Only add if confidence is 95% or higher
         if (result.confidence >= 0.95) {
+          const cleanedName = normalizePayeeName(payee.originalName);
+          
           classifications.push({
             batchId,
             originalName: payee.originalName,
-            cleanedName: payee.originalName.trim(),
+            cleanedName,
             address: payee.address,
             city: payee.city,
             state: payee.state,
@@ -321,6 +336,9 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
             status: "auto-classified",
             originalData: payee.originalData,
           });
+          
+          // Mark as seen to prevent duplicates
+          duplicateTracker.set(duplicateKey, true);
         } else {
           skippedPayees.push({
             name: payee.originalName,
@@ -376,3 +394,27 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
 }
 
 export const classificationService = new ClassificationService();
+
+// Helper functions for normalization and duplicate detection
+function normalizePayeeName(name: string): string {
+  if (!name || typeof name !== 'string') return '';
+  
+  return name
+    .trim()
+    .replace(/\s+/g, ' ')           // Multiple spaces to single
+    .replace(/[.,;:!?]+/g, '')      // Remove punctuation
+    .replace(/\b(LLC|INC|CORP|CO|LTD|LP|LLP)\b\.?/gi, (match) => match.toUpperCase().replace('.', ''))
+    .replace(/\b(THE|A|AN)\b/gi, '')  // Remove articles
+    .replace(/\b(AND|&)\b/gi, '&')    // Standardize "and"
+    .replace(/\s+/g, ' ')           // Clean up spaces again
+    .toUpperCase()
+    .trim();
+}
+
+function generateDuplicateKey(name: string, address?: string): string {
+  const normalizedName = normalizePayeeName(name);
+  const normalizedAddress = address ? 
+    address.trim().replace(/\s+/g, ' ').replace(/[.,#]/g, '').toUpperCase() : '';
+  
+  return `${normalizedName}|${normalizedAddress}`;
+}

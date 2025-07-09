@@ -9,6 +9,55 @@ import fs from "fs";
 import path from "path";
 import { z } from "zod";
 
+// Financial-themed random batch names
+const FINANCIAL_ADJECTIVES = [
+  "Bullish", "Bearish", "Liquid", "Volatile", "Stable", "Dynamic", "Secure", "Premium", 
+  "Strategic", "Tactical", "Balanced", "Aggressive", "Conservative", "Diversified", 
+  "Leveraged", "Hedged", "Optimized", "Compound", "Arbitrage", "Blue-chip"
+];
+
+const FINANCIAL_NOUNS = [
+  "Portfolio", "Asset", "Equity", "Bond", "Dividend", "Yield", "Capital", "Revenue", 
+  "Profit", "Margin", "Ledger", "Balance", "Statement", "Invoice", "Receipt", 
+  "Transaction", "Account", "Fund", "Reserve", "Treasury", "Vault", "Commodity"
+];
+
+function generateFinancialBatchName(): string {
+  const adjective = FINANCIAL_ADJECTIVES[Math.floor(Math.random() * FINANCIAL_ADJECTIVES.length)];
+  const noun = FINANCIAL_NOUNS[Math.floor(Math.random() * FINANCIAL_NOUNS.length)];
+  const number = Math.floor(Math.random() * 999) + 1;
+  return `${adjective} ${noun} ${number}`;
+}
+
+// Best-in-class payee normalization
+function normalizePayeeName(name: string): string {
+  if (!name || typeof name !== 'string') return '';
+  
+  return name
+    .trim()
+    .replace(/\s+/g, ' ')           // Multiple spaces to single
+    .replace(/[.,;:!?]+/g, '')      // Remove punctuation
+    .replace(/\b(LLC|INC|CORP|CO|LTD|LP|LLP)\b\.?/gi, (match) => match.toUpperCase().replace('.', ''))
+    .replace(/\b(THE|A|AN)\b/gi, '')  // Remove articles
+    .replace(/\b(AND|&)\b/gi, '&')    // Standardize "and"
+    .replace(/\s+/g, ' ')           // Clean up spaces again
+    .toUpperCase()
+    .trim();
+}
+
+function generateDuplicateKey(name: string, address?: string): string {
+  const normalizedName = normalizePayeeName(name);
+  const normalizedAddress = address ? 
+    address.trim().replace(/\s+/g, ' ').replace(/[.,#]/g, '').toUpperCase() : '';
+  
+  return `${normalizedName}|${normalizedAddress}`;
+}
+
+// Add skippedRecords field to upload batch schema
+const uploadBatchWithSkippedSchema = z.object({
+  skippedRecords: z.number().optional(),
+});
+
 // Extend Express Request type for file uploads
 interface MulterRequest extends Request {
   file?: any;
@@ -87,7 +136,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const userId = 1; // TODO: Get from session/auth
       const batch = await storage.createUploadBatch({
-        filename: tempFileName,
+        filename: generateFinancialBatchName(),
         originalFilename,
         totalRecords: 0,
         userId,

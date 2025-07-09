@@ -137,6 +137,9 @@ Preferred communication style: Simple, everyday language.
 - **Export Fix**: Fixed export functionality to preserve original field order with clarity_* columns appended
 - **Job Management**: Added Stop/Cancel and Delete functionality for running and completed jobs
 - **OpenAI-Only Classification**: Switched to 100% OpenAI GPT-4o classification with reasoning column
+- **Financial Batch Names**: Creative financial-themed random names (e.g., "Dynamic Dividend 717", "Bullish Portfolio 342")
+- **Best-in-Class Normalization**: Advanced payee name normalization removing punctuation, standardizing business suffixes
+- **Duplicate Detection**: Intelligent duplicate flagging based on normalized names and addresses
 - **Database Updates**: Added reasoning, skippedRecords, currentStep, progressMessage fields
 - **Export Format**: [Original Fields] + [clarity_payee_type, clarity_confidence, clarity_sic_code, clarity_sic_description, clarity_reasoning, clarity_status, clarity_cleaned_name]
 
@@ -145,3 +148,5 @@ Preferred communication style: Simple, everyday language.
 - All classifications include detailed reasoning explaining the decision
 - 95% confidence threshold maintained with automatic skipping below threshold
 - Enhanced error handling with meaningful error messages for failed classifications
+- Intelligent duplicate detection prevents processing the same payee multiple times
+- Advanced normalization handles periods, commas, case variations, and business entity suffixes
