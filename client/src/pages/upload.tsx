@@ -283,9 +283,8 @@ export default function Upload() {
                     </div>
                     
                     {batch.status === "completed" && (
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm">View</Button>
-                        <Button variant="outline" size="sm">Export</Button>
+                      <div className="text-sm text-green-600">
+                        Ready for download
                       </div>
                     )}
                   </div>

@@ -7,6 +7,7 @@ import Dashboard from "@/pages/dashboard";
 import Upload from "@/pages/upload";
 import Classifications from "@/pages/classifications";
 import Review from "@/pages/review";
+import Downloads from "@/pages/downloads";
 import Sidebar from "@/components/layout/sidebar";
 import NotFound from "@/pages/not-found";
 
@@ -19,7 +20,7 @@ function Router() {
           <Route path="/" component={Dashboard} />
           <Route path="/upload" component={Upload} />
           <Route path="/classifications" component={Classifications} />
-          <Route path="/review" component={Review} />
+          <Route path="/downloads" component={Downloads} />
           <Route component={NotFound} />
         </Switch>
       </div>

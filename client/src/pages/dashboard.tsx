@@ -88,11 +88,18 @@ export default function Dashboard() {
         title="Dashboard" 
         subtitle="High-accuracy payee classification with OpenAI (95%+ confidence only)"
       >
-        <Link href="/upload">
-          <Button>
-            Upload File
-          </Button>
-        </Link>
+        <div className="flex gap-2">
+          <Link href="/upload">
+            <Button>
+              Upload File
+            </Button>
+          </Link>
+          <Link href="/downloads">
+            <Button variant="outline">
+              Downloads
+            </Button>
+          </Link>
+        </div>
       </Header>
 
       <main className="flex-1 p-6 overflow-auto">
