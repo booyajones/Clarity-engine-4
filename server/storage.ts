@@ -52,6 +52,10 @@ export interface IStorage {
   // Classification rules
   getClassificationRules(): Promise<ClassificationRule[]>;
   createClassificationRule(rule: InsertClassificationRule): Promise<ClassificationRule>;
+
+  // Delete operations
+  deleteUploadBatch(id: number): Promise<void>;
+  deleteBatchClassifications(batchId: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -220,6 +224,14 @@ export class DatabaseStorage implements IStorage {
       .values(rule)
       .returning();
     return classificationRule;
+  }
+
+  async deleteUploadBatch(id: number): Promise<void> {
+    await db.delete(uploadBatches).where(eq(uploadBatches.id, id));
+  }
+
+  async deleteBatchClassifications(batchId: number): Promise<void> {
+    await db.delete(payeeClassifications).where(eq(payeeClassifications.batchId, batchId));
   }
 }
 

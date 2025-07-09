@@ -302,6 +302,13 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
     for (let i = 0; i < payeeData.length; i++) {
       const payee = payeeData[i];
       
+      // Check if job was cancelled
+      const currentBatch = await storage.getUploadBatch(batchId);
+      if (currentBatch?.status === "cancelled") {
+        console.log(`Job ${batchId} was cancelled, stopping processing`);
+        return;
+      }
+      
       // Update progress
       await storage.updateUploadBatch(batchId, {
         processedRecords: i,

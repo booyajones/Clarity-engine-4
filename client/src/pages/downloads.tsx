@@ -1,11 +1,63 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import Header from "@/components/layout/header";
 import { UploadBatch } from "@/lib/types";
+import { useToast } from "@/hooks/use-toast";
+import { Trash2 } from "lucide-react";
 
 export default function Downloads() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  
   const { data: batches = [], isLoading } = useQuery<UploadBatch[]>({
     queryKey: ["/api/upload/batches"],
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (batchId: number) => {
+      const response = await fetch(`/api/upload/batches/${batchId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error("Failed to delete job");
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Job deleted",
+        description: "Job and all data have been removed.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/upload/batches"] });
+    },
+    onError: () => {
+      toast({
+        title: "Delete failed",
+        description: "Could not delete the job. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const clearAllMutation = useMutation({
+    mutationFn: async () => {
+      const deletePromises = completedBatches.map(batch =>
+        fetch(`/api/upload/batches/${batch.id}`, { method: "DELETE" })
+      );
+      await Promise.all(deletePromises);
+    },
+    onSuccess: () => {
+      toast({
+        title: "All downloads cleared",
+        description: "All completed jobs have been removed.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/upload/batches"] });
+    },
+    onError: () => {
+      toast({
+        title: "Clear failed",
+        description: "Could not clear all downloads. Please try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   const handleDownload = async (batchId: number, filename: string) => {
@@ -43,7 +95,19 @@ export default function Downloads() {
       <Header 
         title="Downloads" 
         subtitle="Download completed classification results"
-      />
+      >
+        {completedBatches.length > 0 && (
+          <Button
+            variant="outline"
+            onClick={() => clearAllMutation.mutate()}
+            disabled={clearAllMutation.isPending}
+            className="text-red-600 hover:text-red-700"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Clear All
+          </Button>
+        )}
+      </Header>
 
       <main className="flex-1 p-6 overflow-auto">
         <div className="max-w-4xl mx-auto">
@@ -60,7 +124,7 @@ export default function Downloads() {
               
               {completedBatches.map((batch) => (
                 <div key={batch.id} className="border rounded-lg p-4 flex items-center justify-between">
-                  <div>
+                  <div className="flex-1">
                     <div className="font-medium">{batch.originalFilename}</div>
                     <div className="text-sm text-gray-500">
                       {batch.processedRecords} records processed • {Math.round((batch.accuracy || 0) * 100)}% accuracy
@@ -70,12 +134,23 @@ export default function Downloads() {
                     </div>
                   </div>
                   
-                  <Button 
-                    onClick={() => handleDownload(batch.id, batch.originalFilename)}
-                    size="sm"
-                  >
-                    Download CSV
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={() => handleDownload(batch.id, batch.originalFilename)}
+                      size="sm"
+                    >
+                      Download CSV
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      size="sm"
+                      onClick={() => deleteMutation.mutate(batch.id)}
+                      disabled={deleteMutation.isPending}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

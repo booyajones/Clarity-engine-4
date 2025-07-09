@@ -180,6 +180,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete upload batch and all associated classifications
+  app.delete("/api/upload/batches/:id", async (req, res) => {
+    try {
+      const batchId = parseInt(req.params.id);
+      
+      // Delete all classifications for this batch
+      await storage.deleteBatchClassifications(batchId);
+      
+      // Delete the batch itself
+      await storage.deleteUploadBatch(batchId);
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting batch:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Cancel/stop a processing batch
+  app.patch("/api/upload/batches/:id/cancel", async (req, res) => {
+    try {
+      const batchId = parseInt(req.params.id);
+      
+      // Update batch status to cancelled
+      const batch = await storage.updateUploadBatch(batchId, {
+        status: "cancelled",
+        currentStep: "Cancelled",
+        progressMessage: "Processing cancelled by user",
+      });
+      
+      res.json(batch);
+    } catch (error) {
+      console.error("Error cancelling batch:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Export classifications  
   app.get("/api/classifications/export/:id", async (req, res) => {
     try {
