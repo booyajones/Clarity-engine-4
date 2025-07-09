@@ -10,6 +10,7 @@ export interface ClassificationResult {
   confidence: number;
   sicCode?: string;
   sicDescription?: string;
+  reasoning: string;
 }
 
 export class ClassificationService {
@@ -60,35 +61,18 @@ export class ClassificationService {
   }
 
   async classifyPayee(name: string, address?: string): Promise<ClassificationResult> {
-    const cleanName = name.trim().toUpperCase();
-    
-    // First, apply rule-based classification for high-confidence cases
-    const ruleResult = this.applyRules(cleanName);
-    if (ruleResult.confidence >= 0.95) {
-      const result = { ...ruleResult };
-      
-      // If it's a business, try to get SIC code
-      if (result.payeeType === "Business") {
-        const sicInfo = await this.getSicCode(cleanName);
-        if (sicInfo) {
-          result.sicCode = sicInfo.code;
-          result.sicDescription = sicInfo.description;
-        }
-      }
-      
-      return result;
+    try {
+      // Use OpenAI for ALL classifications
+      return await this.classifyWithOpenAI(name.trim(), address);
+    } catch (error) {
+      console.error("OpenAI classification error:", error);
+      // Return a low-confidence result that will be skipped
+      return {
+        payeeType: "Business",
+        confidence: 0.5,
+        reasoning: `Classification failed due to API error: ${error.message}`,
+      };
     }
-
-    // Use OpenAI for advanced classification
-    const openaiResult = await this.classifyWithOpenAI(cleanName, address);
-    
-    // Only return results if confidence is 95% or higher
-    if (openaiResult.confidence >= 0.95) {
-      return openaiResult;
-    }
-    
-    // If still not confident enough, throw an error
-    throw new Error(`Classification confidence ${(openaiResult.confidence * 100).toFixed(1)}% is below required 95% threshold`);
   }
 
   private applyRules(name: string): ClassificationResult {
@@ -265,12 +249,12 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
         payeeType: result.payeeType as "Individual" | "Business" | "Government",
         confidence: Math.min(result.confidence, 1.0),
         sicCode: result.sicCode || undefined,
-        sicDescription: result.sicDescription || undefined
+        sicDescription: result.sicDescription || undefined,
+        reasoning: result.reasoning || "OpenAI classification based on name and context patterns"
       };
     } catch (error) {
       console.error('OpenAI classification error:', error);
-      // Fallback to ML classification if OpenAI fails
-      return this.applyMLClassification(name, address);
+      throw new Error(`OpenAI classification failed: ${error.message}`);
     }
   }
 
@@ -333,6 +317,7 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
             confidence: result.confidence,
             sicCode: result.sicCode,
             sicDescription: result.sicDescription,
+            reasoning: result.reasoning,
             status: "auto-classified",
             originalData: payee.originalData,
           });

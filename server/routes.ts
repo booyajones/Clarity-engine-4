@@ -238,6 +238,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           clarity_confidence: Math.round(c.confidence * 100) + "%",
           clarity_sic_code: c.sicCode || "",
           clarity_sic_description: c.sicDescription || "",
+          clarity_reasoning: c.reasoning || "",
           clarity_status: c.status,
           clarity_cleaned_name: c.cleanedName,
         };

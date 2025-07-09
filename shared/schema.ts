@@ -40,6 +40,7 @@ export const payeeClassifications = pgTable("payee_classifications", {
   confidence: real("confidence").notNull(),
   sicCode: text("sic_code"),
   sicDescription: text("sic_description"),
+  reasoning: text("reasoning"),
   status: text("status").notNull().default("auto-classified"), // auto-classified, user-confirmed, user-corrected, pending-review
   reviewedBy: integer("reviewed_by"),
   originalData: jsonb("original_data"), // Store original CSV row data

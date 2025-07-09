@@ -132,10 +132,16 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
-### July 9, 2025 - Progress Tracking & Export Fix
-- Added comprehensive progress tracking stored in database
-- Real-time progress updates every 2 seconds during processing
-- Fixed export functionality to preserve original field order
-- Export now shows: [Original Fields] + [clarity_payee_type, clarity_confidence, clarity_sic_code, clarity_sic_description, clarity_status, clarity_cleaned_name]
-- Enhanced ProgressTracker component with detailed status messages
-- Database schema updated with skippedRecords, currentStep, progressMessage fields
+### July 9, 2025 - Complete System Overhaul
+- **Progress Tracking**: Added comprehensive progress tracking stored in database with real-time updates every 2 seconds
+- **Export Fix**: Fixed export functionality to preserve original field order with clarity_* columns appended
+- **Job Management**: Added Stop/Cancel and Delete functionality for running and completed jobs
+- **OpenAI-Only Classification**: Switched to 100% OpenAI GPT-4o classification with reasoning column
+- **Database Updates**: Added reasoning, skippedRecords, currentStep, progressMessage fields
+- **Export Format**: [Original Fields] + [clarity_payee_type, clarity_confidence, clarity_sic_code, clarity_sic_description, clarity_reasoning, clarity_status, clarity_cleaned_name]
+
+### Classification System Changes
+- Removed rule-based and ML classification fallbacks - now uses OpenAI exclusively
+- All classifications include detailed reasoning explaining the decision
+- 95% confidence threshold maintained with automatic skipping below threshold
+- Enhanced error handling with meaningful error messages for failed classifications
