@@ -195,7 +195,7 @@ export default function Upload() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <Header title="Upload Data" subtitle="Upload CSV or Excel files for payee classification" />
+      <Header title="Upload Data" subtitle="Upload CSV or Excel files for high-accuracy OpenAI classification (95%+ confidence only)" />
 
       <main className="flex-1 p-6 overflow-auto">
         <div className="max-w-2xl mx-auto space-y-6">

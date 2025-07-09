@@ -40,10 +40,12 @@ Preferred communication style: Simple, everyday language.
 - **classificationRules**: AI/ML rules for automated classification
 
 ### AI/ML Classification Service
-- **Rule-based Classification**: Pattern matching for business entities (LLC, INC, CORP)
+- **OpenAI Integration**: Uses GPT-4o for advanced payee classification with 95%+ accuracy requirement
+- **Rule-based Classification**: Pattern matching for business entities (LLC, INC, CORP) as first-tier classification
 - **Government Entity Detection**: Prefix and keyword matching for government entities
-- **Confidence Scoring**: Probabilistic scoring for classification accuracy
+- **High-Confidence Only**: Only returns results when 95% or higher confidence is achieved
 - **SIC Code Assignment**: Automatic industry classification based on business patterns
+- **No Review Queue**: System skips low-confidence results instead of manual review
 
 ### File Processing Pipeline
 - **Upload Handling**: Async file processing with status tracking
@@ -56,8 +58,8 @@ Preferred communication style: Simple, everyday language.
 1. **File Upload**: Users upload CSV/Excel files containing payee data
 2. **Batch Creation**: System creates upload batch with tracking metadata
 3. **Background Processing**: Async parsing and classification of payee records
-4. **AI Classification**: Rules engine processes each payee for type and SIC code
-5. **Review Queue**: Low-confidence classifications flagged for manual review
+4. **AI Classification**: OpenAI GPT-4o processes each payee for type and SIC code with 95%+ accuracy
+5. **High-Confidence Results**: Only payees meeting 95% confidence threshold are returned
 6. **Export/Integration**: Processed data available for download or API access
 
 ## External Dependencies

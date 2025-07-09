@@ -1,5 +1,9 @@
 import { storage } from "../storage";
 import { type InsertPayeeClassification } from "@shared/schema";
+import OpenAI from 'openai';
+
+// the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export interface ClassificationResult {
   payeeType: "Individual" | "Business" | "Government";
@@ -58,7 +62,7 @@ export class ClassificationService {
   async classifyPayee(name: string, address?: string): Promise<ClassificationResult> {
     const cleanName = name.trim().toUpperCase();
     
-    // First, apply rule-based classification
+    // First, apply rule-based classification for high-confidence cases
     const ruleResult = this.applyRules(cleanName);
     if (ruleResult.confidence >= 0.95) {
       const result = { ...ruleResult };
@@ -75,21 +79,16 @@ export class ClassificationService {
       return result;
     }
 
-    // Apply ML-based classification for uncertain cases
-    const mlResult = this.applyMLClassification(cleanName, address);
+    // Use OpenAI for advanced classification
+    const openaiResult = await this.classifyWithOpenAI(cleanName, address);
     
-    const result = { ...mlResult };
-    
-    // If it's a business, try to get SIC code
-    if (result.payeeType === "Business") {
-      const sicInfo = await this.getSicCode(cleanName);
-      if (sicInfo) {
-        result.sicCode = sicInfo.code;
-        result.sicDescription = sicInfo.description;
-      }
+    // Only return results if confidence is 95% or higher
+    if (openaiResult.confidence >= 0.95) {
+      return openaiResult;
     }
     
-    return result;
+    // If still not confident enough, throw an error
+    throw new Error(`Classification confidence ${(openaiResult.confidence * 100).toFixed(1)}% is below required 95% threshold`);
   }
 
   private applyRules(name: string): ClassificationResult {
@@ -217,6 +216,64 @@ export class ClassificationService {
     return null;
   }
 
+  private async classifyWithOpenAI(name: string, address?: string): Promise<ClassificationResult> {
+    try {
+      const prompt = `Classify this payee as Individual, Business, or Government with high accuracy.
+
+Payee Name: ${name}
+${address ? `Address: ${address}` : ''}
+
+Provide a classification with confidence level (0-100). Only return results if confidence is 95% or higher.
+
+Respond with JSON in this format:
+{
+  "payeeType": "Individual|Business|Government",
+  "confidence": 0.95,
+  "sicCode": "optional SIC code for businesses",
+  "sicDescription": "optional SIC description for businesses",
+  "reasoning": "brief explanation of classification"
+}
+
+Consider these factors:
+- Business indicators: LLC, Inc, Corp, Ltd, Company, business services, etc.
+- Individual indicators: First name + Last name patterns, personal titles
+- Government indicators: City of, County of, State of, Department, Agency, etc.
+- Address patterns and context clues
+- Industry-specific terminology and SIC codes
+
+Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: "You are an expert in payee classification with deep knowledge of business entities, government structures, and individual naming patterns. Provide accurate classifications only when highly confident."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.1
+      });
+
+      const result = JSON.parse(response.choices[0].message.content || '{}');
+      
+      return {
+        payeeType: result.payeeType as "Individual" | "Business" | "Government",
+        confidence: Math.min(result.confidence, 1.0),
+        sicCode: result.sicCode || undefined,
+        sicDescription: result.sicDescription || undefined
+      };
+    } catch (error) {
+      console.error('OpenAI classification error:', error);
+      // Fallback to ML classification if OpenAI fails
+      return this.applyMLClassification(name, address);
+    }
+  }
+
   async processPayeeBatch(
     batchId: number,
     payeeData: Array<{
@@ -229,43 +286,67 @@ export class ClassificationService {
     }>
   ): Promise<void> {
     const classifications: InsertPayeeClassification[] = [];
+    const skippedPayees: Array<{ name: string; reason: string }> = [];
 
     for (const payee of payeeData) {
-      const result = await this.classifyPayee(payee.originalName, payee.address);
-      
-      const status = result.confidence >= 0.95 ? "auto-classified" : "pending-review";
-      
-      classifications.push({
-        batchId,
-        originalName: payee.originalName,
-        cleanedName: payee.originalName.trim(),
-        address: payee.address,
-        city: payee.city,
-        state: payee.state,
-        zipCode: payee.zipCode,
-        payeeType: result.payeeType,
-        confidence: result.confidence,
-        sicCode: result.sicCode,
-        sicDescription: result.sicDescription,
-        status,
-        originalData: payee.originalData,
-      });
+      try {
+        const result = await this.classifyPayee(payee.originalName, payee.address);
+        
+        // Only add if confidence is 95% or higher
+        if (result.confidence >= 0.95) {
+          classifications.push({
+            batchId,
+            originalName: payee.originalName,
+            cleanedName: payee.originalName.trim(),
+            address: payee.address,
+            city: payee.city,
+            state: payee.state,
+            zipCode: payee.zipCode,
+            payeeType: result.payeeType,
+            confidence: result.confidence,
+            sicCode: result.sicCode,
+            sicDescription: result.sicDescription,
+            status: "auto-classified",
+            originalData: payee.originalData,
+          });
+        } else {
+          skippedPayees.push({
+            name: payee.originalName,
+            reason: `Confidence ${(result.confidence * 100).toFixed(1)}% below 95% threshold`
+          });
+        }
+      } catch (error) {
+        skippedPayees.push({
+          name: payee.originalName,
+          reason: (error as Error).message
+        });
+      }
     }
 
-    await storage.createPayeeClassifications(classifications);
+    // Only save high-confidence classifications
+    if (classifications.length > 0) {
+      await storage.createPayeeClassifications(classifications);
+    }
 
     // Update batch statistics
     const totalRecords = payeeData.length;
     const processedRecords = classifications.length;
-    const avgConfidence = classifications.reduce((sum, c) => sum + c.confidence, 0) / classifications.length;
+    const avgConfidence = classifications.length > 0 
+      ? classifications.reduce((sum, c) => sum + c.confidence, 0) / classifications.length
+      : 0;
 
     await storage.updateUploadBatch(batchId, {
-      status: "completed",
+      status: classifications.length > 0 ? "completed" : "failed",
       totalRecords,
       processedRecords,
       accuracy: avgConfidence,
       completedAt: new Date(),
     });
+
+    // Log skipped payees for debugging
+    if (skippedPayees.length > 0) {
+      console.log(`Skipped ${skippedPayees.length} payees due to low confidence:`, skippedPayees);
+    }
   }
 }
 

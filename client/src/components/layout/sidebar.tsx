@@ -5,7 +5,6 @@ const navigation = [
   { name: "Dashboard", href: "/" },
   { name: "Upload", href: "/upload" },
   { name: "Classifications", href: "/classifications" },
-  { name: "Review", href: "/review" },
 ];
 
 export default function Sidebar() {

@@ -86,11 +86,10 @@ export default function Dashboard() {
     <div className="flex-1 flex flex-col">
       <Header 
         title="Dashboard" 
-        subtitle="Overview of your payee classification activities"
+        subtitle="High-accuracy payee classification with OpenAI (95%+ confidence only)"
       >
         <Link href="/upload">
-          <Button className="bg-primary-500 hover:bg-primary-600 text-white">
-            <i className="fas fa-plus mr-2"></i>
+          <Button>
             Upload File
           </Button>
         </Link>
@@ -109,8 +108,8 @@ export default function Dashboard() {
               <div className="text-sm text-gray-600">Accuracy</div>
             </div>
             <div className="border rounded p-4">
-              <div className="text-2xl font-bold">{stats.pendingReview}</div>
-              <div className="text-sm text-gray-600">Pending Review</div>
+              <div className="text-2xl font-bold">95%+</div>
+              <div className="text-sm text-gray-600">Min Confidence</div>
             </div>
             <div className="border rounded p-4">
               <div className="text-2xl font-bold">{stats.filesProcessed}</div>
@@ -118,8 +117,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Review Queue */}
-          <ReviewQueue />
+          {/* No review queue - only 95%+ confidence results */}
         </div>
       </main>
     </div>
