@@ -33,27 +33,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Upload batch management
-  app.post("/api/upload", upload.single("file"), async (req: MulterRequest, res) => {
+  // Upload and preview file headers
+  app.post("/api/upload/preview", upload.single("file"), async (req: MulterRequest, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: "No file uploaded" });
       }
 
+      const filePath = req.file.path;
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      let headers: string[] = [];
+
+      if (ext === ".csv") {
+        // Read first row to get headers
+        const firstRow = await new Promise<string[]>((resolve, reject) => {
+          const headerRow: string[] = [];
+          fs.createReadStream(filePath)
+            .pipe(csv())
+            .on("headers", (headerList: string[]) => {
+              resolve(headerList);
+            })
+            .on("error", reject);
+        });
+        headers = firstRow;
+      } else if (ext === ".xlsx" || ext === ".xls") {
+        const workbook = XLSX.readFile(filePath);
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][];
+        headers = jsonData[0] || [];
+      }
+
+      // Don't delete the temp file yet, we need it for processing
+      res.json({ 
+        filename: req.file.originalname,
+        headers,
+        tempFileName: req.file.filename
+      });
+    } catch (error) {
+      console.error("Error previewing file:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Process file with selected column
+  app.post("/api/upload/process", async (req, res) => {
+    try {
+      const { tempFileName, originalFilename, payeeColumn } = req.body;
+      
+      if (!tempFileName || !payeeColumn) {
+        return res.status(400).json({ error: "Missing required parameters" });
+      }
+
       const userId = 1; // TODO: Get from session/auth
       const batch = await storage.createUploadBatch({
-        filename: req.file.filename,
-        originalFilename: req.file.originalname,
+        filename: tempFileName,
+        originalFilename,
         totalRecords: 0,
         userId,
       });
 
-      // Process file in background
-      processFileAsync(req.file, batch.id);
+      // Process file in background with selected column
+      processFileAsync({ filename: tempFileName, originalname: originalFilename, path: `uploads/${tempFileName}` }, batch.id, payeeColumn);
 
       res.json({ batchId: batch.id, status: "processing" });
     } catch (error) {
-      console.error("Error uploading file:", error);
+      console.error("Error processing file:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -187,7 +232,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   return httpServer;
 }
 
-async function processFileAsync(file: any, batchId: number) {
+async function processFileAsync(file: any, batchId: number, payeeColumn?: string) {
   try {
     const payeeData: Array<{
       originalName: string;
@@ -206,8 +251,8 @@ async function processFileAsync(file: any, batchId: number) {
         fs.createReadStream(filePath)
           .pipe(csv())
           .on("data", (row: Record<string, any>) => {
-            // Try to detect payee name column
-            const nameCol = findNameColumn(row);
+            // Use specified column or try to detect payee name column
+            const nameCol = payeeColumn || findNameColumn(row);
             if (nameCol && row[nameCol]) {
               payeeData.push({
                 originalName: row[nameCol],
@@ -229,7 +274,8 @@ async function processFileAsync(file: any, batchId: number) {
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
       for (const row of jsonData as Record<string, any>[]) {
-        const nameCol = findNameColumn(row);
+        // Use specified column or try to detect payee name column
+        const nameCol = payeeColumn || findNameColumn(row);
         if (nameCol && row[nameCol]) {
           payeeData.push({
             originalName: row[nameCol],

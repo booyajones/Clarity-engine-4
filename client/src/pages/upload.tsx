@@ -2,39 +2,88 @@ import Header from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef } from "react";
 import type { UploadBatch } from "@/lib/types";
+
+interface FilePreview {
+  filename: string;
+  headers: string[];
+  tempFileName: string;
+}
 
 export default function Upload() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [filePreview, setFilePreview] = useState<FilePreview | null>(null);
+  const [selectedColumn, setSelectedColumn] = useState<string>("");
 
   const { data: batches = [] } = useQuery<UploadBatch[]>({
     queryKey: ["/api/upload/batches"],
   });
 
-  const uploadMutation = useMutation({
+  const previewMutation = useMutation({
     mutationFn: async (file: File) => {
       const formData = new FormData();
       formData.append("file", file);
       
-      const response = await fetch("/api/upload", {
+      const response = await fetch("/api/upload/preview", {
         method: "POST",
         body: formData,
       });
       
       if (!response.ok) {
-        throw new Error("Upload failed");
+        throw new Error("Preview failed");
+      }
+      
+      return response.json();
+    },
+    onSuccess: (data: FilePreview) => {
+      setFilePreview(data);
+      // Auto-select likely payee column
+      const likelyColumns = ["payee_name", "payee", "name", "vendor", "company"];
+      const matchedColumn = data.headers.find(header => 
+        likelyColumns.some(col => header.toLowerCase().includes(col.toLowerCase()))
+      );
+      if (matchedColumn) {
+        setSelectedColumn(matchedColumn);
+      }
+    },
+    onError: () => {
+      toast({
+        title: "Preview failed",
+        description: "Please try again or contact support if the problem persists.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const processMutation = useMutation({
+    mutationFn: async ({ tempFileName, originalFilename, payeeColumn }: {
+      tempFileName: string;
+      originalFilename: string;
+      payeeColumn: string;
+    }) => {
+      const response = await fetch("/api/upload/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tempFileName, originalFilename, payeeColumn }),
+      });
+      
+      if (!response.ok) {
+        throw new Error("Processing failed");
       }
       
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/upload/batches"] });
+      setFilePreview(null);
+      setSelectedColumn("");
       toast({
         title: "File uploaded successfully",
         description: "Your file is being processed. You'll receive a notification when it's complete.",
@@ -42,7 +91,7 @@ export default function Upload() {
     },
     onError: () => {
       toast({
-        title: "Upload failed",
+        title: "Processing failed",
         description: "Please try again or contact support if the problem persists.",
         variant: "destructive",
       });
@@ -101,7 +150,17 @@ export default function Upload() {
       return;
     }
 
-    uploadMutation.mutate(file);
+    previewMutation.mutate(file);
+  };
+
+  const handleProcessFile = () => {
+    if (!filePreview || !selectedColumn) return;
+    
+    processMutation.mutate({
+      tempFileName: filePreview.tempFileName,
+      originalFilename: filePreview.filename,
+      payeeColumn: selectedColumn,
+    });
   };
 
   const handleChooseFile = () => {
@@ -150,7 +209,7 @@ export default function Upload() {
                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
                   dragActive 
                     ? "border-primary-500 bg-primary-50" 
-                    : uploadMutation.isPending
+                    : previewMutation.isPending
                     ? "border-gray-200 bg-gray-50"
                     : "border-gray-300 hover:border-primary-400 hover:bg-primary-50 cursor-pointer"
                 }`}
@@ -158,7 +217,7 @@ export default function Upload() {
                 onDragLeave={handleDrag}
                 onDragOver={handleDrag}
                 onDrop={handleDrop}
-                onClick={!uploadMutation.isPending ? handleChooseFile : undefined}
+                onClick={!previewMutation.isPending ? handleChooseFile : undefined}
               >
                 <input
                   ref={fileInputRef}
@@ -166,11 +225,11 @@ export default function Upload() {
                   accept=".csv,.xlsx,.xls"
                   onChange={handleFileSelect}
                   className="hidden"
-                  disabled={uploadMutation.isPending}
+                  disabled={previewMutation.isPending}
                 />
                 
                 <div className="w-16 h-16 bg-gray-100 rounded-xl mx-auto mb-4 flex items-center justify-center">
-                  {uploadMutation.isPending ? (
+                  {previewMutation.isPending ? (
                     <i className="fas fa-spinner fa-spin text-gray-600 text-2xl"></i>
                   ) : (
                     <i className="fas fa-cloud-upload-alt text-gray-600 text-2xl"></i>
@@ -178,13 +237,13 @@ export default function Upload() {
                 </div>
                 
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  {uploadMutation.isPending ? "Uploading..." : "Drop your file here"}
+                  {previewMutation.isPending ? "Analyzing..." : "Drop your file here"}
                 </h3>
                 <p className="text-sm text-gray-500 mb-4">
                   or click to browse for CSV, XLSX, or XLS files
                 </p>
                 
-                {!uploadMutation.isPending && (
+                {!previewMutation.isPending && (
                   <Button className="bg-primary-500 hover:bg-primary-600 text-white">
                     <i className="fas fa-folder-open mr-2"></i>
                     Choose File
@@ -199,6 +258,72 @@ export default function Upload() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Column Selection */}
+          {filePreview && (
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle>Select Payee Column</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-600">
+                    We found <strong>{filePreview.headers.length}</strong> columns in "{filePreview.filename}". 
+                    Please select which column contains the payee names.
+                  </p>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Payee Column *
+                      </label>
+                      <Select value={selectedColumn} onValueChange={setSelectedColumn}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a column..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {filePreview.headers.map((header) => (
+                            <SelectItem key={header} value={header}>
+                              {header}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="flex items-end">
+                      <Button 
+                        onClick={handleProcessFile}
+                        disabled={!selectedColumn || processMutation.isPending}
+                        className="w-full"
+                      >
+                        {processMutation.isPending ? (
+                          <>
+                            <i className="fas fa-spinner fa-spin mr-2"></i>
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <i className="fas fa-play mr-2"></i>
+                            Process File
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex">
+                      <i className="fas fa-info-circle text-blue-500 mt-0.5 mr-2"></i>
+                      <div className="text-sm text-blue-700">
+                        <strong>Available columns:</strong> {filePreview.headers.join(", ")}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Upload History */}
           <Card className="shadow-sm">
