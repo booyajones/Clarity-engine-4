@@ -45,19 +45,30 @@ export interface ClassificationResult {
 
 export class ClassificationService {
   private rules: any[] = [];
+  private rulesInitialized = false;
 
   constructor() {
-    this.initializeRules();
+    // Don't initialize rules in constructor to avoid blocking startup
   }
 
-  private async initializeRules() {
-    // Load classification rules from database
-    this.rules = await storage.getClassificationRules();
+  private async ensureRulesInitialized() {
+    if (this.rulesInitialized) return;
     
-    // Add default rules if none exist
-    if (this.rules.length === 0) {
-      await this.createDefaultRules();
+    try {
+      // Load classification rules from database
       this.rules = await storage.getClassificationRules();
+      
+      // Add default rules if none exist
+      if (this.rules.length === 0) {
+        await this.createDefaultRules();
+        this.rules = await storage.getClassificationRules();
+      }
+      
+      this.rulesInitialized = true;
+    } catch (error) {
+      console.error("Failed to initialize classification rules:", error);
+      // Continue without rules - we're using OpenAI exclusively anyway
+      this.rulesInitialized = true;
     }
   }
 
@@ -92,6 +103,9 @@ export class ClassificationService {
 
   async classifyPayee(name: string, address?: string): Promise<ClassificationResult> {
     try {
+      // Ensure rules are initialized (though we use OpenAI exclusively)
+      await this.ensureRulesInitialized();
+      
       // Use OpenAI for ALL classifications
       return await this.classifyWithOpenAI(name.trim(), address);
     } catch (error) {
@@ -100,7 +114,7 @@ export class ClassificationService {
       return {
         payeeType: "Business",
         confidence: 0.5,
-        reasoning: `Classification failed due to API error: ${error.message}`,
+        reasoning: `Classification failed due to API error: ${(error as Error).message}`,
       };
     }
   }
@@ -108,7 +122,8 @@ export class ClassificationService {
   private applyRules(name: string): ClassificationResult {
     let bestMatch: ClassificationResult = {
       payeeType: "Individual",
-      confidence: 0.5
+      confidence: 0.5,
+      reasoning: "No rules matched, defaulting to Individual"
     };
 
     for (const rule of this.rules) {
