@@ -18,6 +18,9 @@ export const uploadBatches = pgTable("upload_batches", {
   status: text("status").notNull().default("processing"), // processing, completed, failed
   totalRecords: integer("total_records").notNull().default(0),
   processedRecords: integer("processed_records").notNull().default(0),
+  skippedRecords: integer("skipped_records").notNull().default(0),
+  currentStep: text("current_step"),
+  progressMessage: text("progress_message"),
   accuracy: real("accuracy").default(0),
   userId: integer("user_id").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),

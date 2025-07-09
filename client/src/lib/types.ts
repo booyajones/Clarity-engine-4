@@ -12,6 +12,9 @@ export interface UploadBatch {
   status: string;
   totalRecords: number;
   processedRecords: number;
+  skippedRecords: number;
+  currentStep: string | null;
+  progressMessage: string | null;
   accuracy: number | null;
   userId: number;
   createdAt: string;

@@ -287,8 +287,28 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
   ): Promise<void> {
     const classifications: InsertPayeeClassification[] = [];
     const skippedPayees: Array<{ name: string; reason: string }> = [];
+    const totalRecords = payeeData.length;
 
-    for (const payee of payeeData) {
+    // Initialize progress tracking
+    await storage.updateUploadBatch(batchId, {
+      totalRecords,
+      processedRecords: 0,
+      skippedRecords: 0,
+      currentStep: "Starting classification",
+      progressMessage: "Initializing OpenAI classification...",
+      status: "processing"
+    });
+
+    for (let i = 0; i < payeeData.length; i++) {
+      const payee = payeeData[i];
+      
+      // Update progress
+      await storage.updateUploadBatch(batchId, {
+        processedRecords: i,
+        currentStep: "Classifying payees",
+        progressMessage: `Processing ${payee.originalName} (${i + 1} of ${totalRecords})`,
+      });
+
       try {
         const result = await this.classifyPayee(payee.originalName, payee.address);
         
@@ -321,15 +341,26 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
           reason: (error as Error).message
         });
       }
+
+      // Update progress with skipped count
+      await storage.updateUploadBatch(batchId, {
+        processedRecords: i + 1,
+        skippedRecords: skippedPayees.length,
+      });
     }
+
+    // Final update - save classifications
+    await storage.updateUploadBatch(batchId, {
+      currentStep: "Saving results",
+      progressMessage: "Saving classification results...",
+    });
 
     // Only save high-confidence classifications
     if (classifications.length > 0) {
       await storage.createPayeeClassifications(classifications);
     }
 
-    // Update batch statistics
-    const totalRecords = payeeData.length;
+    // Final batch statistics
     const processedRecords = classifications.length;
     const avgConfidence = classifications.length > 0 
       ? classifications.reduce((sum, c) => sum + c.confidence, 0) / classifications.length
@@ -337,9 +368,11 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
 
     await storage.updateUploadBatch(batchId, {
       status: classifications.length > 0 ? "completed" : "failed",
-      totalRecords,
       processedRecords,
+      skippedRecords: skippedPayees.length,
       accuracy: avgConfidence,
+      currentStep: "Completed",
+      progressMessage: `Processing complete. ${processedRecords} payees classified, ${skippedPayees.length} skipped.`,
       completedAt: new Date(),
     });
 

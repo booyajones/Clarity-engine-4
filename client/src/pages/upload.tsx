@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef } from "react";
 import type { UploadBatch } from "@/lib/types";
+import ProgressTracker from "@/components/ui/progress-tracker";
 
 interface FilePreview {
   filename: string;
@@ -24,6 +25,7 @@ export default function Upload() {
 
   const { data: batches = [] } = useQuery<UploadBatch[]>({
     queryKey: ["/api/upload/batches"],
+    refetchInterval: 2000, // Poll every 2 seconds for progress updates
   });
 
   const previewMutation = useMutation({
@@ -266,28 +268,13 @@ export default function Upload() {
             </div>
           )}
 
-          {/* Upload History */}
+          {/* Upload History with Progress Tracking */}
           {batches.length > 0 && (
-            <div className="border rounded-lg p-6">
-              <h2 className="text-lg font-medium mb-4">Recent Files</h2>
+            <div className="space-y-4">
+              <h2 className="text-lg font-medium">Recent Files</h2>
               <div className="space-y-3">
                 {batches.map((batch) => (
-                  <div key={batch.id} className="flex items-center justify-between p-3 border rounded">
-                    <div>
-                      <div className="font-medium">{batch.originalFilename}</div>
-                      <div className="text-sm text-gray-500">
-                        {batch.status === "completed" && `${batch.processedRecords} records`}
-                        {batch.status === "processing" && "Processing..."}
-                        {batch.status === "failed" && "Failed"}
-                      </div>
-                    </div>
-                    
-                    {batch.status === "completed" && (
-                      <div className="text-sm text-green-600">
-                        Ready for download
-                      </div>
-                    )}
-                  </div>
+                  <ProgressTracker key={batch.id} batch={batch} />
                 ))}
               </div>
             </div>
