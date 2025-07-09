@@ -198,199 +198,101 @@ export default function Upload() {
       <Header title="Upload Data" subtitle="Upload CSV or Excel files for payee classification" />
 
       <main className="flex-1 p-6 overflow-auto">
-        <div className="max-w-4xl mx-auto space-y-6">
+        <div className="max-w-2xl mx-auto space-y-6">
           {/* Upload Section */}
-          <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle>Upload File</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div
-                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                  dragActive 
-                    ? "border-primary-500 bg-primary-50" 
-                    : previewMutation.isPending
-                    ? "border-gray-200 bg-gray-50"
-                    : "border-gray-300 hover:border-primary-400 hover:bg-primary-50 cursor-pointer"
-                }`}
-                onDragEnter={handleDrag}
-                onDragLeave={handleDrag}
-                onDragOver={handleDrag}
-                onDrop={handleDrop}
-                onClick={!previewMutation.isPending ? handleChooseFile : undefined}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".csv,.xlsx,.xls"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                  disabled={previewMutation.isPending}
-                />
-                
-                <div className="w-16 h-16 bg-gray-100 rounded-xl mx-auto mb-4 flex items-center justify-center">
-                  {previewMutation.isPending ? (
-                    <i className="fas fa-spinner fa-spin text-gray-600 text-2xl"></i>
-                  ) : (
-                    <i className="fas fa-cloud-upload-alt text-gray-600 text-2xl"></i>
-                  )}
-                </div>
-                
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  {previewMutation.isPending ? "Analyzing..." : "Drop your file here"}
-                </h3>
-                <p className="text-sm text-gray-500 mb-4">
-                  or click to browse for CSV, XLSX, or XLS files
-                </p>
-                
-                {!previewMutation.isPending && (
-                  <Button className="bg-primary-500 hover:bg-primary-600 text-white">
-                    <i className="fas fa-folder-open mr-2"></i>
-                    Choose File
-                  </Button>
-                )}
-              </div>
-
-              <div className="mt-4 text-sm text-gray-500">
-                <p><strong>Supported formats:</strong> CSV, XLSX, XLS</p>
-                <p><strong>Maximum file size:</strong> 10MB</p>
-                <p><strong>Required columns:</strong> At least one column containing payee names</p>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="border rounded-lg p-6">
+            <h2 className="text-lg font-medium mb-4">Upload File</h2>
+            
+            <div
+              className={`border-2 border-dashed rounded p-6 text-center ${
+                dragActive ? "border-blue-500 bg-blue-50" : "border-gray-300"
+              }`}
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
+              onDragOver={handleDrag}
+              onDrop={handleDrop}
+              onClick={!previewMutation.isPending ? handleChooseFile : undefined}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                onChange={handleFileSelect}
+                className="hidden"
+                disabled={previewMutation.isPending}
+              />
+              
+              {previewMutation.isPending ? (
+                <p>Analyzing file...</p>
+              ) : (
+                <>
+                  <p className="mb-2">Drop CSV or Excel file here</p>
+                  <Button variant="outline">Choose File</Button>
+                </>
+              )}
+            </div>
+          </div>
 
           {/* Column Selection */}
           {filePreview && (
-            <Card className="shadow-sm">
-              <CardHeader>
-                <CardTitle>Select Payee Column</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <p className="text-sm text-gray-600">
-                    We found <strong>{filePreview.headers.length}</strong> columns in "{filePreview.filename}". 
-                    Please select which column contains the payee names.
-                  </p>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Payee Column *
-                      </label>
-                      <Select value={selectedColumn} onValueChange={setSelectedColumn}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a column..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {filePreview.headers.map((header) => (
-                            <SelectItem key={header} value={header}>
-                              {header}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    
-                    <div className="flex items-end">
-                      <Button 
-                        onClick={handleProcessFile}
-                        disabled={!selectedColumn || processMutation.isPending}
-                        className="w-full"
-                      >
-                        {processMutation.isPending ? (
-                          <>
-                            <i className="fas fa-spinner fa-spin mr-2"></i>
-                            Processing...
-                          </>
-                        ) : (
-                          <>
-                            <i className="fas fa-play mr-2"></i>
-                            Process File
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="flex">
-                      <i className="fas fa-info-circle text-blue-500 mt-0.5 mr-2"></i>
-                      <div className="text-sm text-blue-700">
-                        <strong>Available columns:</strong> {filePreview.headers.join(", ")}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="border rounded-lg p-6">
+              <h2 className="text-lg font-medium mb-4">Select Column</h2>
+              <p className="text-sm text-gray-600 mb-4">
+                Which column contains the payee names?
+              </p>
+              
+              <div className="space-y-4">
+                <Select value={selectedColumn} onValueChange={setSelectedColumn}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select column..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filePreview.headers.map((header) => (
+                      <SelectItem key={header} value={header}>
+                        {header}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                <Button 
+                  onClick={handleProcessFile}
+                  disabled={!selectedColumn || processMutation.isPending}
+                  className="w-full"
+                >
+                  {processMutation.isPending ? "Processing..." : "Process File"}
+                </Button>
+              </div>
+            </div>
           )}
 
           {/* Upload History */}
-          <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle>Upload History</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {batches.length === 0 ? (
-                <div className="text-center py-8">
-                  <i className="fas fa-file-upload text-4xl text-gray-300 mb-4"></i>
-                  <p className="text-gray-500">No files uploaded yet</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {batches.map((batch) => (
-                    <div key={batch.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                      <div className="flex items-center space-x-4">
-                        <div className={`w-10 h-10 ${getStatusColor(batch.status)} rounded-lg flex items-center justify-center`}>
-                          {getStatusIcon(batch.status)}
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-gray-900">{batch.originalFilename}</h4>
-                          <div className="flex items-center space-x-4 text-sm text-gray-500">
-                            <span>
-                              {batch.status === "completed" 
-                                ? `${batch.processedRecords} records processed`
-                                : batch.status === "processing"
-                                ? `Processing ${batch.processedRecords}/${batch.totalRecords} records`
-                                : "Processing failed"
-                              }
-                            </span>
-                            {batch.accuracy && (
-                              <span>• {(batch.accuracy * 100).toFixed(1)}% accuracy</span>
-                            )}
-                            <span>• {new Date(batch.createdAt).toLocaleDateString()}</span>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center space-x-2">
-                        {batch.status === "processing" && (
-                          <div className="w-24">
-                            <Progress 
-                              value={batch.totalRecords > 0 ? (batch.processedRecords / batch.totalRecords) * 100 : 0} 
-                              className="h-2"
-                            />
-                          </div>
-                        )}
-                        {batch.status === "completed" && (
-                          <>
-                            <Button variant="outline" size="sm">
-                              <i className="fas fa-eye mr-1"></i>
-                              View
-                            </Button>
-                            <Button variant="outline" size="sm">
-                              <i className="fas fa-download mr-1"></i>
-                              Export
-                            </Button>
-                          </>
-                        )}
+          {batches.length > 0 && (
+            <div className="border rounded-lg p-6">
+              <h2 className="text-lg font-medium mb-4">Recent Files</h2>
+              <div className="space-y-3">
+                {batches.map((batch) => (
+                  <div key={batch.id} className="flex items-center justify-between p-3 border rounded">
+                    <div>
+                      <div className="font-medium">{batch.originalFilename}</div>
+                      <div className="text-sm text-gray-500">
+                        {batch.status === "completed" && `${batch.processedRecords} records`}
+                        {batch.status === "processing" && "Processing..."}
+                        {batch.status === "failed" && "Failed"}
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    
+                    {batch.status === "completed" && (
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm">View</Button>
+                        <Button variant="outline" size="sm">Export</Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>

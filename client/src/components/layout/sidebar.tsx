@@ -2,61 +2,42 @@ import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 
 const navigation = [
-  { name: "Dashboard", href: "/", icon: "fas fa-chart-pie" },
-  { name: "Upload Data", href: "/upload", icon: "fas fa-upload" },
-  { name: "Classifications", href: "/classifications", icon: "fas fa-table" },
-  { name: "Review Queue", href: "/review", icon: "fas fa-eye" },
+  { name: "Dashboard", href: "/" },
+  { name: "Upload", href: "/upload" },
+  { name: "Classifications", href: "/classifications" },
+  { name: "Review", href: "/review" },
 ];
 
 export default function Sidebar() {
   const [location] = useLocation();
 
   return (
-    <div className="w-64 bg-white shadow-sm border-r border-gray-200 flex flex-col">
-      {/* Logo/Brand */}
-      <div className="p-6 border-b border-gray-200">
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-primary-500 rounded-lg flex items-center justify-center">
-            <i className="fas fa-chart-line text-white text-sm"></i>
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">Clarity</h1>
-            <p className="text-xs text-gray-500">Payee Intelligence</p>
-          </div>
+    <div className="w-48 bg-white border-r flex flex-col">
+      {/* Logo */}
+      <div className="px-4 py-4 border-b">
+        <div className="flex items-center space-x-2">
+          <div className="w-6 h-6 bg-blue-500 rounded"></div>
+          <span className="font-medium">Clarity</span>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-2">
+      <nav className="flex-1 p-4 space-y-1">
         {navigation.map((item) => (
           <Link key={item.name} href={item.href}>
             <div
               className={cn(
-                "flex items-center space-x-3 px-3 py-2 rounded-lg font-medium transition-colors cursor-pointer",
+                "px-3 py-2 rounded text-sm cursor-pointer",
                 location === item.href
-                  ? "bg-primary-50 text-primary-700"
+                  ? "bg-blue-50 text-blue-700"
                   : "text-gray-600 hover:bg-gray-50"
               )}
             >
-              <i className={`${item.icon} text-sm`}></i>
-              <span>{item.name}</span>
+              {item.name}
             </div>
           </Link>
         ))}
       </nav>
-
-      {/* User Profile */}
-      <div className="p-4 border-t border-gray-200">
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
-            <i className="fas fa-user text-gray-600 text-xs"></i>
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">Sarah Wilson</p>
-            <p className="text-xs text-gray-500 truncate">Finance Manager</p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

@@ -97,19 +97,30 @@ export default function Dashboard() {
       </Header>
 
       <main className="flex-1 p-6 overflow-auto">
-        <KpiCards stats={stats} />
+        <div className="max-w-4xl mx-auto space-y-6">
+          {/* Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="border rounded p-4">
+              <div className="text-2xl font-bold">{stats.totalPayees}</div>
+              <div className="text-sm text-gray-600">Total Payees</div>
+            </div>
+            <div className="border rounded p-4">
+              <div className="text-2xl font-bold">{Math.round(stats.accuracy)}%</div>
+              <div className="text-sm text-gray-600">Accuracy</div>
+            </div>
+            <div className="border rounded p-4">
+              <div className="text-2xl font-bold">{stats.pendingReview}</div>
+              <div className="text-sm text-gray-600">Pending Review</div>
+            </div>
+            <div className="border rounded p-4">
+              <div className="text-2xl font-bold">{stats.filesProcessed}</div>
+              <div className="text-sm text-gray-600">Files Processed</div>
+            </div>
+          </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <ClassificationChart data={chartData} />
-          <UploadWidget />
+          {/* Review Queue */}
+          <ReviewQueue />
         </div>
-
-        <ReviewQueue />
-
-        <BusinessInsights 
-          categories={businessCategories} 
-          activities={recentActivities} 
-        />
       </main>
     </div>
   );
