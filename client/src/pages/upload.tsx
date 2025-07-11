@@ -6,8 +6,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef } from "react";
-import type { UploadBatch } from "@/lib/types";
+import type { UploadBatch, ClassificationStats } from "@/lib/types";
 import ProgressTracker from "@/components/ui/progress-tracker";
+import { Badge } from "@/components/ui/badge";
+import { FileText, TrendingUp, Clock, CheckCircle } from "lucide-react";
 
 interface FilePreview {
   filename: string;
@@ -26,6 +28,11 @@ export default function Upload() {
   const { data: batches = [] } = useQuery<UploadBatch[]>({
     queryKey: ["/api/upload/batches"],
     refetchInterval: 2000, // Poll every 2 seconds for progress updates
+  });
+
+  const { data: stats } = useQuery<ClassificationStats>({
+    queryKey: ["/api/dashboard/stats"],
+    refetchInterval: 5000, // Poll every 5 seconds for stats
   });
 
   const previewMutation = useMutation({
@@ -200,85 +207,192 @@ export default function Upload() {
       <Header title="Upload Data" subtitle="Upload CSV or Excel files for high-accuracy OpenAI classification (95%+ confidence only)" />
 
       <main className="flex-1 p-6 overflow-auto">
-        <div className="max-w-2xl mx-auto space-y-6">
-          {/* Upload Section */}
-          <div className="border rounded-lg p-6">
-            <h2 className="text-lg font-medium mb-4">Upload File</h2>
-            
-            <div
-              className={`border-2 border-dashed rounded p-6 text-center ${
-                dragActive ? "border-blue-500 bg-blue-50" : "border-gray-300"
-              }`}
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-              onClick={!previewMutation.isPending ? handleChooseFile : undefined}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv,.xlsx,.xls"
-                onChange={handleFileSelect}
-                className="hidden"
-                disabled={previewMutation.isPending}
-              />
-              
-              {previewMutation.isPending ? (
-                <p>Analyzing file...</p>
-              ) : (
-                <>
-                  <p className="mb-2">Drop CSV or Excel file here</p>
-                  <Button variant="outline">Choose File</Button>
-                </>
+        <div className="max-w-6xl mx-auto space-y-6">
+          {/* Statistics Overview */}
+          {stats && (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Payees</CardTitle>
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats.totalPayees.toLocaleString()}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Accuracy</CardTitle>
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats.accuracy.toFixed(1)}%</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Files Processed</CardTitle>
+                  <CheckCircle className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats.filesProcessed}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Pending Review</CardTitle>
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats.pendingReview}</div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Upload Section */}
+            <div className="space-y-6">
+              <div className="border rounded-lg p-6">
+                <h2 className="text-lg font-medium mb-4">Upload File</h2>
+                
+                <div
+                  className={`border-2 border-dashed rounded p-6 text-center ${
+                    dragActive ? "border-blue-500 bg-blue-50" : "border-gray-300"
+                  }`}
+                  onDragEnter={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDragOver={handleDrag}
+                  onDrop={handleDrop}
+                  onClick={!previewMutation.isPending ? handleChooseFile : undefined}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv,.xlsx,.xls"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    disabled={previewMutation.isPending}
+                  />
+                  
+                  {previewMutation.isPending ? (
+                    <p>Analyzing file...</p>
+                  ) : (
+                    <>
+                      <p className="mb-2">Drop CSV or Excel file here</p>
+                      <Button variant="outline">Choose File</Button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Column Selection */}
+              {filePreview && (
+                <div className="border rounded-lg p-6">
+                  <h2 className="text-lg font-medium mb-4">Select Column</h2>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Which column contains the payee names?
+                  </p>
+                  
+                  <div className="space-y-4">
+                    <Select value={selectedColumn} onValueChange={setSelectedColumn}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select column..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {filePreview.headers.map((header) => (
+                          <SelectItem key={header} value={header}>
+                            {header}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    
+                    <Button 
+                      onClick={handleProcessFile}
+                      disabled={!selectedColumn || processMutation.isPending}
+                      className="w-full"
+                    >
+                      {processMutation.isPending ? "Processing..." : "Process File"}
+                    </Button>
+                  </div>
+                </div>
               )}
             </div>
-          </div>
 
-          {/* Column Selection */}
-          {filePreview && (
-            <div className="border rounded-lg p-6">
-              <h2 className="text-lg font-medium mb-4">Select Column</h2>
-              <p className="text-sm text-gray-600 mb-4">
-                Which column contains the payee names?
-              </p>
-              
-              <div className="space-y-4">
-                <Select value={selectedColumn} onValueChange={setSelectedColumn}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select column..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {filePreview.headers.map((header) => (
-                      <SelectItem key={header} value={header}>
-                        {header}
-                      </SelectItem>
+            {/* Job Status Section */}
+            <div className="space-y-6">
+              <div className="border rounded-lg p-6">
+                <h2 className="text-lg font-medium mb-4">Recent Jobs</h2>
+                {batches.length > 0 ? (
+                  <div className="space-y-3">
+                    {batches.slice(0, 5).map((batch) => (
+                      <div key={batch.id} className="border rounded p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center space-x-2">
+                            <h3 className="font-medium text-sm">{batch.filename}</h3>
+                            <Badge variant={
+                              batch.status === 'completed' ? 'default' : 
+                              batch.status === 'processing' ? 'secondary' : 'destructive'
+                            }>
+                              {batch.status}
+                            </Badge>
+                          </div>
+                          <span className="text-xs text-gray-500">
+                            {new Date(batch.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                        
+                        {batch.status === 'processing' && (
+                          <ProgressTracker 
+                            batch={batch} 
+                            onCancel={() => {
+                              fetch(`/api/upload/batches/${batch.id}/cancel`, { method: 'PATCH' })
+                                .then(() => queryClient.invalidateQueries({ queryKey: ["/api/upload/batches"] }));
+                            }}
+                            onDelete={() => {
+                              fetch(`/api/upload/batches/${batch.id}`, { method: 'DELETE' })
+                                .then(() => queryClient.invalidateQueries({ queryKey: ["/api/upload/batches"] }));
+                            }}
+                          />
+                        )}
+                        
+                        {batch.status === 'completed' && (
+                          <div className="text-sm text-gray-600 space-y-1">
+                            <p>Processed: {batch.processedRecords}/{batch.totalRecords}</p>
+                            <p>Accuracy: {batch.accuracy ? `${(batch.accuracy * 100).toFixed(1)}%` : 'N/A'}</p>
+                            <div className="flex space-x-2 mt-2">
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => window.open(`/api/classifications/export/${batch.id}`, '_blank')}
+                              >
+                                Download
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => {
+                                  if (confirm('Are you sure you want to delete this job?')) {
+                                    fetch(`/api/upload/batches/${batch.id}`, { method: 'DELETE' })
+                                      .then(() => queryClient.invalidateQueries({ queryKey: ["/api/upload/batches"] }));
+                                  }
+                                }}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     ))}
-                  </SelectContent>
-                </Select>
-                
-                <Button 
-                  onClick={handleProcessFile}
-                  disabled={!selectedColumn || processMutation.isPending}
-                  className="w-full"
-                >
-                  {processMutation.isPending ? "Processing..." : "Process File"}
-                </Button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">No jobs yet. Upload a file to get started.</p>
+                )}
               </div>
             </div>
-          )}
-
-          {/* Upload History with Progress Tracking */}
-          {batches.length > 0 && (
-            <div className="space-y-4">
-              <h2 className="text-lg font-medium">Recent Files</h2>
-              <div className="space-y-3">
-                {batches.map((batch) => (
-                  <ProgressTracker key={batch.id} batch={batch} />
-                ))}
-              </div>
-            </div>
-          )}
+          </div>
         </div>
       </main>
     </div>

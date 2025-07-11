@@ -3,7 +3,6 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import Dashboard from "@/pages/dashboard";
 import Upload from "@/pages/upload";
 import Classifications from "@/pages/classifications";
 import Review from "@/pages/review";
@@ -17,8 +16,7 @@ function Router() {
       <Sidebar />
       <div className="flex-1 flex flex-col">
         <Switch>
-          <Route path="/" component={Dashboard} />
-          <Route path="/upload" component={Upload} />
+          <Route path="/" component={Upload} />
           <Route path="/classifications" component={Classifications} />
           <Route path="/downloads" component={Downloads} />
           <Route component={NotFound} />

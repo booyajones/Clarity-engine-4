@@ -2,8 +2,7 @@ import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 
 const navigation = [
-  { name: "Dashboard", href: "/" },
-  { name: "Upload", href: "/upload" },
+  { name: "Upload", href: "/" },
   { name: "Classifications", href: "/classifications" },
   { name: "Downloads", href: "/downloads" },
 ];
