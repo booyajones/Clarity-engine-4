@@ -178,3 +178,6 @@ Preferred communication style: Simple, everyday language.
 - **Job Name Consistency**: Fixed discrepancy between upload and downloads sections - both now display original filename
 - **Enhanced Layout**: Side-by-side upload and job status sections with improved navigation
 - **Streamlined UI**: Reduced navigation to Upload, Classifications, and Downloads for cleaner user experience
+- **No More Skipping**: Fixed critical issue where payees below 95% confidence were being skipped - now ALL records get classified regardless of confidence level
+- **Complete Processing**: Every payee receives OpenAI classification attempt, no records are excluded from processing
+- **Realistic Confidence**: Updated OpenAI prompt to provide realistic confidence levels based on available information rather than artificial 95% threshold

@@ -273,7 +273,7 @@ Consider these factors:
 - Address patterns and context clues
 - Industry-specific terminology and SIC codes
 
-Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
+Provide your best classification for every payee. Give realistic confidence levels based on available information.`;
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o",
@@ -396,36 +396,28 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
             
             const result = await this.classifyPayeeWithRetry(payee.originalName, payee.address);
             
-            // Only process if confidence is 95% or higher
-            if (result.confidence >= 0.95) {
-              const cleanedName = normalizePayeeName(payee.originalName);
-              
-              return {
-                type: 'classified' as const,
-                classification: {
-                  batchId,
-                  originalName: payee.originalName,
-                  cleanedName,
-                  address: payee.address,
-                  city: payee.city,
-                  state: payee.state,
-                  zipCode: payee.zipCode,
-                  payeeType: result.payeeType,
-                  confidence: result.confidence,
-                  sicCode: result.sicCode,
-                  sicDescription: result.sicDescription,
-                  reasoning: result.reasoning,
-                  status: "auto-classified" as const,
-                  originalData: payee.originalData,
-                }
-              };
-            } else {
-              return {
-                type: 'skipped' as const,
-                name: payee.originalName,
-                reason: `Confidence ${(result.confidence * 100).toFixed(1)}% below 95% threshold`
-              };
-            }
+            // Process ALL records regardless of confidence level
+            const cleanedName = normalizePayeeName(payee.originalName);
+            
+            return {
+              type: 'classified' as const,
+              classification: {
+                batchId,
+                originalName: payee.originalName,
+                cleanedName,
+                address: payee.address,
+                city: payee.city,
+                state: payee.state,
+                zipCode: payee.zipCode,
+                payeeType: result.payeeType,
+                confidence: result.confidence,
+                sicCode: result.sicCode,
+                sicDescription: result.sicDescription,
+                reasoning: result.reasoning,
+                status: "auto-classified" as const,
+                originalData: payee.originalData,
+              }
+            };
           } catch (error) {
             return {
               type: 'skipped' as const,
@@ -448,12 +440,12 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
             totalProcessed++; // Count as processed
           } else {
             totalSkipped++;
-            totalProcessed++; // Count as processed but skipped
+            totalProcessed++; // Count as processed but failed
             skippedPayees.push({ name: result.value.name, reason: result.value.reason });
           }
         } else {
           totalSkipped++;
-          totalProcessed++; // Count as processed but failed
+          totalProcessed++; // Count as processed but failed  
           skippedPayees.push({ name: 'Unknown', reason: 'Processing failed' });
         }
       }
@@ -478,7 +470,7 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
         currentStep: totalProcessed >= totalRecords ? "Finalizing" : "Processing batch",
         progressMessage: totalProcessed >= totalRecords ? 
           "Finalizing batch processing..." : 
-          `Processed ${totalProcessed}/${totalRecords} records (${totalSkipped} skipped)`,
+          `Processed ${totalProcessed}/${totalRecords} records${totalSkipped > 0 ? ` (${totalSkipped} failed)` : ''}`,
       });
     }
 
@@ -496,11 +488,11 @@ Only classify with 95%+ confidence. If uncertain, return confidence below 95%.`;
       skippedRecords: totalSkipped,
       accuracy: avgConfidence,
       currentStep: "Completed",
-      progressMessage: `Batch processing complete. ${processedRecords} payees classified, ${totalSkipped} skipped from ${totalRecords} total records.`,
+      progressMessage: `Batch processing complete. ${processedRecords} payees classified${totalSkipped > 0 ? `, ${totalSkipped} failed` : ''} from ${totalRecords} total records.`,
       completedAt: new Date(),
     });
 
-    console.log(`Batch ${batchId} completed: ${processedRecords} classified, ${totalSkipped} skipped, ${((processedRecords/totalRecords)*100).toFixed(1)}% success rate`);
+    console.log(`Batch ${batchId} completed: ${processedRecords} classified${totalSkipped > 0 ? `, ${totalSkipped} failed` : ''}, ${((processedRecords/totalRecords)*100).toFixed(1)}% success rate`);
     
     // Log detailed duplicate detection results
     const duplicateCount = skippedPayees.filter(p => p.reason.includes('Duplicate')).length;
