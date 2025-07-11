@@ -9,7 +9,7 @@ import { useState, useRef } from "react";
 import type { UploadBatch, ClassificationStats } from "@/lib/types";
 import ProgressTracker from "@/components/ui/progress-tracker";
 import { Badge } from "@/components/ui/badge";
-import { FileText, TrendingUp, Clock, CheckCircle } from "lucide-react";
+import { FileText, TrendingUp, Clock, CheckCircle, Trash2 } from "lucide-react";
 
 interface FilePreview {
   filename: string;
@@ -323,7 +323,29 @@ export default function Upload() {
             {/* Job Status Section */}
             <div className="space-y-6">
               <div className="border rounded-lg p-6">
-                <h2 className="text-lg font-medium mb-4">Recent Jobs</h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-medium">Recent Jobs</h2>
+                  {batches.some(batch => batch.status === 'cancelled' || batch.status === 'failed') && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (confirm('Are you sure you want to delete all failed/cancelled jobs?')) {
+                          const failedBatches = batches.filter(batch => batch.status === 'cancelled' || batch.status === 'failed');
+                          Promise.all(failedBatches.map(batch => 
+                            fetch(`/api/upload/batches/${batch.id}`, { method: 'DELETE' })
+                          )).then(() => {
+                            queryClient.invalidateQueries({ queryKey: ["/api/upload/batches"] });
+                          });
+                        }
+                      }}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </Button>
+                  )}
+                </div>
                 {batches.length > 0 ? (
                   <div className="space-y-3">
                     {batches.slice(0, 5).map((batch) => (
@@ -369,6 +391,27 @@ export default function Upload() {
                               >
                                 Download
                               </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => {
+                                  if (confirm('Are you sure you want to delete this job?')) {
+                                    fetch(`/api/upload/batches/${batch.id}`, { method: 'DELETE' })
+                                      .then(() => queryClient.invalidateQueries({ queryKey: ["/api/upload/batches"] }));
+                                  }
+                                }}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {(batch.status === 'cancelled' || batch.status === 'failed') && (
+                          <div className="text-sm text-gray-600 space-y-1">
+                            <p>Status: {batch.status === 'cancelled' ? 'Cancelled by user' : 'Processing failed'}</p>
+                            <p>Progress: {batch.processedRecords}/{batch.totalRecords}</p>
+                            <div className="flex space-x-2 mt-2">
                               <Button 
                                 variant="outline" 
                                 size="sm"
