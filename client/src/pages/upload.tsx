@@ -330,7 +330,7 @@ export default function Upload() {
                       <div key={batch.id} className="border rounded p-3">
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center space-x-2">
-                            <h3 className="font-medium text-sm">{batch.filename}</h3>
+                            <h3 className="font-medium text-sm">{batch.originalFilename}</h3>
                             <Badge variant={
                               batch.status === 'completed' ? 'default' : 
                               batch.status === 'processing' ? 'secondary' : 'destructive'
