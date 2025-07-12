@@ -55,6 +55,49 @@ export class ClassificationService {
     setInterval(() => {
       this.checkForStalledJobs();
     }, 30000);
+    
+    // Check for orphaned jobs on startup
+    this.recoverOrphanedJobs();
+  }
+  
+  private async recoverOrphanedJobs() {
+    try {
+      // Check for jobs that were left in "processing" state but aren't being tracked
+      const userId = 1; // TODO: Get from session/auth
+      const batches = await storage.getUserUploadBatches(userId);
+      
+      for (const batch of batches) {
+        if (batch.status === 'processing' && !this.runningJobs.has(batch.id)) {
+          console.log(`Found orphaned job ${batch.id}, checking if it can be recovered...`);
+          
+          // Count actual classifications vs expected
+          const classified = await storage.getBatchClassifications(batch.id);
+          const classifiedCount = classified.length;
+          
+          if (classifiedCount > 0 && classifiedCount >= batch.processedRecords) {
+            // Job appears to have completed successfully
+            console.log(`Recovering completed job ${batch.id}: ${classifiedCount} records classified`);
+            await storage.updateUploadBatch(batch.id, {
+              status: "completed",
+              processedRecords: classifiedCount,
+              completedAt: new Date(),
+              currentStep: "Completed",
+              progressMessage: `Job recovered: ${classifiedCount} records successfully classified`
+            });
+          } else if (Date.now() - new Date(batch.createdAt).getTime() > 60 * 60 * 1000) {
+            // Job is older than 1 hour and incomplete, mark as failed
+            console.log(`Marking stale job ${batch.id} as failed`);
+            await storage.updateUploadBatch(batch.id, {
+              status: "failed",
+              currentStep: "Failed",
+              progressMessage: "Job was interrupted and exceeded maximum processing time"
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error recovering orphaned jobs:", error);
+    }
   }
   
   private async checkForStalledJobs() {
