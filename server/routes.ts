@@ -66,9 +66,25 @@ interface MulterRequest extends Request {
 const upload = multer({ dest: "uploads/" });
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Test database connection on startup
+  try {
+    console.log("Testing database connection...");
+    await storage.getClassificationStats();
+    console.log("Database connection successful");
+  } catch (error) {
+    console.error("Database connection failed:", error);
+    // Don't crash the server, but log the error
+  }
+
   // Health check
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok" });
+  app.get("/api/health", async (req, res) => {
+    try {
+      // Test database as part of health check
+      await storage.getClassificationStats();
+      res.json({ status: "ok", database: "connected" });
+    } catch (error) {
+      res.status(503).json({ status: "unhealthy", database: "disconnected", error: error.message });
+    }
   });
 
   // Dashboard stats
