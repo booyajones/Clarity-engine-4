@@ -181,3 +181,13 @@ Preferred communication style: Simple, everyday language.
 - **No More Skipping**: Fixed critical issue where payees below 95% confidence were being skipped - now ALL records get classified regardless of confidence level
 - **Complete Processing**: Every payee receives OpenAI classification attempt, no records are excluded from processing
 - **Realistic Confidence**: Updated OpenAI prompt to provide realistic confidence levels based on available information rather than artificial 95% threshold
+
+### July 12, 2025 - Advanced Job Reliability & Sub-Job Processing
+- **Comprehensive Timeout Monitoring**: Added automatic job failure detection for stalled jobs (5 min no progress / 30 min max runtime)
+- **Smart Sub-Job Processing**: Large datasets (10k+ records) automatically broken into 1000-record sub-jobs for reliable completion
+- **Adaptive Batch Sizing**: Dynamic batch sizes based on dataset size (10-25 for large, 50 for medium, 100 for small datasets)
+- **Enhanced Rate Limiting**: Reduced concurrency (2-3 API calls) with jitter and exponential backoff for better stability
+- **Job Progress Tracking**: Real-time progress monitoring with automatic stalled job detection and cleanup
+- **Memory Management**: Smaller database writes (50 records at a time) to prevent memory issues with large datasets
+- **Sequential Sub-Job Processing**: Sub-jobs processed sequentially with 1-second pauses to maintain system stability
+- **Robust Error Recovery**: Improved retry logic with exponential backoff and jitter to handle API rate limits

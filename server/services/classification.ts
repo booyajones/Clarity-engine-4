@@ -375,10 +375,26 @@ Provide your best classification for every payee. Give realistic confidence leve
     const totalRecords = payeeData.length;
     const duplicateDetector = new AdvancedDuplicateDetector();
     
-    // Improved batch sizing for large datasets
-    const BATCH_SIZE = Math.min(50, Math.max(10, Math.floor(totalRecords / 100))); // Smaller batches for large datasets
+    // Smart chunking strategy based on dataset size
+    let BATCH_SIZE, CONCURRENT_LIMIT, SUB_JOB_SIZE;
+    
+    if (totalRecords > 10000) {
+      // Very large datasets: Break into sub-jobs of 1000 records each
+      SUB_JOB_SIZE = 1000;
+      BATCH_SIZE = 25;
+      CONCURRENT_LIMIT = 2;
+      console.log(`Large dataset detected (${totalRecords} records). Using sub-job processing with ${SUB_JOB_SIZE} records per sub-job.`);
+    } else if (totalRecords > 2000) {
+      // Medium datasets: Smaller batches with reduced concurrency
+      BATCH_SIZE = 50;
+      CONCURRENT_LIMIT = 3;
+    } else {
+      // Small datasets: Normal processing
+      BATCH_SIZE = 100;
+      CONCURRENT_LIMIT = 5;
+    }
+    
     const PROGRESS_UPDATE_INTERVAL = 5; // Update progress every 5 records for more frequent updates
-    const CONCURRENT_LIMIT = 3; // Reduced concurrency to prevent rate limiting
     
     // Track this job for timeout monitoring
     this.runningJobs.set(batchId, {
@@ -387,6 +403,11 @@ Provide your best classification for every payee. Give realistic confidence leve
     });
     
     console.log(`Starting batch ${batchId} with ${totalRecords} records. Using batch size: ${BATCH_SIZE}, concurrency: ${CONCURRENT_LIMIT}`);
+    
+    // For very large datasets, use sub-job processing
+    if (SUB_JOB_SIZE && totalRecords > 10000) {
+      return await this.processLargeDatasetWithSubJobs(batchId, payeeData, SUB_JOB_SIZE, BATCH_SIZE, CONCURRENT_LIMIT);
+    }
     
     let totalProcessed = 0;
     let totalSkipped = 0;
@@ -403,7 +424,7 @@ Provide your best classification for every payee. Give realistic confidence leve
       status: "processing"
     });
 
-    // Process data in chunks for large batches
+    // Process data in chunks for medium batches
     for (let chunkStart = 0; chunkStart < payeeData.length; chunkStart += BATCH_SIZE) {
       const chunkEnd = Math.min(chunkStart + BATCH_SIZE, payeeData.length);
       const chunk = payeeData.slice(chunkStart, chunkEnd);
@@ -662,6 +683,208 @@ Provide your best classification for every payee. Give realistic confidence leve
     }
     
     throw lastError || new Error("Classification failed after all retries");
+  }
+
+  private async processLargeDatasetWithSubJobs(
+    batchId: number,
+    payeeData: Array<{
+      originalName: string;
+      address?: string;
+      city?: string;
+      state?: string;
+      zipCode?: string;
+      originalData: any;
+    }>,
+    subJobSize: number,
+    batchSize: number,
+    concurrentLimit: number
+  ): Promise<void> {
+    const totalRecords = payeeData.length;
+    const numberOfSubJobs = Math.ceil(totalRecords / subJobSize);
+    
+    console.log(`Breaking large dataset into ${numberOfSubJobs} sub-jobs of ${subJobSize} records each`);
+    
+    // Initialize progress tracking
+    await storage.updateUploadBatch(batchId, {
+      totalRecords,
+      processedRecords: 0,
+      skippedRecords: 0,
+      currentStep: "Starting sub-job processing",
+      progressMessage: `Breaking ${totalRecords} records into ${numberOfSubJobs} manageable sub-jobs...`,
+      status: "processing"
+    });
+    
+    let totalProcessed = 0;
+    let totalSkipped = 0;
+    const duplicateDetector = new AdvancedDuplicateDetector();
+    
+    // Process each sub-job sequentially to maintain stability
+    for (let subJobIndex = 0; subJobIndex < numberOfSubJobs; subJobIndex++) {
+      const subJobStart = subJobIndex * subJobSize;
+      const subJobEnd = Math.min(subJobStart + subJobSize, totalRecords);
+      const subJobData = payeeData.slice(subJobStart, subJobEnd);
+      const subJobRecords = subJobData.length;
+      
+      console.log(`Processing sub-job ${subJobIndex + 1}/${numberOfSubJobs}: records ${subJobStart + 1}-${subJobEnd}`);
+      
+      // Update progress for this sub-job
+      this.updateJobProgress(batchId);
+      await storage.updateUploadBatch(batchId, {
+        currentStep: `Sub-job ${subJobIndex + 1}/${numberOfSubJobs}`,
+        progressMessage: `Processing sub-job ${subJobIndex + 1}/${numberOfSubJobs}: ${subJobRecords} records (${subJobStart + 1}-${subJobEnd})`,
+      });
+      
+      // Process this sub-job with smaller batches
+      const subJobResult = await this.processSubJob(
+        batchId,
+        subJobData,
+        subJobStart,
+        batchSize,
+        concurrentLimit,
+        duplicateDetector
+      );
+      
+      totalProcessed += subJobResult.processed;
+      totalSkipped += subJobResult.skipped;
+      
+      // Update overall progress
+      const overallProgress = Math.round((totalProcessed / totalRecords) * 100);
+      await storage.updateUploadBatch(batchId, {
+        processedRecords: totalProcessed,
+        skippedRecords: totalSkipped,
+        progressMessage: `Completed ${subJobIndex + 1}/${numberOfSubJobs} sub-jobs. Overall progress: ${overallProgress}% (${totalProcessed}/${totalRecords})`,
+      });
+      
+      // Small pause between sub-jobs to prevent overwhelming the system
+      if (subJobIndex < numberOfSubJobs - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+    
+    // Final completion update
+    this.runningJobs.delete(batchId);
+    await storage.updateUploadBatch(batchId, {
+      status: "completed",
+      processedRecords: totalProcessed,
+      skippedRecords: totalSkipped,
+      currentStep: "Completed",
+      progressMessage: `Large dataset processing complete! ${totalProcessed} payees classified from ${totalRecords} total records using ${numberOfSubJobs} sub-jobs.`,
+      completedAt: new Date(),
+    });
+    
+    console.log(`Large dataset batch ${batchId} completed: ${totalProcessed} classified, ${totalSkipped} skipped across ${numberOfSubJobs} sub-jobs`);
+  }
+  
+  private async processSubJob(
+    batchId: number,
+    subJobData: Array<{
+      originalName: string;
+      address?: string;
+      city?: string;
+      state?: string;
+      zipCode?: string;
+      originalData: any;
+    }>,
+    globalOffset: number,
+    batchSize: number,
+    concurrentLimit: number,
+    duplicateDetector: AdvancedDuplicateDetector
+  ): Promise<{ processed: number; skipped: number }> {
+    let subJobProcessed = 0;
+    let subJobSkipped = 0;
+    let classificationsBuffer: InsertPayeeClassification[] = [];
+    
+    // Process this sub-job in small batches
+    for (let chunkStart = 0; chunkStart < subJobData.length; chunkStart += batchSize) {
+      const chunkEnd = Math.min(chunkStart + batchSize, subJobData.length);
+      const chunk = subJobData.slice(chunkStart, chunkEnd);
+      
+      // Check for cancellation
+      const currentBatch = await storage.getUploadBatch(batchId);
+      if (currentBatch?.status === "cancelled") {
+        console.log(`Job ${batchId} was cancelled during sub-job processing`);
+        return { processed: subJobProcessed, skipped: subJobSkipped };
+      }
+      
+      // Process chunk with limited concurrency
+      const chunkResults = [];
+      for (let i = 0; i < chunk.length; i += concurrentLimit) {
+        const batch = chunk.slice(i, i + concurrentLimit);
+        this.updateJobProgress(batchId);
+        
+        const batchPromises = batch.map(async (payee, batchIndex) => {
+          const globalIndex = globalOffset + chunkStart + i + batchIndex;
+          
+          try {
+            // Check for duplicates
+            const isDuplicate = await duplicateDetector.isDuplicate(payee.originalName, payee.address);
+            if (isDuplicate) {
+              return { 
+                success: false, 
+                reason: `Duplicate detected: "${payee.originalName}" already processed`,
+                index: globalIndex
+              };
+            }
+            
+            // Classify the payee
+            const result = await this.classifyPayeeWithRetry(payee.originalName, payee.address);
+            const cleanedName = normalizePayeeName(payee.originalName);
+            
+            const classification: InsertPayeeClassification = {
+              batchId,
+              originalName: payee.originalName,
+              cleanedName,
+              address: payee.address || null,
+              city: payee.city || null,
+              state: payee.state || null,
+              zipCode: payee.zipCode || null,
+              payeeType: result.payeeType,
+              confidence: result.confidence,
+              sicCode: result.sicCode || null,
+              sicDescription: result.sicDescription || null,
+              status: "auto-classified",
+              originalData: payee.originalData,
+              reasoning: result.reasoning,
+            };
+            
+            return { success: true, classification, index: globalIndex };
+          } catch (error) {
+            console.error(`Failed to classify payee at index ${globalIndex}:`, error);
+            return { 
+              success: false, 
+              reason: `Classification error: ${error.message}`,
+              index: globalIndex 
+            };
+          }
+        });
+        
+        const batchResults = await Promise.all(batchPromises);
+        chunkResults.push(...batchResults);
+      }
+      
+      // Process results and buffer successful classifications
+      for (const result of chunkResults) {
+        if (result.success && result.classification) {
+          classificationsBuffer.push(result.classification);
+          subJobProcessed++;
+        } else {
+          subJobSkipped++;
+        }
+      }
+      
+      // Save classifications in smaller batches to prevent memory issues
+      if (classificationsBuffer.length >= 50) {
+        await storage.createPayeeClassifications(classificationsBuffer);
+        classificationsBuffer = [];
+      }
+    }
+    
+    // Save remaining classifications
+    if (classificationsBuffer.length > 0) {
+      await storage.createPayeeClassifications(classificationsBuffer);
+    }
+    
+    return { processed: subJobProcessed, skipped: subJobSkipped };
   }
 }
 
