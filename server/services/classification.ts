@@ -46,9 +46,45 @@ export interface ClassificationResult {
 export class ClassificationService {
   private rules: any[] = [];
   private rulesInitialized = false;
+  private runningJobs = new Map<number, { startTime: Date, lastProgressTime: Date }>();
 
   constructor() {
     // Don't initialize rules in constructor to avoid blocking startup
+    
+    // Monitor for stalled jobs every 30 seconds
+    setInterval(() => {
+      this.checkForStalledJobs();
+    }, 30000);
+  }
+  
+  private async checkForStalledJobs() {
+    const now = new Date();
+    for (const [batchId, jobInfo] of this.runningJobs) {
+      const timeSinceLastProgress = now.getTime() - jobInfo.lastProgressTime.getTime();
+      const totalRunTime = now.getTime() - jobInfo.startTime.getTime();
+      
+      // If no progress for 5 minutes or total runtime exceeds 30 minutes, mark as failed
+      if (timeSinceLastProgress > 5 * 60 * 1000 || totalRunTime > 30 * 60 * 1000) {
+        console.error(`Job ${batchId} appears stalled. Last progress: ${Math.round(timeSinceLastProgress / 1000)}s ago`);
+        await this.failStalledJob(batchId, timeSinceLastProgress > 5 * 60 * 1000 ? 'No progress timeout' : 'Maximum runtime exceeded');
+      }
+    }
+  }
+  
+  private async failStalledJob(batchId: number, reason: string) {
+    this.runningJobs.delete(batchId);
+    await storage.updateUploadBatch(batchId, {
+      status: "failed",
+      currentStep: "Failed",
+      progressMessage: `Job failed: ${reason}. Please try uploading a smaller file or contact support.`,
+    });
+  }
+  
+  private updateJobProgress(batchId: number) {
+    const jobInfo = this.runningJobs.get(batchId);
+    if (jobInfo) {
+      jobInfo.lastProgressTime = new Date();
+    }
   }
 
   private async ensureRulesInitialized() {
@@ -250,6 +286,9 @@ export class ClassificationService {
       // Apply rate limiting for large batches
       await rateLimiter.waitIfNeeded();
       
+      // Add small random delay to spread out API calls
+      await new Promise(resolve => setTimeout(resolve, Math.random() * 500));
+      
       const prompt = `Classify this payee as Individual, Business, or Government with high accuracy.
 
 Payee Name: ${name}
@@ -335,8 +374,19 @@ Provide your best classification for every payee. Give realistic confidence leve
   ): Promise<void> {
     const totalRecords = payeeData.length;
     const duplicateDetector = new AdvancedDuplicateDetector();
-    const BATCH_SIZE = 100; // Process in chunks to manage memory
+    
+    // Improved batch sizing for large datasets
+    const BATCH_SIZE = Math.min(50, Math.max(10, Math.floor(totalRecords / 100))); // Smaller batches for large datasets
     const PROGRESS_UPDATE_INTERVAL = 5; // Update progress every 5 records for more frequent updates
+    const CONCURRENT_LIMIT = 3; // Reduced concurrency to prevent rate limiting
+    
+    // Track this job for timeout monitoring
+    this.runningJobs.set(batchId, {
+      startTime: new Date(),
+      lastProgressTime: new Date()
+    });
+    
+    console.log(`Starting batch ${batchId} with ${totalRecords} records. Using batch size: ${BATCH_SIZE}, concurrency: ${CONCURRENT_LIMIT}`);
     
     let totalProcessed = 0;
     let totalSkipped = 0;
@@ -379,6 +429,9 @@ Provide your best classification for every payee. Give realistic confidence leve
       
       for (let i = 0; i < chunk.length; i += CONCURRENT_LIMIT) {
         const batch = chunk.slice(i, i + CONCURRENT_LIMIT);
+        
+        // Update job progress tracking
+        this.updateJobProgress(batchId);
         const batchPromises = batch.map(async (payee, batchIndex) => {
           const globalIndex = chunkStart + i + batchIndex;
           
@@ -534,8 +587,10 @@ Provide your best classification for every payee. Give realistic confidence leve
         }
       }
 
-      // Update progress every chunk with detailed status
+      // Update job progress tracking and database
+      this.updateJobProgress(batchId);
       const progressPercent = Math.round((totalProcessed / totalRecords) * 100);
+      
       await storage.updateUploadBatch(batchId, {
         processedRecords: totalProcessed,
         skippedRecords: totalSkipped,
@@ -567,6 +622,9 @@ Provide your best classification for every payee. Give realistic confidence leve
       completedAt: new Date(),
     });
 
+    // Clean up job tracking
+    this.runningJobs.delete(batchId);
+    
     console.log(`Batch ${batchId} completed: ${processedRecords} classified${totalSkipped > 0 ? `, ${totalSkipped} failed` : ''}, ${((processedRecords/totalRecords)*100).toFixed(1)}% success rate`);
     
     // Log detailed duplicate detection results
@@ -593,9 +651,11 @@ Provide your best classification for every payee. Give realistic confidence leve
         lastError = error as Error;
         
         if (attempt < maxRetries) {
-          // Exponential backoff: 1s, 2s, 4s
-          const backoffMs = Math.pow(2, attempt) * 1000;
-          console.log(`Classification attempt ${attempt + 1} failed for "${name}", retrying in ${backoffMs}ms...`);
+          // Exponential backoff with jitter: 1-2s, 2-4s, 4-8s
+          const baseBackoff = Math.pow(2, attempt) * 1000;
+          const jitter = Math.random() * baseBackoff;
+          const backoffMs = baseBackoff + jitter;
+          console.log(`Classification attempt ${attempt + 1} failed for "${name}", retrying in ${Math.round(backoffMs)}ms...`);
           await new Promise(resolve => setTimeout(resolve, backoffMs));
         }
       }
