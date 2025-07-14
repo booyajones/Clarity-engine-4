@@ -7,11 +7,11 @@ import fs from 'fs';
 import path from 'path';
 import * as XLSX from 'xlsx';
 
-// Initialize OpenAI with high performance settings
+// Initialize OpenAI with Tier 5 performance settings
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY,
-  maxRetries: 3,
-  timeout: 30000 // 30 second timeout per request
+  maxRetries: 5,
+  timeout: 20000 // 20 second timeout for faster retries
 });
 
 interface ClassificationResult {
@@ -124,8 +124,8 @@ export class OptimizedClassificationService {
     stream: Readable,
     signal: AbortSignal
   ): Promise<void> {
-    const BATCH_SIZE = 100; // Process 100 payees in parallel
-    const MAX_CONCURRENT = 50; // Maximum 50 concurrent OpenAI calls
+    const BATCH_SIZE = 500; // Process 500 payees in parallel for Tier 5
+    const MAX_CONCURRENT = 200; // Maximum 200 concurrent OpenAI calls for Tier 5
     let buffer: PayeeData[] = [];
     let totalProcessed = 0;
     let totalRecords = 0;
@@ -197,7 +197,7 @@ export class OptimizedClassificationService {
     signal: AbortSignal
   ): Promise<void> {
     const classifications: InsertPayeeClassification[] = [];
-    const CHUNK_SIZE = 10; // Process in chunks of 10 for optimal OpenAI performance
+    const CHUNK_SIZE = 50; // Process in chunks of 50 for Tier 5 performance
     
     // Process payees in chunks with controlled concurrency
     for (let i = 0; i < payees.length; i += CHUNK_SIZE) {
@@ -254,8 +254,8 @@ export class OptimizedClassificationService {
       }
     }
     
-    // Save classifications in batches to avoid memory issues
-    const SAVE_BATCH_SIZE = 100;
+    // Save classifications in larger batches for better performance
+    const SAVE_BATCH_SIZE = 500;
     for (let i = 0; i < classifications.length; i += SAVE_BATCH_SIZE) {
       const batch = classifications.slice(i, i + SAVE_BATCH_SIZE);
       await storage.createPayeeClassifications(batch);
