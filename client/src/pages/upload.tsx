@@ -27,7 +27,7 @@ export default function Upload() {
 
   const { data: batches = [] } = useQuery<UploadBatch[]>({
     queryKey: ["/api/upload/batches"],
-    refetchInterval: 2000, // Poll every 2 seconds for progress updates
+    refetchInterval: 1000, // Poll every 1 second for faster progress updates
   });
 
   const { data: stats } = useQuery<ClassificationStats>({
@@ -89,13 +89,13 @@ export default function Upload() {
       
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/upload/batches"] });
       setFilePreview(null);
       setSelectedColumn("");
       toast({
-        title: "File uploaded successfully",
-        description: "Your file is being processed. You'll receive a notification when it's complete.",
+        title: "File processing started",
+        description: `Processing batch ID ${data.batchId}. Watch the progress in the Recent Jobs section below.`,
       });
     },
     onError: () => {
@@ -159,11 +159,20 @@ export default function Upload() {
       return;
     }
 
+    toast({
+      title: "Uploading file...",
+      description: `Processing ${file.name}`,
+    });
     previewMutation.mutate(file);
   };
 
   const handleProcessFile = () => {
     if (!filePreview || !selectedColumn) return;
+    
+    toast({
+      title: "Starting processing...",
+      description: `AI classification will begin shortly for ${filePreview.filename}`,
+    });
     
     processMutation.mutate({
       tempFileName: filePreview.tempFileName,

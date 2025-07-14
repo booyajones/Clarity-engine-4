@@ -190,7 +190,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Process file in background with selected column
       processFileAsync({ filename: tempFileName, originalname: originalFilename, path: `uploads/${tempFileName}` }, batch.id, payeeColumn);
 
-      res.json({ batchId: batch.id, status: "processing" });
+      res.json({ 
+        batchId: batch.id, 
+        status: "processing",
+        message: "File uploaded successfully and processing has started",
+        filename: batch.filename
+      });
     } catch (error) {
       console.error("Error processing file:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -375,6 +380,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 async function processFileAsync(file: any, batchId: number, payeeColumn?: string) {
   try {
+    console.log(`Starting file processing for batch ${batchId}, file: ${file.originalname}`);
+    
+    // Immediate status update
+    await storage.updateUploadBatch(batchId, {
+      status: "processing",
+      currentStep: "Reading file",
+      progressMessage: `Starting to process ${file.originalname}...`,
+    });
+
     const payeeData: Array<{
       originalName: string;
       address?: string;
@@ -386,8 +400,15 @@ async function processFileAsync(file: any, batchId: number, payeeColumn?: string
 
     const filePath = file.path;
     const ext = path.extname(file.originalname).toLowerCase();
+    
+    console.log(`Reading file ${filePath} with extension ${ext}`);
 
     if (ext === ".csv") {
+      await storage.updateUploadBatch(batchId, {
+        currentStep: "Parsing CSV",
+        progressMessage: `Reading CSV file and extracting payee data...`,
+      });
+
       await new Promise<void>((resolve, reject) => {
         fs.createReadStream(filePath)
           .pipe(csv())
@@ -409,6 +430,11 @@ async function processFileAsync(file: any, batchId: number, payeeColumn?: string
           .on("error", reject);
       });
     } else if (ext === ".xlsx" || ext === ".xls") {
+      await storage.updateUploadBatch(batchId, {
+        currentStep: "Parsing Excel",
+        progressMessage: `Reading Excel file and extracting payee data...`,
+      });
+
       const workbook = XLSX.readFile(filePath);
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
@@ -430,14 +456,28 @@ async function processFileAsync(file: any, batchId: number, payeeColumn?: string
       }
     }
 
+    console.log(`Found ${payeeData.length} payee records in file`);
+    
+    // Update with record count
+    await storage.updateUploadBatch(batchId, {
+      totalRecords: payeeData.length,
+      currentStep: "Initializing AI classification",
+      progressMessage: `Found ${payeeData.length} payee records. Starting AI classification...`,
+    });
+
     // Process classifications
     await classificationService.processPayeeBatch(batchId, payeeData);
 
     // Clean up uploaded file
     fs.unlinkSync(filePath);
+    console.log(`File processing completed for batch ${batchId}`);
   } catch (error) {
     console.error("Error processing file:", error);
-    await storage.updateUploadBatch(batchId, { status: "failed" });
+    await storage.updateUploadBatch(batchId, { 
+      status: "failed",
+      currentStep: "Failed",
+      progressMessage: `File processing failed: ${(error as Error).message}`
+    });
   }
 }
 
