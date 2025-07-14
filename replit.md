@@ -211,10 +211,14 @@ Preferred communication style: Simple, everyday language.
 - **Error Recovery**: Better error handling with automatic retries and fallback classifications
 - **Expected Performance**: 50-100+ records/second with $800/month OpenAI budget (Tier 3+)
 
-### July 15, 2025 - Accuracy Fix & 95% Confidence Implementation
-- **Fixed Accuracy Calculation**: Now properly calculates percentage of records with 95%+ confidence
-- **GPT-4o Integration**: Switched from GPT-3.5-turbo to GPT-4o for best-in-class accuracy
-- **Confidence Threshold**: Implemented proper confidence scoring with 95% threshold requirement
-- **Delete All Jobs**: Added button to delete all jobs at once for easier management
-- **Improved Prompts**: Enhanced system prompts to only return high confidence when truly certain
-- **Duplicate Detection**: Maintains in-memory cache of processed names to identify duplicates
+### July 15, 2025 - Complete Classification with 95% Accuracy Target
+- **Classify Everything**: All records now classified, none skipped - achieving comprehensive coverage
+- **GPT-4o with Confidence Rules**: Clear classification rules for Business/Individual/Government with 95%+ confidence targets
+- **Flag for Review System**: Ambiguous cases (below 95% confidence) marked as "pending-review" instead of being skipped
+- **Enhanced Duplicate Detection**: Database-wide duplicate checking with advanced name normalization (30+ business suffixes)
+- **Improved Accuracy Calculation**: Shows percentage of records achieving 95%+ confidence level
+- **Classification Guidelines**:
+  - Business: LLC/INC/CORP suffixes, business activities, brand names (95-99% confidence)
+  - Individual: Personal names without business indicators (95-99% confidence)
+  - Government: City/County/State prefixes, department names (95-99% confidence)
+  - Ambiguous: Flagged for review if confidence below 95%

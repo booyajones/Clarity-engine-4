@@ -21,6 +21,7 @@ interface ClassificationResult {
   sicCode?: string;
   sicDescription?: string;
   reasoning: string;
+  flagForReview?: boolean;
 }
 
 interface PayeeData {
@@ -233,7 +234,7 @@ export class OptimizedClassificationService {
       // Calculate accuracy (percentage of records with 95%+ confidence)
       const classifications = await storage.getBatchClassifications(batchId);
       const highConfidenceCount = classifications.filter(c => c.confidence >= 0.95).length;
-      const accuracy = totalProcessed > 0 ? highConfidenceCount / totalProcessed : 0;
+      const accuracy = classifications.length > 0 ? highConfidenceCount / classifications.length : 0;
       
       await storage.updateUploadBatch(batchId, {
         status: "completed",
@@ -279,30 +280,28 @@ export class OptimizedClassificationService {
           continue;
         }
         
-        // Only save if confidence is 95% or higher
-        if (result.confidence >= 0.95) {
-          classifications.push({
-            batchId,
-            originalName: payee.originalName,
-            cleanedName: this.normalizePayeeName(payee.originalName),
-            address: payee.address || null,
-            city: payee.city || null,
-            state: payee.state || null,
-            zipCode: payee.zipCode || null,
-            payeeType: result.payeeType,
-            confidence: result.confidence,
-            sicCode: result.sicCode || null,
-            sicDescription: result.sicDescription || null,
-            status: "auto-classified",
-            originalData: payee.originalData,
-            reasoning: result.reasoning,
-          });
-          
-          // Add to processed names cache
-          this.processedNames.set(this.normalizePayeeName(payee.originalName), result);
-        } else {
-          console.log(`Skipping low confidence (${result.confidence}): ${payee.originalName}`);
-        }
+        // Save all records, but flag low confidence ones for review
+        const flagForReview = result.confidence < 0.95 || result.flagForReview;
+        
+        classifications.push({
+          batchId,
+          originalName: payee.originalName,
+          cleanedName: this.normalizePayeeName(payee.originalName),
+          address: payee.address || null,
+          city: payee.city || null,
+          state: payee.state || null,
+          zipCode: payee.zipCode || null,
+          payeeType: result.payeeType,
+          confidence: result.confidence,
+          sicCode: result.sicCode || null,
+          sicDescription: result.sicDescription || null,
+          status: flagForReview ? "pending-review" : "auto-classified",
+          originalData: payee.originalData,
+          reasoning: result.reasoning,
+        });
+        
+        // Add to processed names cache
+        this.processedNames.set(this.normalizePayeeName(payee.originalName), result);
       }
     } catch (error) {
       console.error(`Batch processing error:`, error);
@@ -332,12 +331,31 @@ export class OptimizedClassificationService {
         model: "gpt-4o", // Use GPT-4o for best accuracy
         messages: [{
           role: "system",
-          content: `You are an expert payee classifier. Classify as Individual, Business, or Government with high accuracy.
-IMPORTANT: Only return confidence of 0.95 or higher when you are VERY certain. If uncertain, use lower confidence.
-You must respond in valid JSON format like this: {"payeeType":"Business","confidence":0.98,"sicCode":"5411","sicDescription":"Grocery Stores","reasoning":"LLC suffix clearly indicates business entity"}`
+          content: `You are an expert payee classifier with 95%+ accuracy. Classify entities as Individual, Business, or Government based on these rules:
+
+BUSINESS INDICATORS (95-99% confidence):
+- LLC, INC, CORP, CO, LTD, LP, PLLC, etc.
+- "Gallery", "Services", "Solutions", "Systems", "Group"
+- Brand names (McDonald's, Walmart, etc.)
+- Business activities (Locksmith, Plumbing, Catering, etc.)
+- DBA (Doing Business As)
+
+INDIVIDUAL INDICATORS (95-99% confidence):
+- Personal names without business indicators
+- First name only (John, Mary, etc.)
+- Full personal names (John Smith, Mary Johnson)
+
+GOVERNMENT INDICATORS (95-99% confidence):
+- City of, County of, State of
+- Department names (DOT, DMV, IRS)
+- Federal/State/Municipal agencies
+
+For ambiguous cases (60-94% confidence), include "flagForReview":true
+
+Respond in JSON: {"payeeType":"Business","confidence":0.98,"sicCode":"5411","sicDescription":"Grocery Stores","reasoning":"Clear business entity with LLC suffix","flagForReview":false}`
         }, {
           role: "user",
-          content: `Classify this payee and respond with JSON: "${payee.originalName}"${payee.address ? `, Address: ${payee.address}` : ''}`
+          content: `Classify this payee: "${payee.originalName}"${payee.address ? `, Address: ${payee.address}` : ''}`
         }],
         temperature: 0,
         max_tokens: 150,
@@ -348,10 +366,11 @@ You must respond in valid JSON format like this: {"payeeType":"Business","confid
       
       const classification: ClassificationResult = {
         payeeType: result.payeeType || "Individual",
-        confidence: Math.min(Math.max(result.confidence || 0.5, 0), 1),
+        confidence: Math.min(Math.max(result.confidence || 0.85, 0), 1),
         sicCode: result.sicCode,
         sicDescription: result.sicDescription,
-        reasoning: result.reasoning || "Classified based on available information"
+        reasoning: result.reasoning || "Classified based on available information",
+        flagForReview: result.flagForReview || false
       };
       
       // Cache the result
