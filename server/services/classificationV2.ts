@@ -61,10 +61,12 @@ export class OptimizedClassificationService {
     
     try {
       const ext = path.extname(filePath).toLowerCase();
+      console.log(`File path: ${filePath}`);
+      console.log(`Detected extension: "${ext}"`);
       console.log(`Processing ${ext} file for batch ${batchId}, payeeColumn="${payeeColumn}"`);
       
       console.log(`About to create stream for ${ext} file...`);
-      const payeeStream = ext === '.csv' 
+      const payeeStream = ext === '.csv' || !ext 
         ? this.createCsvStream(filePath, payeeColumn)
         : this.createExcelStream(filePath, payeeColumn);
       
