@@ -337,60 +337,42 @@ export class OptimizedClassificationService {
         model: "gpt-4o", // Use GPT-4o for best accuracy
         messages: [{
           role: "system",
-          content: `You are a financial data classification expert specializing in payee identification. Your goal is to achieve 95%+ accuracy.
+          content: `Classify payees as Business, Individual, or Government with 95%+ confidence.
 
-CLASSIFICATION RULES:
+Business: LLC/INC/CORP/CO/LTD suffixes, business keywords, brand names
+Individual: Personal names without business indicators  
+Government: City/County/State of, agencies, departments
 
-1. BUSINESS (High Confidence 0.95-0.99):
-   - Legal entity suffixes: LLC, INC, CORP, CO, LTD, LP, LLP, PLLC, PC, PA, ENTERPRISES, HOLDINGS
-   - Business keywords: Services, Solutions, Systems, Group, Associates, Partners, Consulting, Management
-   - Recognized brand names or commercial establishments
-   - Trade/profession names (e.g., "Bob's Plumbing", "Smith Auto Repair")
-   - DBA (Doing Business As) indicators
-   - Always assign appropriate SIC code for businesses
-
-2. INDIVIDUAL (High Confidence 0.95-0.99):
-   - Personal names WITHOUT any business indicators
-   - Single first names (John, Mary, Sarah)
-   - Full personal names (John Smith, Mary Johnson-Lee)
-   - Names with personal titles (Mr., Mrs., Dr.) without business context
-   - Important: If ANY business suffix or keyword is present, classify as Business
-
-3. GOVERNMENT (High Confidence 0.95-0.99):
-   - Government prefixes: City of, County of, State of, Town of, Village of
-   - Agency acronyms: IRS, DOT, DMV, USPS, FBI, EPA, FDA
-   - Department/Bureau/Office/Authority/Commission
-   - Public schools, universities, libraries
-   - Court systems, police departments, fire departments
-
-CONFIDENCE SCORING:
-- 0.95-0.99: Clear indicators present, unambiguous classification
-- 0.85-0.94: Some indicators present but with minor ambiguity
-- 0.60-0.84: Mixed or unclear indicators, needs review
-- Below 0.60: Insufficient information
-
-Always include detailed reasoning explaining your classification decision.
-For any confidence below 0.95, set "flagForReview":true
-
-Respond in JSON format:
-{
-  "payeeType": "Business|Individual|Government",
-  "confidence": 0.00-0.99,
-  "sicCode": "XXXX" (for businesses only),
-  "sicDescription": "Description" (for businesses only),
-  "reasoning": "Detailed explanation of classification logic",
-  "flagForReview": true|false
-}`
+Return concise JSON:
+{"payeeType":"Business|Individual|Government","confidence":0.95-0.99,"sicCode":"XXXX","sicDescription":"Name","reasoning":"Brief reason","flagForReview":false}`
         }, {
           role: "user",
           content: `Classify this payee: "${payee.originalName}"${payee.address ? `, Address: ${payee.address}` : ''}`
         }],
         temperature: 0,
-        max_tokens: 150,
+        max_tokens: 500, // Further increased to prevent any truncation
         response_format: { type: "json_object" }
       });
       
-      const result = JSON.parse(response.choices[0].message.content || '{}');
+      const responseContent = response.choices[0].message.content || '{}';
+      let result: any;
+      
+      try {
+        result = JSON.parse(responseContent);
+      } catch (parseError) {
+        console.error(`JSON parse error for ${payee.originalName}:`, parseError.message);
+        console.error(`Raw response: ${responseContent}`);
+        
+        // Fallback classification with low confidence
+        return {
+          payeeType: "Individual",
+          confidence: 0.5,
+          sicCode: null,
+          sicDescription: null,
+          reasoning: `Failed to parse AI response: ${parseError.message}. Using fallback classification.`,
+          flagForReview: true
+        };
+      }
       
       const classification: ClassificationResult = {
         payeeType: result.payeeType || "Individual",
@@ -398,13 +380,22 @@ Respond in JSON format:
         sicCode: result.sicCode,
         sicDescription: result.sicDescription,
         reasoning: result.reasoning || "Classified based on available information",
-        flagForReview: result.flagForReview || false
+        flagForReview: result.flagForReview || result.confidence < 0.95
       };
       
       return classification;
     } catch (error) {
-      console.error(`OpenAI error for ${payee.originalName}:`, error.message);
-      throw error;
+      console.error(`OpenAI API error for ${payee.originalName}:`, error.message);
+      
+      // Return a fallback classification instead of throwing
+      return {
+        payeeType: "Individual",
+        confidence: 0.5,
+        sicCode: null,
+        sicDescription: null,
+        reasoning: `Classification API error: ${error.message}. Using fallback classification.`,
+        flagForReview: true
+      };
     }
   }
   

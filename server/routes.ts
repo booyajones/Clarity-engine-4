@@ -399,6 +399,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Test classification endpoint (for debugging)
+  app.post("/api/test-classification", async (req, res) => {
+    try {
+      const { batchId, filePath, payeeColumn } = req.body;
+      
+      console.log(`Testing classification for batch ${batchId}, file: ${filePath}`);
+      
+      // Directly call the classification service
+      const { optimizedClassificationService } = await import("./services/classificationV2.js");
+      await optimizedClassificationService.processFileStream(batchId, filePath, payeeColumn);
+      
+      res.json({ success: true, message: "Classification test started" });
+    } catch (error) {
+      console.error("Test classification error:", error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
