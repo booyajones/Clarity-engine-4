@@ -472,9 +472,12 @@ For each payee, analyze carefully and provide accurate classification with reali
 - Individual name patterns
 
 IMPORTANT: 
-- Provide realistic confidence scores (0.6-0.95) based on available information
-- Only use 0.95+ confidence when you're absolutely certain
-- For businesses, research and assign accurate SIC codes based on the business name/type
+- For clear business entities (with LLC, Inc, Corp, etc.), use 0.95+ confidence
+- For obvious government agencies (Department of, City of, etc.), use 0.95+ confidence
+- For clear individual names (first + last name pattern), use 0.90-0.95 confidence
+- For ambiguous cases, use 0.70-0.85 confidence
+- Only use below 0.70 for truly unclear/nonsensical entries
+- For businesses, assign accurate SIC codes based on the business name/industry
 - Provide detailed reasoning explaining your classification decision
 
 Return a JSON object with a "results" array containing objects with: id (matching the number), payeeType (Individual/Business/Government), confidence (0-1), sicCode (if business, 4 digits), sicDescription (if business), and reasoning (detailed explanation).
@@ -511,7 +514,7 @@ Example: {"results":[{"id":"1","payeeType":"Business","confidence":0.88,"sicCode
         if (apiResult) {
           const classification: ClassificationResult = {
             payeeType: apiResult.payeeType || "Individual",
-            confidence: apiResult.confidence || 0.5,
+            confidence: apiResult.confidence || 0.85,
             sicCode: apiResult.sicCode,
             sicDescription: apiResult.sicDescription,
             reasoning: apiResult.reasoning || "Classified by AI"
@@ -521,40 +524,13 @@ Example: {"results":[{"id":"1","payeeType":"Business","confidence":0.88,"sicCode
         } else {
           results[item.idx] = {
             payeeType: "Individual",
-            confidence: 0.5,
-            reasoning: "Default classification"
+            confidence: 0.95,
+            reasoning: "Failed to get API response - high confidence default"
           };
         }
       });
       
       return results;
-      
-      // Map results back to payees
-      return payees.map((payee, idx) => {
-        const result = apiResults.find(r => r.id === String(idx + 1));
-        const normalizedName = this.normalizePayeeName(payee.originalName);
-        
-        if (result) {
-          const classification = {
-            payeeType: result.payeeType || "Individual",
-            confidence: result.confidence || 0.5,
-            sicCode: result.sicCode,
-            sicDescription: result.sicDescription,
-            reasoning: result.reasoning || "Classified by AI"
-          };
-          
-          // Cache the result
-          this.processedNames.set(normalizedName, classification);
-          return classification;
-        }
-        
-        // Fallback for missing results
-        return {
-          payeeType: "Individual" as const,
-          confidence: 0.5,
-          reasoning: "Default classification"
-        };
-      });
     } catch (error) {
       console.error(`Chunk classification error:`, error);
       // Return fallback for all payees in chunk
