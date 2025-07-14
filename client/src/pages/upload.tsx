@@ -9,7 +9,7 @@ import { useState, useRef } from "react";
 import type { UploadBatch, ClassificationStats } from "@/lib/types";
 import ProgressTracker from "@/components/ui/progress-tracker";
 import { Badge } from "@/components/ui/badge";
-import { FileText, TrendingUp, Clock, CheckCircle, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 
 interface FilePreview {
   filename: string;
@@ -30,10 +30,7 @@ export default function Upload() {
     refetchInterval: 1000, // Poll every 1 second for faster progress updates
   });
 
-  const { data: stats } = useQuery<ClassificationStats>({
-    queryKey: ["/api/dashboard/stats"],
-    refetchInterval: 5000, // Poll every 5 seconds for stats
-  });
+
 
   const previewMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -217,51 +214,7 @@ export default function Upload() {
 
       <main className="flex-1 p-6 overflow-auto">
         <div className="max-w-6xl mx-auto space-y-6">
-          {/* Statistics Overview */}
-          {stats && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Payees</CardTitle>
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats.totalPayees.toLocaleString()}</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Accuracy</CardTitle>
-                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    {stats.accuracy != null && !isNaN(stats.accuracy) 
-                      ? `${(stats.accuracy * 100).toFixed(1)}%` 
-                      : 'N/A'}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Files Processed</CardTitle>
-                  <CheckCircle className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats.filesProcessed}</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Pending Review</CardTitle>
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats.pendingReview}</div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
+
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Upload Section */}
