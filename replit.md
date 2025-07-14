@@ -290,3 +290,25 @@ Preferred communication style: Simple, everyday language.
 - **UI Enhancement**: Immediate column selection after file upload without "Next" button
   - Streamlined workflow: Choose File → Column selection appears automatically
   - Preserved font themes and professional "cold clarity" aesthetic
+
+### January 15, 2025 (Latest) - Advanced Results Viewing & Column Sorting
+- **Comprehensive Classification Viewer**: Created detailed interface for examining classification results
+  - View Results button next to Download for completed jobs
+  - Summary cards showing Business/Individual/Government breakdowns with totals
+  - Real-time search across payee names, companies, and industries
+  - Filter by classification type (Business/Individual/Government/All)
+  - Individual record details with AI reasoning, confidence scores, and original data
+- **Advanced Column Sorting**: Click-to-sort functionality on all table columns
+  - Sort by Payee Name, Type, Confidence, Industry, or Location
+  - Visual sort indicators (up/down arrows) show current sort direction
+  - Toggle ascending/descending order by clicking same column twice
+  - Supports sorting by confidence score, SIC codes, geographic location
+- **Enhanced Export Options**: Multiple download formats for different needs
+  - Download All: Complete dataset with original field order + clarity_* columns
+  - Export Filtered: Only currently filtered/sorted records as CSV
+  - Copy-to-clipboard functionality for individual names and data fields
+- **Professional UX Features**: 
+  - Responsive design with mobile-friendly interface
+  - Loading states and error handling throughout
+  - Breadcrumb navigation back to main job list
+  - Detailed classification reasoning in popup dialogs

@@ -40,6 +40,9 @@ import {
   FileSpreadsheet,
   Copy,
   CheckCircle2,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -98,6 +101,24 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
   const [selectedType, setSelectedType] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("originalName");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(column);
+      setSortOrder("asc");
+    }
+  };
+
+  const getSortIcon = (column: string) => {
+    if (sortBy !== column) {
+      return <ChevronsUpDown className="h-4 w-4 text-gray-400" />;
+    }
+    return sortOrder === "asc" 
+      ? <ChevronUp className="h-4 w-4 text-gray-600" />
+      : <ChevronDown className="h-4 w-4 text-gray-600" />;
+  };
   const [selectedClassification, setSelectedClassification] = useState<ClassificationData | null>(null);
 
   const { data, isLoading, error } = useQuery<ClassificationResponse>({
@@ -211,13 +232,33 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
       let aValue: any, bValue: any;
       
       switch (sortBy) {
-        case "confidence":
-          aValue = a.confidence;
-          bValue = b.confidence;
+        case "originalName":
+          aValue = a.originalName.toLowerCase();
+          bValue = b.originalName.toLowerCase();
+          break;
+        case "cleanedName":
+          aValue = a.cleanedName.toLowerCase();
+          bValue = b.cleanedName.toLowerCase();
           break;
         case "payeeType":
           aValue = a.payeeType;
           bValue = b.payeeType;
+          break;
+        case "confidence":
+          aValue = a.confidence;
+          bValue = b.confidence;
+          break;
+        case "sicCode":
+          aValue = a.sicCode || "";
+          bValue = b.sicCode || "";
+          break;
+        case "sicDescription":
+          aValue = (a.sicDescription || "").toLowerCase();
+          bValue = (b.sicDescription || "").toLowerCase();
+          break;
+        case "location":
+          aValue = `${a.city || ""} ${a.state || ""}`.toLowerCase().trim();
+          bValue = `${b.city || ""} ${b.state || ""}`.toLowerCase().trim();
           break;
         case "createdAt":
           aValue = new Date(a.createdAt);
@@ -416,7 +457,7 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
               </div>
               
               <Select value={selectedType} onValueChange={setSelectedType}>
-                <SelectTrigger className="w-full md:w-40">
+                <SelectTrigger className="w-full md:w-48">
                   <Filter className="h-4 w-4 mr-2" />
                   <SelectValue />
                 </SelectTrigger>
@@ -428,25 +469,9 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                 </SelectContent>
               </Select>
               
-              <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-full md:w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="originalName">Name A-Z</SelectItem>
-                  <SelectItem value="confidence">Confidence</SelectItem>
-                  <SelectItem value="payeeType">Type</SelectItem>
-                  <SelectItem value="createdAt">Date Added</SelectItem>
-                </SelectContent>
-              </Select>
-              
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-              >
-                {sortOrder === "asc" ? "↑" : "↓"}
-              </Button>
+              <div className="text-sm text-gray-500 flex items-center">
+                Click column headers to sort
+              </div>
             </div>
 
             {/* Results Summary */}
@@ -459,11 +484,51 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Payee Name</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Confidence</TableHead>
-                    <TableHead>Industry</TableHead>
-                    <TableHead>Location</TableHead>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-gray-50 select-none"
+                      onClick={() => handleSort("originalName")}
+                    >
+                      <div className="flex items-center gap-2">
+                        Payee Name
+                        {getSortIcon("originalName")}
+                      </div>
+                    </TableHead>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-gray-50 select-none"
+                      onClick={() => handleSort("payeeType")}
+                    >
+                      <div className="flex items-center gap-2">
+                        Type
+                        {getSortIcon("payeeType")}
+                      </div>
+                    </TableHead>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-gray-50 select-none"
+                      onClick={() => handleSort("confidence")}
+                    >
+                      <div className="flex items-center gap-2">
+                        Confidence
+                        {getSortIcon("confidence")}
+                      </div>
+                    </TableHead>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-gray-50 select-none"
+                      onClick={() => handleSort("sicDescription")}
+                    >
+                      <div className="flex items-center gap-2">
+                        Industry
+                        {getSortIcon("sicDescription")}
+                      </div>
+                    </TableHead>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-gray-50 select-none"
+                      onClick={() => handleSort("location")}
+                    >
+                      <div className="flex items-center gap-2">
+                        Location
+                        {getSortIcon("location")}
+                      </div>
+                    </TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
