@@ -1,8 +1,8 @@
-# Clarity - Payee Intelligence Platform
+# Clarity Engine - Payee Intelligence Platform
 
 ## Overview
 
-Clarity is a sophisticated AI-powered web application designed for finance and accounting professionals to transform messy payee data into structured, actionable insights. The platform features intelligent classification of payees into categories (Individual, Business, Government) with SIC code assignment and confidence scoring.
+Clarity Engine is a sophisticated AI-powered web application designed for finance and accounting professionals to transform messy payee data into structured, actionable insights. The platform features intelligent classification of payees into categories (Individual, Business, Government) with SIC code assignment and confidence scoring.
 
 ## User Preferences
 

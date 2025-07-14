@@ -297,7 +297,7 @@ export default function Home() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-4xl font-light text-gray-900 tracking-wide">
-                <span className="font-normal">CLARITY</span>
+                <span className="font-normal">CLARITY ENGINE</span>
               </h1>
               <p className="text-sm text-gray-500 mt-2 tracking-wide uppercase">Intelligent Payee Classification</p>
             </div>
