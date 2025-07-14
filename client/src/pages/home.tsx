@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload as UploadIcon, Download, Loader2, X } from "lucide-react";
+import { Upload as UploadIcon, Download, Loader2, X, FileSpreadsheet, CheckCircle2, XCircle, Clock, AlertCircle, Activity, ArrowRight, ClipboardList } from "lucide-react";
 import { useState, useRef } from "react";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -249,15 +249,40 @@ export default function Home() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "completed":
-        return <Badge variant="success">Completed</Badge>;
+        return (
+          <div className="flex items-center gap-1.5 text-success-600">
+            <CheckCircle2 className="h-4 w-4" />
+            <span className="font-medium">Completed</span>
+          </div>
+        );
       case "processing":
-        return <Badge variant="default">Processing</Badge>;
+        return (
+          <div className="flex items-center gap-1.5 text-primary-600">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="font-medium">Processing</span>
+          </div>
+        );
       case "failed":
-        return <Badge variant="destructive">Failed</Badge>;
+        return (
+          <div className="flex items-center gap-1.5 text-error-600">
+            <XCircle className="h-4 w-4" />
+            <span className="font-medium">Failed</span>
+          </div>
+        );
       case "cancelled":
-        return <Badge variant="secondary">Cancelled</Badge>;
+        return (
+          <div className="flex items-center gap-1.5 text-gray-600">
+            <XCircle className="h-4 w-4" />
+            <span className="font-medium">Cancelled</span>
+          </div>
+        );
       default:
-        return <Badge variant="outline">Pending</Badge>;
+        return (
+          <div className="flex items-center gap-1.5 text-gray-500">
+            <Clock className="h-4 w-4" />
+            <span className="font-medium">Pending</span>
+          </div>
+        );
     }
   };
 
@@ -266,18 +291,30 @@ export default function Home() {
   const otherBatches = batches?.filter(b => !["processing", "completed"].includes(b.status)) || [];
 
   return (
-    <div className="flex-1 p-8 max-w-7xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Clarity - Payee Intelligence</h1>
-        <p className="text-gray-600">Upload your payee data for AI-powered classification</p>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-blue-50">
+      <div className="flex-1 p-8 max-w-7xl mx-auto">
+        <div className="mb-8 text-center">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <div className="p-3 bg-primary-500 text-white rounded-2xl shadow-lg">
+              <FileSpreadsheet className="h-8 w-8" />
+            </div>
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-primary-600 to-primary-700 bg-clip-text text-transparent">
+              Clarity
+            </h1>
+          </div>
+          <p className="text-lg text-gray-600">Transform your payee data with AI-powered intelligence</p>
+        </div>
 
       {/* Upload Section */}
-      <Card className="mb-8">
+      <Card className="mb-8 shadow-xl border-0 overflow-hidden">
+        <div className="bg-gradient-to-r from-primary-500 to-primary-600 p-1"></div>
         <CardHeader>
-          <CardTitle>Upload New File</CardTitle>
-          <CardDescription>
-            Upload a CSV or Excel file containing payee data. The system will automatically classify each payee.
+          <CardTitle className="text-2xl font-semibold flex items-center gap-2">
+            <UploadIcon className="h-6 w-6 text-primary-600" />
+            Upload New File
+          </CardTitle>
+          <CardDescription className="text-base">
+            Upload a CSV or Excel file containing payee data. Our AI will automatically classify each payee as Individual, Business, or Government.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -294,16 +331,19 @@ export default function Home() {
                 variant="outline"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
+                className="border-2 border-primary-400 hover:bg-primary-50 transition-all duration-200"
               >
-                <UploadIcon className="mr-2 h-4 w-4" />
-                Choose File
+                <UploadIcon className="mr-2 h-5 w-5 text-primary-600" />
+                <span className="text-primary-700 font-medium">Choose File</span>
               </Button>
               {selectedFile && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600">{selectedFile.name}</span>
+                <div className="flex items-center gap-2 px-4 py-2 bg-primary-50 rounded-lg border border-primary-200">
+                  <FileSpreadsheet className="h-4 w-4 text-primary-600" />
+                  <span className="text-sm font-medium text-gray-700">{selectedFile.name}</span>
                   <Button
                     size="sm"
                     variant="ghost"
+                    className="h-6 w-6 p-0 hover:bg-primary-100"
                     onClick={() => {
                       setSelectedFile(null);
                       if (fileInputRef.current) {
@@ -311,13 +351,17 @@ export default function Home() {
                       }
                     }}
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-3 w-3" />
                   </Button>
                 </div>
               )}
             </div>
             {selectedFile && !previewData && (
-              <Button onClick={handleUpload} disabled={isUploading}>
+              <Button 
+                onClick={handleUpload} 
+                disabled={isUploading}
+                className="bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white shadow-lg transition-all duration-200"
+              >
                 {isUploading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -325,8 +369,8 @@ export default function Home() {
                   </>
                 ) : (
                   <>
-                    <UploadIcon className="mr-2 h-4 w-4" />
-                    Next
+                    <ArrowRight className="mr-2 h-4 w-4" />
+                    Next: Select Column
                   </>
                 )}
               </Button>
@@ -355,6 +399,7 @@ export default function Home() {
                   <Button
                     onClick={handleProcessFile}
                     disabled={!selectedColumn || processMutation.isPending}
+                    className="bg-gradient-to-r from-success-500 to-success-600 hover:from-success-600 hover:to-emerald-700 text-white shadow-lg transition-all duration-200"
                   >
                     {processMutation.isPending ? (
                       <>
@@ -362,7 +407,10 @@ export default function Home() {
                         Processing...
                       </>
                     ) : (
-                      <>Process File</>
+                      <>
+                        <CheckCircle2 className="mr-2 h-4 w-4" />
+                        Process File
+                      </>
                     )}
                   </Button>
                   <Button
@@ -387,9 +435,13 @@ export default function Home() {
 
       {/* Active Jobs */}
       {processingBatches.length > 0 && (
-        <Card className="mb-8">
+        <Card className="mb-8 shadow-xl border-0 overflow-hidden">
+          <div className="bg-gradient-to-r from-orange-500 to-amber-500 p-1"></div>
           <CardHeader>
-            <CardTitle>Active Jobs</CardTitle>
+            <CardTitle className="text-2xl font-semibold flex items-center gap-2">
+              <Activity className="h-6 w-6 text-orange-600" />
+              Active Jobs
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -406,7 +458,9 @@ export default function Home() {
                       size="sm"
                       variant="destructive"
                       onClick={() => cancelMutation.mutate(batch.id)}
+                      className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-md"
                     >
+                      <X className="h-3 w-3 mr-1" />
                       Cancel
                     </Button>
                   </div>
@@ -420,9 +474,13 @@ export default function Home() {
 
       {/* All Jobs Table */}
       {batches && batches.length > 0 && (
-        <Card>
+        <Card className="shadow-xl border-0 overflow-hidden">
+          <div className="bg-gradient-to-r from-blue-500 to-indigo-500 p-1"></div>
           <CardHeader>
-            <CardTitle>Classification History</CardTitle>
+            <CardTitle className="text-2xl font-semibold flex items-center gap-2">
+              <ClipboardList className="h-6 w-6 text-blue-600" />
+              Classification History
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
@@ -467,8 +525,9 @@ export default function Home() {
                             size="sm"
                             variant="outline"
                             onClick={() => window.location.href = `/api/classifications/export/${batch.id}`}
+                            className="border-success-400 hover:bg-success-50 text-success-600"
                           >
-                            <Download className="h-4 w-4" />
+                            <Download className="h-3 w-3" />
                           </Button>
                         )}
                         <Button
@@ -487,6 +546,7 @@ export default function Home() {
           </CardContent>
         </Card>
       )}
+      </div>
     </div>
   );
 }
