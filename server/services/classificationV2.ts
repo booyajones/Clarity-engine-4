@@ -35,41 +35,6 @@ interface PayeeData {
 
 export class OptimizedClassificationService {
   private activeJobs = new Map<number, AbortController>();
-  private processedNames = new Map<string, ClassificationResult>();
-  private existingPayees = new Map<string, PayeeClassification>();
-  
-  private async loadExistingPayees(): Promise<void> {
-    // Disabled database-wide duplicate checking - only check within current batch
-    console.log('Duplicate detection limited to current batch only');
-    this.existingPayees.clear();
-  }
-  
-  private isDuplicate(name: string): boolean {
-    const normalized = this.normalizePayeeName(name);
-    
-    // Only check if already processed in this batch
-    if (this.processedNames.has(normalized)) {
-      console.log(`Duplicate in current batch: ${name} (normalized: ${normalized})`);
-      return true;
-    }
-    
-    // Don't check against existing database records
-    return false;
-  }
-  
-  private areSimilarNames(name1: string, name2: string): boolean {
-    // If normalized names are identical, check if originals are also similar
-    const n1 = name1.toLowerCase().trim();
-    const n2 = name2.toLowerCase().trim();
-    
-    // Exact match
-    if (n1 === n2) return true;
-    
-    // One is substring of another (e.g., "Christa" and "Christa INC")
-    if (n1.includes(n2) || n2.includes(n1)) return true;
-    
-    return false;
-  }
   
   async processFileStream(
     batchId: number,
@@ -85,9 +50,6 @@ export class OptimizedClassificationService {
     
     const abortController = new AbortController();
     this.activeJobs.set(batchId, abortController);
-    
-    // Load all existing payees for duplicate detection
-    await this.loadExistingPayees();
     
     try {
       const ext = path.extname(filePath).toLowerCase();
@@ -273,6 +235,11 @@ export class OptimizedClassificationService {
     console.log(`Processing batch of ${payees.length} payees for batch ${batchId}`);
     const batchStartTime = Date.now();
     
+    // Track duplicates within this specific file upload
+    const batchDuplicates = new Set<string>();
+    let duplicatesFound = 0;
+    let lowConfidenceCount = 0;
+    
     // Process all payees in a single batch request
     try {
       if (signal.aborted) return;
@@ -281,19 +248,20 @@ export class OptimizedClassificationService {
       const batchTime = (Date.now() - batchStartTime) / 1000;
       console.log(`Processed batch of ${payees.length} in ${batchTime}s (${(payees.length/batchTime).toFixed(1)} rec/s)`);
       
-      let duplicatesFound = 0;
-      let lowConfidenceCount = 0;
-      
       for (let j = 0; j < results.length; j++) {
         const result = results[j];
         const payee = payees[j];
+        const normalizedName = this.normalizePayeeName(payee.originalName);
         
-        // Check for duplicates but still process if not exact match
-        const isDup = this.isDuplicate(payee.originalName);
+        // Check for duplicates within this file upload only
+        const isDup = batchDuplicates.has(normalizedName);
         if (isDup) {
           duplicatesFound++;
-          // For duplicates, still classify them but mark as duplicate in reasoning
-          result.reasoning = `Duplicate detected. ${result.reasoning}`;
+          // For duplicates, still save them but mark as duplicate in reasoning
+          result.reasoning = `DUPLICATE: This payee appears multiple times in this file. ${result.reasoning}`;
+        } else {
+          // Add to batch duplicates set for checking subsequent records
+          batchDuplicates.add(normalizedName);
         }
         
         // Save all records, but flag low confidence ones for review
@@ -305,7 +273,7 @@ export class OptimizedClassificationService {
         classifications.push({
           batchId,
           originalName: payee.originalName,
-          cleanedName: this.normalizePayeeName(payee.originalName),
+          cleanedName: normalizedName,
           address: payee.address || null,
           city: payee.city || null,
           state: payee.state || null,
@@ -318,9 +286,6 @@ export class OptimizedClassificationService {
           originalData: payee.originalData,
           reasoning: result.reasoning,
         });
-        
-        // Add to processed names cache
-        this.processedNames.set(this.normalizePayeeName(payee.originalName), result);
       }
       
       console.log(`Batch summary: ${duplicatesFound} duplicates, ${lowConfidenceCount} flagged for review`);
@@ -365,11 +330,7 @@ export class OptimizedClassificationService {
   private async classifyPayee(payee: PayeeData): Promise<ClassificationResult> {
     const normalizedName = this.normalizePayeeName(payee.originalName);
     
-    // Check cache first
-    const cached = this.processedNames.get(normalizedName);
-    if (cached) {
-      return { ...cached, reasoning: `Duplicate of previously classified payee` };
-    }
+    // Don't check cache here - duplicate detection is handled in processBatch
     
     try {
       const response = await openai.chat.completions.create({
@@ -439,9 +400,6 @@ Respond in JSON format:
         reasoning: result.reasoning || "Classified based on available information",
         flagForReview: result.flagForReview || false
       };
-      
-      // Cache the result
-      this.processedNames.set(normalizedName, classification);
       
       return classification;
     } catch (error) {
