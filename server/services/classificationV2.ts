@@ -63,10 +63,12 @@ export class OptimizedClassificationService {
       const ext = path.extname(filePath).toLowerCase();
       console.log(`Processing ${ext} file for batch ${batchId}, payeeColumn="${payeeColumn}"`);
       
+      console.log(`About to create stream for ${ext} file...`);
       const payeeStream = ext === '.csv' 
         ? this.createCsvStream(filePath, payeeColumn)
         : this.createExcelStream(filePath, payeeColumn);
       
+      console.log(`Stream created, starting processPayeeStream...`);
       await this.processPayeeStream(batchId, payeeStream, abortController.signal);
     } catch (error) {
       console.error(`Error processing file for batch ${batchId}:`, error);
@@ -88,70 +90,61 @@ export class OptimizedClassificationService {
   private createCsvStream(filePath: string, payeeColumn?: string): Readable {
     const payeeStream = new Readable({ objectMode: true, read() {} });
     let rowIndex = 0;
+    let totalRows = 0;
     
     console.log(`Creating CSV stream for file: ${filePath}, payeeColumn: "${payeeColumn}"`);
     
-    // Read entire file content to debug
-    const fileContent = fs.readFileSync(filePath, 'utf-8');
-    console.log(`File length: ${fileContent.length} characters`);
-    
-    // Split by line and process manually
-    const lines = fileContent.split(/\r?\n/);
-    console.log(`Total lines in file: ${lines.length}`);
-    
-    if (lines.length === 0) {
-      console.error('File appears to be empty');
-      payeeStream.push(null);
-      return payeeStream;
-    }
-    
-    // Parse headers
-    const headerLine = lines[0];
-    const headers = headerLine.split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-    console.log('CSV headers:', headers);
-    
-    const payeeColumnIndex = headers.findIndex(h => h === payeeColumn);
-    if (payeeColumnIndex === -1) {
-      console.error(`Column "${payeeColumn}" not found in headers:`, headers);
-      payeeStream.push(null);
-      return payeeStream;
-    }
-    
-    // Process data rows
-    let processedRows = 0;
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue; // Skip empty lines
+    try {
+      // Use csv-parser properly
+      const stream = fs.createReadStream(filePath)
+        .pipe(csv({
+          skipLinesWithError: false,
+          strict: false
+        }));
       
-      const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+      stream.on('headers', (headers) => {
+        console.log('CSV headers detected:', headers);
+      });
       
-      if (i <= 3) {
-        console.log(`Row ${i}: ${line}`);
-        console.log(`Parsed values:`, values);
-        console.log(`Payee value (col ${payeeColumnIndex}):`, values[payeeColumnIndex]);
-      }
-      
-      if (values[payeeColumnIndex]) {
-        const row: Record<string, any> = {};
-        headers.forEach((header, idx) => {
-          row[header] = values[idx] || '';
-        });
+      stream.on('data', (row: Record<string, any>) => {
+        totalRows++;
         
-        payeeStream.push({
-          originalName: values[payeeColumnIndex],
-          address: row['Address 1'] || row.address || row.Address,
-          city: row.City || row.city,
-          state: row.State || row.state,
-          zipCode: row.Zip || row.zip || row.ZIP,
-          originalData: row,
-          index: rowIndex++
-        });
-        processedRows++;
-      }
+        // Debug first few rows
+        if (totalRows <= 3) {
+          console.log(`Row ${totalRows}:`, JSON.stringify(row));
+        }
+        
+        // Check if payee column exists in row
+        if (payeeColumn && row[payeeColumn]) {
+          payeeStream.push({
+            originalName: row[payeeColumn],
+            address: row['Address 1'] || row.address || row.Address,
+            city: row.City || row.city,
+            state: row.State || row.state,
+            zipCode: row.Zip || row.zip || row.ZIP,
+            originalData: row,
+            index: rowIndex++
+          });
+        } else if (totalRows <= 3) {
+          console.log(`Column "${payeeColumn}" not found or empty in row ${totalRows}`);
+          console.log(`Available columns:`, Object.keys(row));
+        }
+      });
+      
+      stream.on('end', () => {
+        console.log(`CSV parsing complete. Total rows: ${totalRows}, Payee records found: ${rowIndex}`);
+        payeeStream.push(null);
+      });
+      
+      stream.on('error', (err) => {
+        console.error('CSV parsing error:', err);
+        payeeStream.destroy(err);
+      });
+      
+    } catch (err) {
+      console.error('Error setting up CSV stream:', err);
+      payeeStream.destroy(err as Error);
     }
-    
-    console.log(`Manual CSV parsing complete. Processed ${processedRows} payee records from ${lines.length - 1} data rows`);
-    payeeStream.push(null);
     
     return payeeStream;
   }
@@ -200,6 +193,8 @@ export class OptimizedClassificationService {
     let totalRecords = 0;
     let startTime = Date.now();
     
+    console.log(`processPayeeStream started for batch ${batchId}`);
+    
     // Initialize batch status
     await storage.updateUploadBatch(batchId, {
       status: "processing",
@@ -208,6 +203,7 @@ export class OptimizedClassificationService {
     });
     
     // Process stream
+    console.log(`About to process stream...`);
     for await (const payeeData of stream) {
       if (signal.aborted) {
         console.log(`Job ${batchId} was aborted`);
@@ -216,6 +212,10 @@ export class OptimizedClassificationService {
       
       buffer.push(payeeData);
       totalRecords++;
+      
+      if (totalRecords <= 3) {
+        console.log(`Received payee record ${totalRecords}:`, payeeData.originalName);
+      }
       
       if (buffer.length >= BATCH_SIZE) {
         await this.processBatch(batchId, buffer, totalProcessed, totalRecords, signal);
