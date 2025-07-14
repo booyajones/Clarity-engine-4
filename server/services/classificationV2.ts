@@ -11,7 +11,7 @@ import XLSX from 'xlsx';
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY || '',
   maxRetries: 2,
-  timeout: 15000, // 15 second timeout
+  timeout: 60000, // 60 second timeout for larger batches
   dangerouslyAllowBrowser: false
 });
 
@@ -524,8 +524,8 @@ Example: {"results":[{"id":"1","payeeType":"Business","confidence":0.88,"sicCode
         } else {
           results[item.idx] = {
             payeeType: "Individual",
-            confidence: 0.95,
-            reasoning: "Failed to get API response - high confidence default"
+            confidence: 0.5,
+            reasoning: "No API response received - low confidence default"
           };
         }
       });
@@ -533,12 +533,26 @@ Example: {"results":[{"id":"1","payeeType":"Business","confidence":0.88,"sicCode
       return results;
     } catch (error) {
       console.error(`Chunk classification error:`, error);
-      // Return fallback for all payees in chunk
-      return payees.map(() => ({
-        payeeType: "Individual" as const,
-        confidence: 0.5,
-        reasoning: `Classification failed: ${error.message}`
-      }));
+      // Return low-confidence fallback for all payees in chunk
+      return payees.map((payee) => {
+        // Make educated guess based on name patterns
+        const name = payee.originalName.toLowerCase();
+        let payeeType: "Individual" | "Business" | "Government" = "Individual";
+        
+        if (name.includes('llc') || name.includes('inc') || name.includes('corp') || 
+            name.includes('company') || name.includes('enterprises') || name.includes('ltd')) {
+          payeeType = "Business";
+        } else if (name.includes('department') || name.includes('city of') || 
+                   name.includes('state of') || name.includes('county')) {
+          payeeType = "Government";
+        }
+        
+        return {
+          payeeType,
+          confidence: 0.5, // Low confidence due to API failure
+          reasoning: `Classification failed (API timeout/error) - using pattern matching fallback`
+        };
+      });
     }
   }
   
