@@ -222,3 +222,15 @@ Preferred communication style: Simple, everyday language.
   - Individual: Personal names without business indicators (95-99% confidence)
   - Government: City/County/State prefixes, department names (95-99% confidence)
   - Ambiguous: Flagged for review if confidence below 95%
+
+### July 15, 2025 (Evening) - Duplicate Detection Fix & AI Accuracy Enhancement
+- **Fixed Duplicate Detection**: Disabled database-wide duplicate checking (was flagging all 208 existing records as duplicates)
+- **Batch-Only Duplicates**: Now only checks for duplicates within the current upload batch, not against entire database
+- **Enhanced AI Prompt**: Completely rewrote GPT-4o classification prompt with:
+  - Detailed classification rules for each category
+  - Expanded business entity suffixes (PC, PA, ENTERPRISES, HOLDINGS)
+  - Clear confidence scoring guidelines (0.95+ for high confidence)
+  - Explicit instructions for SIC code assignment
+  - Better reasoning requirements
+- **UI Simplification**: Removed dashboard metrics from upload page per user request
+- **Performance**: Maintains high-speed processing with improved accuracy targeting

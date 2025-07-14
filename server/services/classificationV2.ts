@@ -39,41 +39,21 @@ export class OptimizedClassificationService {
   private existingPayees = new Map<string, PayeeClassification>();
   
   private async loadExistingPayees(): Promise<void> {
-    console.log('Loading existing payees for duplicate detection...');
-    try {
-      const allPayees = await db.select().from(payeeClassifications);
-      this.existingPayees.clear();
-      
-      for (const payee of allPayees) {
-        const normalized = this.normalizePayeeName(payee.originalName);
-        this.existingPayees.set(normalized, payee);
-      }
-      
-      console.log(`Loaded ${this.existingPayees.size} existing payees for duplicate checking`);
-    } catch (error) {
-      console.error('Failed to load existing payees:', error);
-    }
+    // Disabled database-wide duplicate checking - only check within current batch
+    console.log('Duplicate detection limited to current batch only');
+    this.existingPayees.clear();
   }
   
   private isDuplicate(name: string): boolean {
     const normalized = this.normalizePayeeName(name);
     
-    // Check if already processed in this batch
+    // Only check if already processed in this batch
     if (this.processedNames.has(normalized)) {
       console.log(`Duplicate in current batch: ${name} (normalized: ${normalized})`);
       return true;
     }
     
-    // For existing payees, be less aggressive - only flag exact matches after normalization
-    if (this.existingPayees.has(normalized)) {
-      const existing = this.existingPayees.get(normalized);
-      // Only consider it a duplicate if the original names are very similar
-      if (existing && this.areSimilarNames(name, existing.originalName)) {
-        console.log(`Duplicate in database: ${name} matches ${existing.originalName}`);
-        return true;
-      }
-    }
-    
+    // Don't check against existing database records
     return false;
   }
   
@@ -396,28 +376,50 @@ export class OptimizedClassificationService {
         model: "gpt-4o", // Use GPT-4o for best accuracy
         messages: [{
           role: "system",
-          content: `You are an expert payee classifier with 95%+ accuracy. Classify entities as Individual, Business, or Government based on these rules:
+          content: `You are a financial data classification expert specializing in payee identification. Your goal is to achieve 95%+ accuracy.
 
-BUSINESS INDICATORS (95-99% confidence):
-- LLC, INC, CORP, CO, LTD, LP, PLLC, etc.
-- "Gallery", "Services", "Solutions", "Systems", "Group"
-- Brand names (McDonald's, Walmart, etc.)
-- Business activities (Locksmith, Plumbing, Catering, etc.)
-- DBA (Doing Business As)
+CLASSIFICATION RULES:
 
-INDIVIDUAL INDICATORS (95-99% confidence):
-- Personal names without business indicators
-- First name only (John, Mary, etc.)
-- Full personal names (John Smith, Mary Johnson)
+1. BUSINESS (High Confidence 0.95-0.99):
+   - Legal entity suffixes: LLC, INC, CORP, CO, LTD, LP, LLP, PLLC, PC, PA, ENTERPRISES, HOLDINGS
+   - Business keywords: Services, Solutions, Systems, Group, Associates, Partners, Consulting, Management
+   - Recognized brand names or commercial establishments
+   - Trade/profession names (e.g., "Bob's Plumbing", "Smith Auto Repair")
+   - DBA (Doing Business As) indicators
+   - Always assign appropriate SIC code for businesses
 
-GOVERNMENT INDICATORS (95-99% confidence):
-- City of, County of, State of
-- Department names (DOT, DMV, IRS)
-- Federal/State/Municipal agencies
+2. INDIVIDUAL (High Confidence 0.95-0.99):
+   - Personal names WITHOUT any business indicators
+   - Single first names (John, Mary, Sarah)
+   - Full personal names (John Smith, Mary Johnson-Lee)
+   - Names with personal titles (Mr., Mrs., Dr.) without business context
+   - Important: If ANY business suffix or keyword is present, classify as Business
 
-For ambiguous cases (60-94% confidence), include "flagForReview":true
+3. GOVERNMENT (High Confidence 0.95-0.99):
+   - Government prefixes: City of, County of, State of, Town of, Village of
+   - Agency acronyms: IRS, DOT, DMV, USPS, FBI, EPA, FDA
+   - Department/Bureau/Office/Authority/Commission
+   - Public schools, universities, libraries
+   - Court systems, police departments, fire departments
 
-Respond in JSON: {"payeeType":"Business","confidence":0.98,"sicCode":"5411","sicDescription":"Grocery Stores","reasoning":"Clear business entity with LLC suffix","flagForReview":false}`
+CONFIDENCE SCORING:
+- 0.95-0.99: Clear indicators present, unambiguous classification
+- 0.85-0.94: Some indicators present but with minor ambiguity
+- 0.60-0.84: Mixed or unclear indicators, needs review
+- Below 0.60: Insufficient information
+
+Always include detailed reasoning explaining your classification decision.
+For any confidence below 0.95, set "flagForReview":true
+
+Respond in JSON format:
+{
+  "payeeType": "Business|Individual|Government",
+  "confidence": 0.00-0.99,
+  "sicCode": "XXXX" (for businesses only),
+  "sicDescription": "Description" (for businesses only),
+  "reasoning": "Detailed explanation of classification logic",
+  "flagForReview": true|false
+}`
         }, {
           role: "user",
           content: `Classify this payee: "${payee.originalName}"${payee.address ? `, Address: ${payee.address}` : ''}`
