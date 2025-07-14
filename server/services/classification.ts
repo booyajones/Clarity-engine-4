@@ -447,9 +447,15 @@ Provide your best classification for every payee. Give realistic confidence leve
     
     console.log(`Starting batch ${batchId} with ${totalRecords} records. Using batch size: ${BATCH_SIZE}, concurrency: ${CONCURRENT_LIMIT}`);
     
-    // For very large datasets, use sub-job processing
-    if (SUB_JOB_SIZE && totalRecords > 10000) {
-      return await this.processLargeDatasetWithSubJobs(batchId, payeeData, SUB_JOB_SIZE, BATCH_SIZE, CONCURRENT_LIMIT);
+    // Disable sub-job processing for now - use regular processing for all datasets
+    // This prevents the stalling issue we're experiencing with large datasets
+    console.log(`Processing ${totalRecords} records with regular batch processing (no sub-jobs)`);
+    
+    // For very large datasets, use more conservative settings
+    if (totalRecords > 10000) {
+      BATCH_SIZE = 10; // Much smaller batches
+      CONCURRENT_LIMIT = 1; // Single API call at a time
+      console.log(`Large dataset detected: Using conservative settings (batch=${BATCH_SIZE}, concurrent=${CONCURRENT_LIMIT})`);
     }
     
     let totalProcessed = 0;
@@ -487,8 +493,7 @@ Provide your best classification for every payee. Give realistic confidence leve
         progressMessage: `Processing chunk ${Math.floor(chunkStart/BATCH_SIZE) + 1}/${Math.ceil(payeeData.length/BATCH_SIZE)} (${chunkStart + 1}-${chunkEnd} of ${totalRecords})`,
       });
 
-      // Process chunk with controlled concurrency (limit concurrent OpenAI calls)
-      const CONCURRENT_LIMIT = 5; // Limit concurrent API calls to prevent overwhelming OpenAI
+      // Use the CONCURRENT_LIMIT already set above based on dataset size
       const chunkResults = [];
       
       for (let i = 0; i < chunk.length; i += CONCURRENT_LIMIT) {
