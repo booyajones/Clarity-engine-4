@@ -40,21 +40,36 @@ export class OptimizedClassificationService {
     filePath: string,
     payeeColumn?: string
   ): Promise<void> {
+    console.log(`Starting processFileStream for batch ${batchId}, file: ${filePath}`);
+    
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`File not found: ${filePath}`);
+    }
+    
     const abortController = new AbortController();
     this.activeJobs.set(batchId, abortController);
     
     try {
       const ext = path.extname(filePath).toLowerCase();
+      console.log(`Processing ${ext} file for batch ${batchId}`);
+      
       const payeeStream = ext === '.csv' 
         ? this.createCsvStream(filePath, payeeColumn)
         : this.createExcelStream(filePath, payeeColumn);
       
       await this.processPayeeStream(batchId, payeeStream, abortController.signal);
+    } catch (error) {
+      console.error(`Error processing file for batch ${batchId}:`, error);
+      throw error;
     } finally {
       this.activeJobs.delete(batchId);
       // Clean up file after processing
       try {
-        fs.unlinkSync(filePath);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+          console.log(`Deleted file: ${filePath}`);
+        }
       } catch (e) {
         console.error(`Failed to delete file ${filePath}:`, e);
       }
@@ -64,12 +79,16 @@ export class OptimizedClassificationService {
   private createCsvStream(filePath: string, payeeColumn?: string): Readable {
     const payeeStream = new Readable({ objectMode: true, read() {} });
     let rowIndex = 0;
+    let foundAnyData = false;
+    
+    console.log(`Creating CSV stream for file: ${filePath}, payeeColumn: ${payeeColumn}`);
     
     fs.createReadStream(filePath)
       .pipe(csv())
       .on('data', (row: Record<string, any>) => {
         const nameCol = payeeColumn || this.findNameColumn(row);
         if (nameCol && row[nameCol]) {
+          foundAnyData = true;
           payeeStream.push({
             originalName: row[nameCol],
             address: row.address || row.Address || row.ADDRESS,
@@ -79,10 +98,18 @@ export class OptimizedClassificationService {
             originalData: row,
             index: rowIndex++
           });
+        } else if (rowIndex === 0) {
+          console.log(`Could not find name column. Available columns:`, Object.keys(row));
         }
       })
-      .on('end', () => payeeStream.push(null))
-      .on('error', (err) => payeeStream.destroy(err));
+      .on('end', () => {
+        console.log(`CSV stream ended. Found ${rowIndex} payee records`);
+        payeeStream.push(null);
+      })
+      .on('error', (err) => {
+        console.error('CSV stream error:', err);
+        payeeStream.destroy(err);
+      });
     
     return payeeStream;
   }
@@ -322,14 +349,31 @@ ${payee.state ? `State: ${payee.state}` : ''}`
   }
   
   private findNameColumn(row: Record<string, any>): string | null {
-    const nameVariations = ['vendor_name', 'payee_name', 'name', 'payee', 'vendor', 'supplier', 'company'];
+    const nameVariations = ['supplier name', 'vendor_name', 'payee_name', 'name', 'payee', 'vendor', 'supplier', 'company'];
     const keys = Object.keys(row);
     
+    // Log available columns on first row
+    console.log(`Available columns in CSV: ${keys.join(', ')}`);
+    
+    // First try exact match (case insensitive)
     for (const variation of nameVariations) {
-      const found = keys.find(key => key.toLowerCase().includes(variation));
-      if (found) return found;
+      const found = keys.find(key => key.toLowerCase() === variation.toLowerCase());
+      if (found) {
+        console.log(`Found name column by exact match: ${found}`);
+        return found;
+      }
     }
     
+    // Then try contains match
+    for (const variation of nameVariations) {
+      const found = keys.find(key => key.toLowerCase().includes(variation));
+      if (found) {
+        console.log(`Found name column by partial match: ${found}`);
+        return found;
+      }
+    }
+    
+    console.log(`Using first column as default: ${keys[0]}`);
     return keys[0]; // Default to first column
   }
   
