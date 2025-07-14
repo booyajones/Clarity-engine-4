@@ -235,7 +235,11 @@ export default function Upload() {
                   <TrendingUp className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{stats.accuracy.toFixed(1)}%</div>
+                  <div className="text-2xl font-bold">
+                    {stats.accuracy != null && !isNaN(stats.accuracy) 
+                      ? `${(stats.accuracy * 100).toFixed(1)}%` 
+                      : 'N/A'}
+                  </div>
                 </CardContent>
               </Card>
               <Card>

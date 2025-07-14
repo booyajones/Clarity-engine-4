@@ -57,7 +57,38 @@ export class OptimizedClassificationService {
   
   private isDuplicate(name: string): boolean {
     const normalized = this.normalizePayeeName(name);
-    return this.existingPayees.has(normalized) || this.processedNames.has(normalized);
+    
+    // Check if already processed in this batch
+    if (this.processedNames.has(normalized)) {
+      console.log(`Duplicate in current batch: ${name} (normalized: ${normalized})`);
+      return true;
+    }
+    
+    // For existing payees, be less aggressive - only flag exact matches after normalization
+    if (this.existingPayees.has(normalized)) {
+      const existing = this.existingPayees.get(normalized);
+      // Only consider it a duplicate if the original names are very similar
+      if (existing && this.areSimilarNames(name, existing.originalName)) {
+        console.log(`Duplicate in database: ${name} matches ${existing.originalName}`);
+        return true;
+      }
+    }
+    
+    return false;
+  }
+  
+  private areSimilarNames(name1: string, name2: string): boolean {
+    // If normalized names are identical, check if originals are also similar
+    const n1 = name1.toLowerCase().trim();
+    const n2 = name2.toLowerCase().trim();
+    
+    // Exact match
+    if (n1 === n2) return true;
+    
+    // One is substring of another (e.g., "Christa" and "Christa INC")
+    if (n1.includes(n2) || n2.includes(n1)) return true;
+    
+    return false;
   }
   
   async processFileStream(
@@ -269,19 +300,27 @@ export class OptimizedClassificationService {
       const results = await this.classifyBatch(payees);
       const batchTime = (Date.now() - batchStartTime) / 1000;
       console.log(`Processed batch of ${payees.length} in ${batchTime}s (${(payees.length/batchTime).toFixed(1)} rec/s)`);
-        
+      
+      let duplicatesFound = 0;
+      let lowConfidenceCount = 0;
+      
       for (let j = 0; j < results.length; j++) {
         const result = results[j];
         const payee = payees[j];
         
-        // Skip duplicates
-        if (this.isDuplicate(payee.originalName)) {
-          console.log(`Skipping duplicate: ${payee.originalName}`);
-          continue;
+        // Check for duplicates but still process if not exact match
+        const isDup = this.isDuplicate(payee.originalName);
+        if (isDup) {
+          duplicatesFound++;
+          // For duplicates, still classify them but mark as duplicate in reasoning
+          result.reasoning = `Duplicate detected. ${result.reasoning}`;
         }
         
         // Save all records, but flag low confidence ones for review
         const flagForReview = result.confidence < 0.95 || result.flagForReview;
+        if (flagForReview) {
+          lowConfidenceCount++;
+        }
         
         classifications.push({
           batchId,
@@ -303,16 +342,42 @@ export class OptimizedClassificationService {
         // Add to processed names cache
         this.processedNames.set(this.normalizePayeeName(payee.originalName), result);
       }
+      
+      console.log(`Batch summary: ${duplicatesFound} duplicates, ${lowConfidenceCount} flagged for review`);
     } catch (error) {
       console.error(`Batch processing error:`, error);
-      // Don't add fallback classifications - skip failed records entirely
-      // Only high confidence (95%+) records should be saved
+      // Process with fallback classification for failed records
+      for (const payee of payees) {
+        classifications.push({
+          batchId,
+          originalName: payee.originalName,
+          cleanedName: this.normalizePayeeName(payee.originalName),
+          address: payee.address || null,
+          city: payee.city || null,
+          state: payee.state || null,
+          zipCode: payee.zipCode || null,
+          payeeType: "Individual",
+          confidence: 0.5,
+          sicCode: null,
+          sicDescription: null,
+          status: "pending-review",
+          originalData: payee.originalData,
+          reasoning: `Classification failed: ${error.message}. Defaulted to Individual with low confidence.`,
+        });
+      }
     }
     
     // Save classifications in larger batches for better performance
     const SAVE_BATCH_SIZE = 500;
+    console.log(`Saving ${classifications.length} classifications for batch ${batchId}`);
+    
+    if (classifications.length === 0) {
+      console.warn(`No classifications to save for batch ${batchId} - all records may have been duplicates`);
+    }
+    
     for (let i = 0; i < classifications.length; i += SAVE_BATCH_SIZE) {
       const batch = classifications.slice(i, i + SAVE_BATCH_SIZE);
+      console.log(`Saving batch ${i/SAVE_BATCH_SIZE + 1}: ${batch.length} records`);
       await storage.createPayeeClassifications(batch);
     }
   }
