@@ -7,11 +7,12 @@ import fs from 'fs';
 import path from 'path';
 import XLSX from 'xlsx';
 
-// Initialize OpenAI with Tier 5 performance settings
+// Initialize OpenAI with aggressive performance settings
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY,
-  maxRetries: 5,
-  timeout: 20000 // 20 second timeout for faster retries
+  maxRetries: 2,
+  timeout: 5000, // 5 second timeout for faster failures
+  dangerouslyAllowBrowser: false
 });
 
 interface ClassificationResult {
@@ -151,8 +152,8 @@ export class OptimizedClassificationService {
     stream: Readable,
     signal: AbortSignal
   ): Promise<void> {
-    const BATCH_SIZE = 500; // Maximum batch size for Tier 5  
-    const MAX_CONCURRENT = 200; // Maximum concurrency for 30,000 RPM
+    const BATCH_SIZE = 1000; // Larger batches for batch API calls
+    const MAX_CONCURRENT = 100; // Controlled concurrency
     let buffer: PayeeData[] = [];
     let totalProcessed = 0;
     let totalRecords = 0;
@@ -280,12 +281,17 @@ export class OptimizedClassificationService {
       }
     }
     
-    // Save classifications in larger batches for better performance
-    const SAVE_BATCH_SIZE = 500;
+    // Save classifications in optimized batches
+    const SAVE_BATCH_SIZE = 100; // Smaller batches for faster DB writes
+    const savePromises = [];
+    
     for (let i = 0; i < classifications.length; i += SAVE_BATCH_SIZE) {
       const batch = classifications.slice(i, i + SAVE_BATCH_SIZE);
-      await storage.createPayeeClassifications(batch);
+      savePromises.push(storage.createPayeeClassifications(batch));
     }
+    
+    // Save in parallel for better performance
+    await Promise.all(savePromises);
   }
   
   private async classifyPayee(payee: PayeeData): Promise<ClassificationResult> {
@@ -371,15 +377,91 @@ You must respond in valid JSON format like this: {"payeeType":"Business","confid
     return keys[0]; // Default to first column
   }
   
-  // New batch classification method for better performance
+  // New batch classification method that processes multiple payees in parallel
   private async classifyBatch(payees: PayeeData[]): Promise<ClassificationResult[]> {
+    const CHUNK_SIZE = 50; // Process 50 payees per API call for better efficiency
+    const MAX_PARALLEL = 20; // Process up to 20 chunks in parallel
     const results: ClassificationResult[] = [];
     
-    // Process in parallel without delays for maximum speed
-    const promises = payees.map(payee => this.classifyPayee(payee));
+    // Split into chunks
+    const chunks: PayeeData[][] = [];
+    for (let i = 0; i < payees.length; i += CHUNK_SIZE) {
+      chunks.push(payees.slice(i, i + CHUNK_SIZE));
+    }
     
-    const classificationResults = await Promise.all(promises);
-    return classificationResults;
+    // Process chunks in parallel batches
+    for (let i = 0; i < chunks.length; i += MAX_PARALLEL) {
+      const parallelChunks = chunks.slice(i, i + MAX_PARALLEL);
+      const parallelPromises = parallelChunks.map(chunk => this.classifyChunk(chunk));
+      
+      const batchResults = await Promise.all(parallelPromises);
+      batchResults.forEach(chunkResults => results.push(...chunkResults));
+    }
+    
+    return results;
+  }
+  
+  private async classifyChunk(payees: PayeeData[]): Promise<ClassificationResult[]> {
+    const payeeList = payees.map((p, idx) => 
+      `${idx + 1}. ${p.originalName}${p.city ? `, ${p.city}` : ''}`
+    ).join('\n');
+    
+    try {
+      const response = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo", // Fastest model
+        messages: [{
+          role: "system",
+          content: `You are a payee classifier. Classify each payee as Individual, Business, or Government.
+For each payee, provide a JSON object with a "results" array containing objects with: id (matching the number), payeeType, confidence (0-1), sicCode (if business), sicDescription (if business), and reasoning.
+Example: {"results":[{"id":"1","payeeType":"Business","confidence":0.95,"sicCode":"5411","sicDescription":"Grocery Stores","reasoning":"LLC suffix"}]}`
+        }, {
+          role: "user",
+          content: `Classify these payees and respond with JSON:\n${payeeList}`
+        }],
+        temperature: 0,
+        max_tokens: 3000, // More tokens for 50 payees
+        response_format: { type: "json_object" }
+      });
+      
+      const content = response.choices[0]?.message?.content || '{"results":[]}';
+      const parsed = JSON.parse(content);
+      const apiResults = parsed.results || [];
+      
+      // Map results back to payees
+      return payees.map((payee, idx) => {
+        const result = apiResults.find(r => r.id === String(idx + 1));
+        const normalizedName = this.normalizePayeeName(payee.originalName);
+        
+        if (result) {
+          const classification = {
+            payeeType: result.payeeType || "Individual",
+            confidence: result.confidence || 0.5,
+            sicCode: result.sicCode,
+            sicDescription: result.sicDescription,
+            reasoning: result.reasoning || "Classified by AI"
+          };
+          
+          // Cache the result
+          this.processedNames.set(normalizedName, classification);
+          return classification;
+        }
+        
+        // Fallback for missing results
+        return {
+          payeeType: "Individual" as const,
+          confidence: 0.5,
+          reasoning: "Default classification"
+        };
+      });
+    } catch (error) {
+      console.error(`Chunk classification error:`, error);
+      // Return fallback for all payees in chunk
+      return payees.map(() => ({
+        payeeType: "Individual" as const,
+        confidence: 0.5,
+        reasoning: `Classification failed: ${error.message}`
+      }));
+    }
   }
   
   cancelJob(batchId: number): void {
