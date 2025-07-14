@@ -246,7 +246,8 @@ export class OptimizedClassificationService {
     const normalizedPayees: Array<{original: string, normalized: string, superNormalized: string}> = [];
     for (const payee of payees) {
       const normalized = this.normalizePayeeName(payee.originalName);
-      const superNormalized = this.superNormalizeForDuplicates(normalized);
+      const superNormalized = this.superNormalizeForDuplicates(payee.originalName); // Should use original, not normalized
+      console.log(`Duplicate check: "${payee.originalName}" → super: "${superNormalized}"`);
       normalizedPayees.push({
         original: payee.originalName,
         normalized: normalized,
