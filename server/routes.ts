@@ -302,6 +302,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const batchId = parseInt(req.params.id);
       
+      // Cancel the job in the classification service
+      const { optimizedClassificationService } = await import('./services/classificationV2');
+      optimizedClassificationService.cancelJob(batchId);
+      
       // Update batch status to cancelled
       const batch = await storage.updateUploadBatch(batchId, {
         status: "cancelled",
@@ -380,96 +384,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 async function processFileAsync(file: any, batchId: number, payeeColumn?: string) {
   try {
-    console.log(`Starting file processing for batch ${batchId}, file: ${file.originalname}`);
+    console.log(`Starting optimized file processing for batch ${batchId}, file: ${file.originalname}`);
     
-    // Immediate status update
-    await storage.updateUploadBatch(batchId, {
-      status: "processing",
-      currentStep: "Reading file",
-      progressMessage: `Starting to process ${file.originalname}...`,
-    });
-
-    const payeeData: Array<{
-      originalName: string;
-      address?: string;
-      city?: string;
-      state?: string;
-      zipCode?: string;
-      originalData: any;
-    }> = [];
-
-    const filePath = file.path;
-    const ext = path.extname(file.originalname).toLowerCase();
+    // Use the new optimized classification service
+    const { optimizedClassificationService } = await import('./services/classificationV2');
     
-    console.log(`Reading file ${filePath} with extension ${ext}`);
-
-    if (ext === ".csv") {
-      await storage.updateUploadBatch(batchId, {
-        currentStep: "Parsing CSV",
-        progressMessage: `Reading CSV file and extracting payee data...`,
-      });
-
-      await new Promise<void>((resolve, reject) => {
-        fs.createReadStream(filePath)
-          .pipe(csv())
-          .on("data", (row: Record<string, any>) => {
-            // Use specified column or try to detect payee name column
-            const nameCol = payeeColumn || findNameColumn(row);
-            if (nameCol && row[nameCol]) {
-              payeeData.push({
-                originalName: row[nameCol],
-                address: row.address || row.Address || row.ADDRESS,
-                city: row.city || row.City || row.CITY,
-                state: row.state || row.State || row.STATE,
-                zipCode: row.zip || row.ZIP || row.zipCode || row.zip_code,
-                originalData: row,
-              });
-            }
-          })
-          .on("end", resolve)
-          .on("error", reject);
-      });
-    } else if (ext === ".xlsx" || ext === ".xls") {
-      await storage.updateUploadBatch(batchId, {
-        currentStep: "Parsing Excel",
-        progressMessage: `Reading Excel file and extracting payee data...`,
-      });
-
-      const workbook = XLSX.readFile(filePath);
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
-
-      for (const row of jsonData as Record<string, any>[]) {
-        // Use specified column or try to detect payee name column
-        const nameCol = payeeColumn || findNameColumn(row);
-        if (nameCol && row[nameCol]) {
-          payeeData.push({
-            originalName: row[nameCol],
-            address: row.address || row.Address || row.ADDRESS,
-            city: row.city || row.City || row.CITY,
-            state: row.state || row.State || row.STATE,
-            zipCode: row.zip || row.ZIP || row.zipCode || row.zip_code,
-            originalData: row,
-          });
-        }
-      }
-    }
-
-    console.log(`Found ${payeeData.length} payee records in file`);
+    // Process file with streaming to avoid memory issues
+    await optimizedClassificationService.processFileStream(batchId, file.path, payeeColumn);
     
-    // Update with record count
-    await storage.updateUploadBatch(batchId, {
-      totalRecords: payeeData.length,
-      currentStep: "Initializing AI classification",
-      progressMessage: `Found ${payeeData.length} payee records. Starting AI classification...`,
-    });
-
-    // Process classifications
-    await classificationService.processPayeeBatch(batchId, payeeData);
-
-    // Clean up uploaded file
-    fs.unlinkSync(filePath);
     console.log(`File processing completed for batch ${batchId}`);
   } catch (error) {
     console.error("Error processing file:", error);

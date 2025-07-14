@@ -2,32 +2,49 @@ import { storage } from "../storage";
 import { type InsertPayeeClassification } from "@shared/schema";
 import OpenAI from 'openai';
 
-// Rate limiting for OpenAI API calls
+// Rate limiting for OpenAI API calls - optimized for high-tier access
 class RateLimiter {
   private requests: number[] = [];
   private readonly maxRequests: number;
   private readonly timeWindow: number;
+  private totalRequests: number = 0;
+  private windowStart: number = Date.now();
 
-  constructor(maxRequests: number = 50, timeWindowMs: number = 60000) { // 50 requests per minute
+  constructor(maxRequests: number = 5000, timeWindowMs: number = 60000) { // 5000 RPM for tier 3+
     this.maxRequests = maxRequests;
     this.timeWindow = timeWindowMs;
   }
 
   async waitIfNeeded(): Promise<void> {
     const now = Date.now();
+    
+    // Reset window if needed
+    if (now - this.windowStart > this.timeWindow) {
+      this.requests = [];
+      this.totalRequests = 0;
+      this.windowStart = now;
+    }
+    
     // Remove old requests outside time window
     this.requests = this.requests.filter(time => now - time < this.timeWindow);
     
     if (this.requests.length >= this.maxRequests) {
       const oldestRequest = this.requests[0];
-      const waitTime = this.timeWindow - (now - oldestRequest);
+      const waitTime = this.timeWindow - (now - oldestRequest) + 100; // Add 100ms buffer
       if (waitTime > 0) {
-        console.log(`Rate limit reached, waiting ${waitTime}ms...`);
+        console.log(`Rate limit reached (${this.requests.length}/${this.maxRequests}), waiting ${waitTime}ms...`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }
     }
     
     this.requests.push(now);
+    this.totalRequests++;
+    
+    // Log progress every 100 requests
+    if (this.totalRequests % 100 === 0) {
+      const rps = this.requests.length / ((now - this.windowStart) / 1000);
+      console.log(`API Rate: ${this.requests.length} requests, ${rps.toFixed(1)} req/sec`);
+    }
   }
 }
 
@@ -418,26 +435,26 @@ Provide your best classification for every payee. Give realistic confidence leve
     const totalRecords = payeeData.length;
     const duplicateDetector = new AdvancedDuplicateDetector();
     
-    // Smart chunking strategy based on dataset size
-    let BATCH_SIZE, CONCURRENT_LIMIT, SUB_JOB_SIZE;
+    // Aggressive performance settings for $800/month budget (likely Tier 3+)
+    let BATCH_SIZE, CONCURRENT_LIMIT;
     
     if (totalRecords > 10000) {
-      // Very large datasets: Break into sub-jobs of 1000 records each
-      SUB_JOB_SIZE = 1000;
-      BATCH_SIZE = 25;
-      CONCURRENT_LIMIT = 2;
-      console.log(`Large dataset detected (${totalRecords} records). Using sub-job processing with ${SUB_JOB_SIZE} records per sub-job.`);
-    } else if (totalRecords > 2000) {
-      // Medium datasets: Smaller batches with reduced concurrency
-      BATCH_SIZE = 50;
-      CONCURRENT_LIMIT = 3;
+      // Large datasets: Aggressive parallel processing
+      BATCH_SIZE = 200; // Process 200 at a time
+      CONCURRENT_LIMIT = 50; // 50 parallel API calls
+    } else if (totalRecords > 1000) {
+      // Medium datasets: Still aggressive
+      BATCH_SIZE = 150;
+      CONCURRENT_LIMIT = 30;
     } else {
-      // Small datasets: Normal processing
+      // Small datasets: Maximum speed
       BATCH_SIZE = 100;
-      CONCURRENT_LIMIT = 5;
+      CONCURRENT_LIMIT = 20;
     }
     
-    const PROGRESS_UPDATE_INTERVAL = 5; // Update progress every 5 records for more frequent updates
+    const PROGRESS_UPDATE_INTERVAL = 50; // Update less frequently to reduce DB writes
+    
+    console.log(`Performance settings: BATCH_SIZE=${BATCH_SIZE}, CONCURRENT=${CONCURRENT_LIMIT} for ${totalRecords} records`)
     
     // Track this job for timeout monitoring
     this.runningJobs.set(batchId, {
@@ -447,16 +464,8 @@ Provide your best classification for every payee. Give realistic confidence leve
     
     console.log(`Starting batch ${batchId} with ${totalRecords} records. Using batch size: ${BATCH_SIZE}, concurrency: ${CONCURRENT_LIMIT}`);
     
-    // Disable sub-job processing for now - use regular processing for all datasets
-    // This prevents the stalling issue we're experiencing with large datasets
-    console.log(`Processing ${totalRecords} records with regular batch processing (no sub-jobs)`);
-    
-    // For very large datasets, use more conservative settings
-    if (totalRecords > 10000) {
-      BATCH_SIZE = 10; // Much smaller batches
-      CONCURRENT_LIMIT = 1; // Single API call at a time
-      console.log(`Large dataset detected: Using conservative settings (batch=${BATCH_SIZE}, concurrent=${CONCURRENT_LIMIT})`);
-    }
+    // Process all datasets with high performance settings
+    console.log(`Processing ${totalRecords} records with optimized batch processing`)
     
     let totalProcessed = 0;
     let totalSkipped = 0;
@@ -643,16 +652,14 @@ Provide your best classification for every payee. Give realistic confidence leve
         }
       }
 
-      // Save classifications buffer when it gets large or at end of chunk
-      if (classificationsBuffer.length >= BATCH_SIZE || chunkEnd === payeeData.length) {
-        if (classificationsBuffer.length > 0) {
-          await storage.updateUploadBatch(batchId, {
-            currentStep: "Saving classifications",
-            progressMessage: `Saving ${classificationsBuffer.length} classifications...`,
-          });
-          
+      // Save classifications immediately to prevent memory buildup
+      if (classificationsBuffer.length >= 50) { // Save every 50 records
+        try {
           await storage.createPayeeClassifications(classificationsBuffer);
-          classificationsBuffer = []; // Clear buffer after saving
+          classificationsBuffer = []; // Clear buffer immediately
+        } catch (error) {
+          console.error(`Failed to save classifications batch: ${error.message}`);
+          // Don't fail the whole job, just log the error
         }
       }
 

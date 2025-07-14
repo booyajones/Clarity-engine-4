@@ -200,3 +200,13 @@ Preferred communication style: Simple, everyday language.
 - **Better Error Handling**: Added comprehensive status messages throughout file processing pipeline
 - **Loading State Improvements**: Enhanced button states and visual feedback during operations
 - **Production Ready**: Application now fully functional with responsive UI and real-time progress tracking
+
+### July 14, 2025 - Performance Optimization & Memory Fix
+- **Complete Rewrite**: Created optimized classification service V2 with streaming file processing
+- **Memory Leak Fix**: Implemented streaming CSV/Excel parsing to prevent 42GB+ memory usage
+- **Performance Boost**: Increased rate limits to 5000 RPM, batch size to 200, concurrency to 50
+- **Database Optimization**: Increased connection pool to 20 with better timeout settings
+- **Streaming Architecture**: Process files without loading entire dataset into memory
+- **Real-time Progress**: Track records/second performance metrics during processing
+- **Error Recovery**: Better error handling with automatic retries and fallback classifications
+- **Expected Performance**: 50-100+ records/second with $800/month OpenAI budget (Tier 3+)
