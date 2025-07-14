@@ -5,7 +5,7 @@ import { Readable } from 'stream';
 import csv from 'csv-parser';
 import fs from 'fs';
 import path from 'path';
-import * as XLSX from 'xlsx';
+import XLSX from 'xlsx';
 
 // Initialize OpenAI with Tier 5 performance settings
 const openai = new OpenAI({ 
