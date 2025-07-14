@@ -269,7 +269,7 @@ export class OptimizedClassificationService {
         const duplicateId = `duplicate_id${duplicateIdCounter}`;
         duplicateIdCounter++;
         for (const name of names) {
-          duplicateGroups.set(name.toLowerCase(), duplicateId);
+          duplicateGroups.set(name, duplicateId); // Store with original casing
         }
         console.log(`Found duplicate group ${duplicateId}: ${names.join(', ')}`);
       }
@@ -277,7 +277,7 @@ export class OptimizedClassificationService {
     
     // Second pass: Check for potential duplicates that normalization might have missed
     // This handles edge cases like "JPMorgan Chase" vs "Chase Bank"
-    const ungroupedPayees = normalizedPayees.filter(np => !duplicateGroups.has(np.original.toLowerCase()));
+    const ungroupedPayees = normalizedPayees.filter(np => !duplicateGroups.has(np.original));
     if (ungroupedPayees.length > 1 && ungroupedPayees.length <= 20) {
       // Only use AI for small batches to avoid high costs
       const potentialDuplicates = await this.findAIPotentialDuplicates(ungroupedPayees);
@@ -286,7 +286,7 @@ export class OptimizedClassificationService {
           const duplicateId = `duplicate_id${duplicateIdCounter}`;
           duplicateIdCounter++;
           for (const name of group) {
-            duplicateGroups.set(name.toLowerCase(), duplicateId);
+            duplicateGroups.set(name, duplicateId); // Store with original casing
           }
           console.log(`AI found duplicate group ${duplicateId}: ${group.join(', ')}`);
         }
@@ -307,7 +307,7 @@ export class OptimizedClassificationService {
         const normalizedName = this.normalizePayeeName(payee.originalName);
         
         // Check if this payee belongs to a duplicate group
-        const duplicateId = duplicateGroups.get(payee.originalName.toLowerCase());
+        const duplicateId = duplicateGroups.get(payee.originalName);
         if (duplicateId) {
           duplicatesFound++;
           // Include duplicate ID in reasoning
