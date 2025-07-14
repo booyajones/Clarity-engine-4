@@ -263,7 +263,7 @@ export class OptimizedClassificationService {
       groupsMap.get(np.superNormalized)!.push(np.original);
     }
     
-    // Assign duplicate IDs to groups with more than one member
+    // First pass: Assign duplicate IDs to groups with more than one member
     for (const [superNorm, names] of groupsMap) {
       if (names.length > 1) {
         const duplicateId = `duplicate_id${duplicateIdCounter}`;
@@ -272,6 +272,24 @@ export class OptimizedClassificationService {
           duplicateGroups.set(name.toLowerCase(), duplicateId);
         }
         console.log(`Found duplicate group ${duplicateId}: ${names.join(', ')}`);
+      }
+    }
+    
+    // Second pass: Check for potential duplicates that normalization might have missed
+    // This handles edge cases like "JPMorgan Chase" vs "Chase Bank"
+    const ungroupedPayees = normalizedPayees.filter(np => !duplicateGroups.has(np.original.toLowerCase()));
+    if (ungroupedPayees.length > 1 && ungroupedPayees.length <= 20) {
+      // Only use AI for small batches to avoid high costs
+      const potentialDuplicates = await this.findAIPotentialDuplicates(ungroupedPayees);
+      for (const group of potentialDuplicates) {
+        if (group.length > 1) {
+          const duplicateId = `duplicate_id${duplicateIdCounter}`;
+          duplicateIdCounter++;
+          for (const name of group) {
+            duplicateGroups.set(name.toLowerCase(), duplicateId);
+          }
+          console.log(`AI found duplicate group ${duplicateId}: ${group.join(', ')}`);
+        }
       }
     }
     
@@ -442,13 +460,119 @@ Return concise JSON:
   }
   
   private superNormalizeForDuplicates(name: string): string {
-    // Super aggressive normalization for duplicate detection
-    return name
-      .toLowerCase()
-      .replace(/[^\w]/g, '') // Remove ALL non-word characters including spaces
-      .replace(/\b(street|str|st|avenue|ave|av|road|rd|boulevard|blvd|drive|dr|lane|ln|court|ct|place|pl|circle|cir|highway|hwy|parkway|pkwy|way|suite|ste|building|bldg|floor|fl|unit|apt|apartment|room|rm)\b/g, '') // Remove address suffixes
-      .replace(/\b(north|south|east|west|n|s|e|w|ne|nw|se|sw)\b/g, '') // Remove directionals
-      .trim();
+    // Ultra-aggressive normalization for duplicate detection
+    let normalized = name.toLowerCase();
+    
+    // Remove numbers in parentheses like (123), (211), etc.
+    normalized = normalized.replace(/\s*\(\d+\)\s*/g, ' ');
+    
+    // First remove ALL punctuation but keep spaces
+    normalized = normalized.replace(/[^\w\s]/g, ' ');
+    
+    // Remove common business suffixes FIRST (before removing product descriptors)
+    // This ensures "Pepsi Cola Company" -> "Pepsi Cola" -> "Pepsi"
+    const businessSuffixes = [
+      'llc', 'incorporated', 'inc', 'corp', 'corporation', 'co', 'company', 'companies',
+      'ltd', 'limited', 'lp', 'llp', 'pllc', 'plc', 'pc', 'pa',
+      'enterprises', 'enterprise', 'ent', 'group', 'grp',
+      'services', 'service', 'svcs', 'svc',
+      'solutions', 'solution', 'soln',
+      'associates', 'assoc', 'assocs',
+      'partners', 'partnership', 'ptnr', 'ptr',
+      'holdings', 'holding', 'hldg',
+      'international', 'intl', 'global', 'worldwide',
+      'systems', 'system', 'sys',
+      'technologies', 'technology', 'tech',
+      'industries', 'industry', 'ind',
+      'consulting', 'consultants', 'consultant', 'consult',
+      'management', 'mgmt', 'mgm',
+      'development', 'dev', 'developers',
+      'investments', 'investment', 'invest',
+      'capital', 'ventures', 'venture', 'vc',
+      'properties', 'property', 'prop',
+      'realty', 'real estate', 'realtors',
+      'trust', 'foundation', 'institute', 'institution',
+      'organization', 'org', 'association', 'assn', 'assoc',
+      'society', 'club', 'center', 'centre'
+    ];
+    
+    // Create regex to remove business suffixes
+    const suffixRegex = new RegExp(`\\b(${businessSuffixes.join('|')})\\b`, 'gi');
+    normalized = normalized.replace(suffixRegex, ' ');
+    
+    // Remove common product/service descriptors that customers might add
+    const productDescriptors = [
+      'cola', 'soda', 'beverage', 'beverages', 'drink', 'drinks',
+      'products', 'product', 'prod', 'brands', 'brand',
+      'foods', 'food', 'restaurant', 'restaurants', 'resto',
+      'cafe', 'coffee', 'pizza', 'burger', 'burgers',
+      'bank', 'banking', 'financial', 'finance', 'insurance', 'ins',
+      'agency', 'agencies',
+      'store', 'stores', 'shop', 'shops', 'shopping',
+      'market', 'markets', 'supermarket', 'mart',
+      'pharmacy', 'drug', 'drugs', 'medical', 'health', 'healthcare',
+      'gas', 'gasoline', 'fuel', 'station', 'stations', 'petroleum',
+      'hotel', 'hotels', 'motel', 'motels', 'inn', 'lodge', 'resort',
+      'airlines', 'airline', 'airways', 'air', 'flights', 'aviation',
+      'rental', 'rentals', 'rent', 'leasing', 'lease',
+      'wireless', 'mobile', 'cellular', 'phone', 'phones', 'communications', 'comm',
+      'internet', 'broadband', 'cable', 'satellite', 'streaming', 'network',
+      'shipping', 'freight', 'delivery', 'express', 'logistics', 'transport',
+      'retail', 'wholesale', 'distribution', 'supply', 'supplies', 'supplier'
+    ];
+    
+    // Create regex to remove these descriptors
+    const descriptorRegex = new RegExp(`\\b(${productDescriptors.join('|')})\\b`, 'gi');
+    normalized = normalized.replace(descriptorRegex, ' ');
+    
+    // Remove address-related words
+    const addressWords = [
+      'street', 'str', 'st', 'avenue', 'ave', 'av',
+      'road', 'rd', 'boulevard', 'blvd', 'drive', 'dr',
+      'lane', 'ln', 'court', 'ct', 'place', 'pl',
+      'circle', 'cir', 'highway', 'hwy', 'parkway', 'pkwy',
+      'way', 'suite', 'ste', 'building', 'bldg',
+      'floor', 'fl', 'unit', 'apt', 'apartment', 'room', 'rm'
+    ];
+    
+    const addressRegex = new RegExp(`\\b(${addressWords.join('|')})\\b`, 'gi');
+    normalized = normalized.replace(addressRegex, ' ');
+    
+    // Remove directionals
+    normalized = normalized.replace(/\b(north|south|east|west|n|s|e|w|ne|nw|se|sw)\b/gi, ' ');
+    
+    // Remove ALL remaining non-alphanumeric characters and collapse spaces
+    normalized = normalized.replace(/[^a-z0-9\s]/g, '');
+    normalized = normalized.replace(/\s+/g, ''); // Remove all spaces for final comparison
+    
+    return normalized.trim();
+  }
+  
+  private async findAIPotentialDuplicates(payees: Array<{original: string, normalized: string, superNormalized: string}>): Promise<string[][]> {
+    // Use AI to find potential duplicates that normalization might miss
+    try {
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [{
+          role: "system",
+          content: `Group payee names that refer to the same entity. Consider variations, subsidiaries, and common abbreviations.
+Return JSON array of groups where each group contains names that should be considered duplicates.
+Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
+        }, {
+          role: "user",
+          content: `Find duplicate groups in: ${payees.map(p => p.original).join(', ')}`
+        }],
+        temperature: 0,
+        max_tokens: 1000,
+        response_format: { type: "json_object" }
+      });
+      
+      const result = JSON.parse(response.choices[0].message.content || '{"groups":[]}');
+      return result.groups || [];
+    } catch (error) {
+      console.error('AI duplicate detection error:', error);
+      return [];
+    }
   }
   
   private findNameColumn(row: Record<string, any>): string | null {

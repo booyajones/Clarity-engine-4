@@ -164,13 +164,20 @@ Preferred communication style: Simple, everyday language.
 - Advanced normalization handles periods, commas, case variations, and business entity suffixes
 
 ### Advanced Duplicate Detection System
-- **Three-Layer Detection**: Basic normalization → Advanced normalization → OpenAI comparison
-- **Business Entity Normalization**: Removes LLC, INC, CORP, CO, LTD, LP, LLP, PLLC, ENTERPRISES, etc.
-- **Address Normalization**: Handles ST/STREET, AVE/AVENUE, RD/ROAD, BLVD/BOULEVARD variations
-- **Fuzzy Matching**: Uses Levenshtein distance with 80% similarity threshold for potential duplicates
-- **OpenAI Verification**: Final verification step using GPT-4o for ambiguous cases
-- **Caching System**: Prevents re-processing of already determined duplicates
-- **Detailed Logging**: Comprehensive reporting of duplicate detection results and reasoning
+- **Ultra-Aggressive Normalization**: Multi-stage normalization that handles complex variations
+  - Removes numbers in parentheses: PEPSI COLA (211) → PEPSI
+  - Strips 40+ business suffixes: Company, Corp, Inc, LLC, etc. (processed first)
+  - Removes 60+ product/service descriptors: cola, bank, store, pharmacy, etc.
+  - Handles address components: street, avenue, suite, etc.
+  - Case insensitive and punctuation agnostic
+- **Smart Processing Order**: Business suffixes removed BEFORE product descriptors
+  - Ensures "Pepsi Cola Company" → "Pepsi Cola" → "Pepsi"
+- **Comprehensive Coverage**: Successfully groups variations like:
+  - PEPSI, Pepsi, PEPSI COLA, PEPSI-COLA, PEPSI COLA (211) → all become "pepsi"
+  - Wells Fargo, WELLS FARGO BANK, Wells Fargo & Company → all become "wellsfargo"
+- **AI Fallback**: Optional GPT-4o verification for edge cases (small batches only)
+- **Duplicate ID System**: Assigns unique IDs (duplicate_id1, duplicate_id2) to group variations
+- **Batch-Level Detection**: Duplicates detected within each upload, not across entire database
 
 ### July 11, 2025 - UI Consolidation & Job Name Consistency
 - **Dashboard Removal**: Eliminated redundant dashboard page - all functionality moved to enhanced upload page
