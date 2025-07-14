@@ -93,13 +93,32 @@ export class OptimizedClassificationService {
     
     console.log(`Creating CSV stream for file: ${filePath}, payeeColumn: "${payeeColumn}"`);
     
-    const csvStream = fs.createReadStream(filePath)
-      .pipe(csv({
-        skipLinesWithError: true,
-        strict: false
-      }));
-      
-    csvStream
+    console.log(`Creating CSV parser...`);
+    let parseEvents = 0;
+    
+    const csvStream = csv({
+      skipLinesWithError: false,
+      strict: false,
+      columns: true, // Treat first line as headers
+      skip_empty_lines: true,
+      trim: true
+    });
+    
+    const fileStream = fs.createReadStream(filePath);
+    
+    fileStream.on('error', (err) => {
+      console.error('File stream error:', err);
+    });
+    
+    fileStream.on('data', (chunk) => {
+      if (parseEvents === 0) {
+        console.log(`First chunk received, size: ${chunk.length} bytes`);
+        parseEvents++;
+      }
+    });
+    
+    fileStream
+      .pipe(csvStream)
       .on('headers', (headers) => {
         console.log('CSV headers detected:', headers);
       })
@@ -111,6 +130,7 @@ export class OptimizedClassificationService {
         if (totalRows <= 3) {
           console.log(`Row ${totalRows} - Looking for column "${nameCol}" in:`, Object.keys(row));
           console.log(`Value in "${nameCol}":`, row[nameCol]);
+          console.log(`Full row data:`, JSON.stringify(row));
         }
         
         if (nameCol && row[nameCol]) {
@@ -138,7 +158,8 @@ export class OptimizedClassificationService {
         payeeStream.push(null);
       })
       .on('error', (err) => {
-        console.error('CSV stream error:', err);
+        console.error('CSV parser error:', err);
+        console.error('Error details:', err.message);
         payeeStream.destroy(err);
       });
     
