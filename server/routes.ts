@@ -297,6 +297,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete all upload batches for the current user
+  app.delete("/api/upload/batches", async (req, res) => {
+    try {
+      const userId = 1; // TODO: Get from session/auth
+      
+      // Get all batches for the user
+      const batches = await storage.getUserUploadBatches(userId);
+      
+      // Delete classifications and batches for each
+      for (const batch of batches) {
+        await storage.deleteBatchClassifications(batch.id);
+        await storage.deleteUploadBatch(batch.id);
+      }
+      
+      res.json({ success: true, deletedCount: batches.length });
+    } catch (error) {
+      console.error("Error deleting all batches:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Cancel/stop a processing batch
   app.patch("/api/upload/batches/:id/cancel", async (req, res) => {
     try {

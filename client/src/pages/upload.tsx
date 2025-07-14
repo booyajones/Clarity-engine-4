@@ -334,26 +334,59 @@ export default function Upload() {
               <div className="border rounded-lg p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-medium">Recent Jobs</h2>
-                  {batches.some(batch => batch.status === 'cancelled' || batch.status === 'failed') && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        if (confirm('Are you sure you want to delete all failed/cancelled jobs?')) {
-                          const failedBatches = batches.filter(batch => batch.status === 'cancelled' || batch.status === 'failed');
-                          Promise.all(failedBatches.map(batch => 
-                            fetch(`/api/upload/batches/${batch.id}`, { method: 'DELETE' })
-                          )).then(() => {
-                            queryClient.invalidateQueries({ queryKey: ["/api/upload/batches"] });
-                          });
-                        }
-                      }}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete
-                    </Button>
-                  )}
+                  <div className="flex gap-2">
+                    {batches.some(batch => batch.status === 'cancelled' || batch.status === 'failed') && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (confirm('Are you sure you want to delete all failed/cancelled jobs?')) {
+                            const failedBatches = batches.filter(batch => batch.status === 'cancelled' || batch.status === 'failed');
+                            Promise.all(failedBatches.map(batch => 
+                              fetch(`/api/upload/batches/${batch.id}`, { method: 'DELETE' })
+                            )).then(() => {
+                              queryClient.invalidateQueries({ queryKey: ["/api/upload/batches"] });
+                            });
+                          }
+                        }}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete Failed
+                      </Button>
+                    )}
+                    {batches.length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (confirm(`Are you sure you want to delete all ${batches.length} jobs? This cannot be undone.`)) {
+                            fetch("/api/upload/batches", { method: "DELETE" })
+                              .then(res => res.json())
+                              .then(() => {
+                                queryClient.invalidateQueries({ queryKey: ["/api/upload/batches"] });
+                                queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+                                toast({
+                                  title: "All jobs deleted",
+                                  description: "All jobs and their data have been removed.",
+                                });
+                              })
+                              .catch(() => {
+                                toast({
+                                  title: "Delete failed",
+                                  description: "Could not delete all jobs. Please try again.",
+                                  variant: "destructive",
+                                });
+                              });
+                          }
+                        }}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete All
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 {batches.length > 0 ? (
                   <div className="space-y-3">
