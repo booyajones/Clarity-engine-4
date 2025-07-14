@@ -460,12 +460,26 @@ You must respond in valid JSON format like this: {"payeeType":"Business","confid
     
     try {
       const response = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo", // Fastest model
+        model: "gpt-4o", // Best accuracy model
         messages: [{
           role: "system",
-          content: `You are a payee classifier. Classify each payee as Individual, Business, or Government.
-For each payee, provide a JSON object with a "results" array containing objects with: id (matching the number), payeeType, confidence (0-1), sicCode (if business), sicDescription (if business), and reasoning.
-Example: {"results":[{"id":"1","payeeType":"Business","confidence":0.95,"sicCode":"5411","sicDescription":"Grocery Stores","reasoning":"LLC suffix"}]}`
+          content: `You are an expert financial payee classifier with deep knowledge of business entities, government organizations, and individual naming patterns.
+
+For each payee, analyze carefully and provide accurate classification with realistic confidence scores based on:
+- Entity type indicators (LLC, Inc, Corp, etc.)
+- Business naming patterns and industry keywords
+- Government agency patterns
+- Individual name patterns
+
+IMPORTANT: 
+- Provide realistic confidence scores (0.6-0.95) based on available information
+- Only use 0.95+ confidence when you're absolutely certain
+- For businesses, research and assign accurate SIC codes based on the business name/type
+- Provide detailed reasoning explaining your classification decision
+
+Return a JSON object with a "results" array containing objects with: id (matching the number), payeeType (Individual/Business/Government), confidence (0-1), sicCode (if business, 4 digits), sicDescription (if business), and reasoning (detailed explanation).
+
+Example: {"results":[{"id":"1","payeeType":"Business","confidence":0.88,"sicCode":"5411","sicDescription":"Grocery Stores","reasoning":"'Walmart Inc' is clearly a business entity with Inc suffix, known retail corporation specializing in grocery and general merchandise"}]}`
         }, {
           role: "user",
           content: `Classify these payees and respond with JSON:\n${apiPayeeList}`
@@ -553,28 +567,8 @@ Example: {"results":[{"id":"1","payeeType":"Business","confidence":0.95,"sicCode
   }
   
   private quickClassify(name: string): ClassificationResult | null {
-    const normalized = name.toUpperCase();
-    
-    // Business patterns
-    if (/\b(LLC|INC|CORP|CORPORATION|CO|LTD|LIMITED|LP|LLP|PLLC|ENTERPRISES|SERVICES|SOLUTIONS|GROUP|HOLDINGS|PARTNERS|ASSOCIATES|CONSULTING|TECHNOLOGIES|INDUSTRIES|SYSTEMS|GLOBAL|INTERNATIONAL)\b/.test(normalized)) {
-      return {
-        payeeType: "Business",
-        confidence: 0.95,
-        sicCode: "7373",
-        sicDescription: "Computer Integrated Systems Design",
-        reasoning: "Business entity suffix detected"
-      };
-    }
-    
-    // Government patterns
-    if (/\b(DEPARTMENT|DEPT|CITY OF|STATE OF|COUNTY OF|FEDERAL|GOVERNMENT|AGENCY|BUREAU|OFFICE OF|ADMINISTRATION|COMMISSION|AUTHORITY|DISTRICT|MUNICIPAL|IRS|EPA|DOD|DOE|FDA|CDC|FBI|CIA|NSA)\b/.test(normalized)) {
-      return {
-        payeeType: "Government",
-        confidence: 0.95,
-        reasoning: "Government entity pattern detected"
-      };
-    }
-    
+    // Disable pre-classification to ensure all payees go through OpenAI
+    // for higher quality and confidence
     return null;
   }
   
