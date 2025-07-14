@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload as UploadIcon, Download, Loader2, X, FileSpreadsheet, CheckCircle2, XCircle, Clock, AlertCircle, Activity, ArrowRight, ClipboardList } from "lucide-react";
+import { Upload as UploadIcon, Download, Loader2, X, FileSpreadsheet, CheckCircle2, XCircle, Clock, AlertCircle, Activity, ArrowRight, ClipboardList, Sparkles } from "lucide-react";
 import { useState, useRef } from "react";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -294,15 +294,18 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-blue-50">
       <div className="flex-1 p-8 max-w-7xl mx-auto">
         <div className="mb-8 text-center">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="p-3 bg-primary-500 text-white rounded-2xl shadow-lg">
-              <FileSpreadsheet className="h-8 w-8" />
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full blur-xl opacity-60"></div>
+              <div className="relative p-3 bg-gradient-to-br from-primary-500 to-primary-600 text-white rounded-full shadow-lg">
+                <Sparkles className="h-7 w-7" />
+              </div>
             </div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-primary-600 to-primary-700 bg-clip-text text-transparent">
+            <h1 className="text-5xl font-bold bg-gradient-to-r from-primary-600 to-purple-600 bg-clip-text text-transparent">
               Clarity
             </h1>
           </div>
-          <p className="text-lg text-gray-600">Transform your payee data with AI-powered intelligence</p>
+          <p className="text-lg text-gray-600 font-light">Transform your payee data with AI-powered intelligence</p>
         </div>
 
       {/* Upload Section */}
