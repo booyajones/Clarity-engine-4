@@ -20,7 +20,7 @@ export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   connectionTimeoutMillis: 30000,  // 30 second timeout for high load
   idleTimeoutMillis: 300000,       // 5 minute idle timeout
-  max: 50,                         // Maximum connections for Tier 5 throughput
+  max: 100,                        // Maximum connections for high throughput
   maxUses: 5000,                   // Higher reuse for sustained performance
   allowExitOnIdle: true            // Allow graceful shutdown
 });

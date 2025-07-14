@@ -151,8 +151,8 @@ export class OptimizedClassificationService {
     stream: Readable,
     signal: AbortSignal
   ): Promise<void> {
-    const BATCH_SIZE = 500; // Process 500 payees in parallel for Tier 5
-    const MAX_CONCURRENT = 200; // Maximum 200 concurrent OpenAI calls for Tier 5
+    const BATCH_SIZE = 500; // Maximum batch size for Tier 5  
+    const MAX_CONCURRENT = 200; // Maximum concurrency for 30,000 RPM
     let buffer: PayeeData[] = [];
     let totalProcessed = 0;
     let totalRecords = 0;
@@ -224,60 +224,59 @@ export class OptimizedClassificationService {
     signal: AbortSignal
   ): Promise<void> {
     const classifications: InsertPayeeClassification[] = [];
-    const CHUNK_SIZE = 50; // Process in chunks of 50 for Tier 5 performance
     
-    // Process payees in chunks with controlled concurrency
-    for (let i = 0; i < payees.length; i += CHUNK_SIZE) {
+    console.log(`Processing batch of ${payees.length} payees for batch ${batchId}`);
+    const batchStartTime = Date.now();
+    
+    // Process all payees in a single batch request
+    try {
       if (signal.aborted) return;
       
-      const chunk = payees.slice(i, i + CHUNK_SIZE);
-      const chunkPromises = chunk.map(payee => this.classifyPayee(payee));
-      
-      try {
-        const results = await Promise.all(chunkPromises);
+      const results = await this.classifyBatch(payees);
+      const batchTime = (Date.now() - batchStartTime) / 1000;
+      console.log(`Processed batch of ${payees.length} in ${batchTime}s (${(payees.length/batchTime).toFixed(1)} rec/s)`);
         
-        for (let j = 0; j < results.length; j++) {
-          const result = results[j];
-          const payee = chunk[j];
+      for (let j = 0; j < results.length; j++) {
+        const result = results[j];
+        const payee = payees[j];
           
-          classifications.push({
-            batchId,
-            originalName: payee.originalName,
-            cleanedName: this.normalizePayeeName(payee.originalName),
-            address: payee.address || null,
-            city: payee.city || null,
-            state: payee.state || null,
-            zipCode: payee.zipCode || null,
-            payeeType: result.payeeType,
-            confidence: result.confidence,
-            sicCode: result.sicCode || null,
-            sicDescription: result.sicDescription || null,
-            status: "auto-classified",
-            originalData: payee.originalData,
-            reasoning: result.reasoning,
-          });
-        }
-      } catch (error) {
-        console.error(`Chunk processing error:`, error);
-        // Add fallback classifications for failed chunk
-        for (const payee of chunk) {
-          classifications.push({
-            batchId,
-            originalName: payee.originalName,
-            cleanedName: this.normalizePayeeName(payee.originalName),
-            address: payee.address || null,
-            city: payee.city || null,
-            state: payee.state || null,
-            zipCode: payee.zipCode || null,
-            payeeType: "Individual",
-            confidence: 0.5,
-            sicCode: null,
-            sicDescription: null,
-            status: "auto-classified",
-            originalData: payee.originalData,
-            reasoning: `Classification failed: ${error.message}`,
-          });
-        }
+        classifications.push({
+          batchId,
+          originalName: payee.originalName,
+          cleanedName: this.normalizePayeeName(payee.originalName),
+          address: payee.address || null,
+          city: payee.city || null,
+          state: payee.state || null,
+          zipCode: payee.zipCode || null,
+          payeeType: result.payeeType,
+          confidence: result.confidence,
+          sicCode: result.sicCode || null,
+          sicDescription: result.sicDescription || null,
+          status: "auto-classified",
+          originalData: payee.originalData,
+          reasoning: result.reasoning,
+        });
+      }
+    } catch (error) {
+      console.error(`Batch processing error:`, error);
+      // Add fallback classifications for failed batch
+      for (const payee of payees) {
+        classifications.push({
+          batchId,
+          originalName: payee.originalName,
+          cleanedName: this.normalizePayeeName(payee.originalName),
+          address: payee.address || null,
+          city: payee.city || null,
+          state: payee.state || null,
+          zipCode: payee.zipCode || null,
+          payeeType: "Individual",
+          confidence: 0.5,
+          sicCode: null,
+          sicDescription: null,
+          status: "auto-classified",
+          originalData: payee.originalData,
+          reasoning: `Classification failed: ${error.message}`,
+        });
       }
     }
     
@@ -300,21 +299,16 @@ export class OptimizedClassificationService {
     
     try {
       const response = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-3.5-turbo", // Use reliable turbo model for speed
         messages: [{
           role: "system",
-          content: `You are a financial data classification expert. Classify payees into Individual, Business, or Government.
-Return a JSON object with: payeeType, confidence (0-1), sicCode, sicDescription, reasoning.
-Be realistic about confidence - use lower values when uncertain.`
+          content: `You are a payee classifier. Classify as Individual, Business, or Government.
+You must respond in valid JSON format like this: {"payeeType":"Business","confidence":0.9,"sicCode":"5411","sicDescription":"Grocery Stores","reasoning":"Company suffix indicates business"}`
         }, {
           role: "user",
-          content: `Classify this payee:
-Name: ${payee.originalName}
-${payee.address ? `Address: ${payee.address}` : ''}
-${payee.city ? `City: ${payee.city}` : ''}
-${payee.state ? `State: ${payee.state}` : ''}`
+          content: `Classify this payee and respond with JSON: ${payee.originalName}`
         }],
-        temperature: 0.1,
+        temperature: 0,
         max_tokens: 150,
         response_format: { type: "json_object" }
       });
@@ -375,6 +369,17 @@ ${payee.state ? `State: ${payee.state}` : ''}`
     
     console.log(`Using first column as default: ${keys[0]}`);
     return keys[0]; // Default to first column
+  }
+  
+  // New batch classification method for better performance
+  private async classifyBatch(payees: PayeeData[]): Promise<ClassificationResult[]> {
+    const results: ClassificationResult[] = [];
+    
+    // Process in parallel without delays for maximum speed
+    const promises = payees.map(payee => this.classifyPayee(payee));
+    
+    const classificationResults = await Promise.all(promises);
+    return classificationResults;
   }
   
   cancelJob(batchId: number): void {
