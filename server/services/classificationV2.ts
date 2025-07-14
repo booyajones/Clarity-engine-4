@@ -152,7 +152,7 @@ export class OptimizedClassificationService {
     stream: Readable,
     signal: AbortSignal
   ): Promise<void> {
-    const BATCH_SIZE = 1000; // Large batch for Tier 5 throughput
+    const BATCH_SIZE = 100; // Smaller batch for more frequent progress updates
     const MAX_CONCURRENT = 20; // Aggressive concurrency for parallelism
     let buffer: PayeeData[] = [];
     let totalProcessed = 0;
@@ -386,8 +386,8 @@ You must respond in valid JSON format like this: {"payeeType":"Business","confid
   
   // New batch classification method that processes multiple payees in parallel
   private async classifyBatch(payees: PayeeData[]): Promise<ClassificationResult[]> {
-    const CHUNK_SIZE = 50; // Larger chunks for Tier 5 performance
-    const MAX_PARALLEL = 20; // Aggressive parallelism for 30k RPM
+    const CHUNK_SIZE = 10; // Smaller chunks to avoid timeouts
+    const MAX_PARALLEL = 10; // Controlled parallelism
     const results: ClassificationResult[] = [];
     
     // Split into chunks
@@ -398,8 +398,29 @@ You must respond in valid JSON format like this: {"payeeType":"Business","confid
     
     console.log(`Processing ${chunks.length} chunks of max ${CHUNK_SIZE} payees each with ${MAX_PARALLEL} parallel`);
     
-    // Process all chunks in parallel for maximum throughput
-    const allPromises = chunks.map(chunk => this.classifyChunk(chunk));
+    // Process chunks with controlled concurrency to avoid rate limits
+    const allPromises = [];
+    for (let i = 0; i < chunks.length; i += MAX_PARALLEL) {
+      const batch = chunks.slice(i, i + MAX_PARALLEL).map(chunk => this.classifyChunk(chunk));
+      allPromises.push(...batch);
+      if (i + MAX_PARALLEL < chunks.length) {
+        // Process in waves to avoid overwhelming the API
+        const batchResults = await Promise.allSettled(batch);
+        batchResults.forEach((result, idx) => {
+          if (result.status === 'fulfilled') {
+            results.push(...result.value);
+          } else {
+            console.error(`Chunk ${i + idx} failed:`, result.reason);
+            const failedChunk = chunks[i + idx];
+            results.push(...failedChunk.map(() => ({
+              payeeType: "Individual" as const,
+              confidence: 0.5,
+              reasoning: "Classification failed"
+            })));
+          }
+        });
+      }
+    }
     
     try {
       const batchResults = await Promise.allSettled(allPromises);
