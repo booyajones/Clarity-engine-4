@@ -210,3 +210,11 @@ Preferred communication style: Simple, everyday language.
 - **Real-time Progress**: Track records/second performance metrics during processing
 - **Error Recovery**: Better error handling with automatic retries and fallback classifications
 - **Expected Performance**: 50-100+ records/second with $800/month OpenAI budget (Tier 3+)
+
+### July 15, 2025 - Accuracy Fix & 95% Confidence Implementation
+- **Fixed Accuracy Calculation**: Now properly calculates percentage of records with 95%+ confidence
+- **GPT-4o Integration**: Switched from GPT-3.5-turbo to GPT-4o for best-in-class accuracy
+- **Confidence Threshold**: Implemented proper confidence scoring with 95% threshold requirement
+- **Delete All Jobs**: Added button to delete all jobs at once for easier management
+- **Improved Prompts**: Enhanced system prompts to only return high confidence when truly certain
+- **Duplicate Detection**: Maintains in-memory cache of processed names to identify duplicates

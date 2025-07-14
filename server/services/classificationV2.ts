@@ -203,10 +203,16 @@ export class OptimizedClassificationService {
       const elapsedSeconds = (Date.now() - startTime) / 1000;
       const recordsPerSecond = totalProcessed / elapsedSeconds;
       
+      // Calculate accuracy (percentage of records with 95%+ confidence)
+      const classifications = await storage.getBatchClassifications(batchId);
+      const highConfidenceCount = classifications.filter(c => c.confidence >= 0.95).length;
+      const accuracy = totalProcessed > 0 ? highConfidenceCount / totalProcessed : 0;
+      
       await storage.updateUploadBatch(batchId, {
         status: "completed",
         processedRecords: totalProcessed,
         totalRecords,
+        accuracy,
         currentStep: "Completed",
         progressMessage: `Completed! Processed ${totalProcessed} records in ${elapsedSeconds.toFixed(1)}s (${recordsPerSecond.toFixed(1)} records/sec)`,
         completedAt: new Date()
@@ -299,14 +305,15 @@ export class OptimizedClassificationService {
     
     try {
       const response = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo", // Use reliable turbo model for speed
+        model: "gpt-4o", // Use GPT-4o for best accuracy
         messages: [{
           role: "system",
-          content: `You are a payee classifier. Classify as Individual, Business, or Government.
-You must respond in valid JSON format like this: {"payeeType":"Business","confidence":0.9,"sicCode":"5411","sicDescription":"Grocery Stores","reasoning":"Company suffix indicates business"}`
+          content: `You are an expert payee classifier. Classify as Individual, Business, or Government with high accuracy.
+IMPORTANT: Only return confidence of 0.95 or higher when you are VERY certain. If uncertain, use lower confidence.
+You must respond in valid JSON format like this: {"payeeType":"Business","confidence":0.98,"sicCode":"5411","sicDescription":"Grocery Stores","reasoning":"LLC suffix clearly indicates business entity"}`
         }, {
           role: "user",
-          content: `Classify this payee and respond with JSON: ${payee.originalName}`
+          content: `Classify this payee and respond with JSON: "${payee.originalName}"${payee.address ? `, Address: ${payee.address}` : ''}`
         }],
         temperature: 0,
         max_tokens: 150,
@@ -317,10 +324,10 @@ You must respond in valid JSON format like this: {"payeeType":"Business","confid
       
       const classification: ClassificationResult = {
         payeeType: result.payeeType || "Individual",
-        confidence: Math.min(Math.max(result.confidence || 0.8, 0), 1),
+        confidence: Math.min(Math.max(result.confidence || 0.5, 0), 1),
         sicCode: result.sicCode,
         sicDescription: result.sicDescription,
-        reasoning: result.reasoning || "Classified based on name pattern"
+        reasoning: result.reasoning || "Classified based on available information"
       };
       
       // Cache the result
