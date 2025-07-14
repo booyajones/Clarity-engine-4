@@ -7,9 +7,11 @@ import { Trash2, StopCircle } from "lucide-react";
 
 interface ProgressTrackerProps {
   batch: UploadBatch;
+  onCancel?: () => void;
+  onDelete?: () => void;
 }
 
-export default function ProgressTracker({ batch }: ProgressTrackerProps) {
+export default function ProgressTracker({ batch, onCancel, onDelete }: ProgressTrackerProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -116,7 +118,10 @@ export default function ProgressTracker({ batch }: ProgressTrackerProps) {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => cancelMutation.mutate(batch.id)}
+                onClick={() => {
+                  cancelMutation.mutate(batch.id);
+                  if (onCancel) onCancel();
+                }}
                 disabled={cancelMutation.isPending}
               >
                 <StopCircle className="h-4 w-4" />
@@ -125,7 +130,10 @@ export default function ProgressTracker({ batch }: ProgressTrackerProps) {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => deleteMutation.mutate(batch.id)}
+              onClick={() => {
+                deleteMutation.mutate(batch.id);
+                if (onDelete) onDelete();
+              }}
               disabled={deleteMutation.isPending}
               className="text-red-600 hover:text-red-700"
             >
