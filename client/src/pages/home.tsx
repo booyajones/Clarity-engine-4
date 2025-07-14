@@ -250,38 +250,38 @@ export default function Home() {
     switch (status) {
       case "completed":
         return (
-          <div className="flex items-center gap-1.5 text-success-600">
-            <CheckCircle2 className="h-4 w-4" />
-            <span className="font-medium">Completed</span>
-          </div>
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            Completed
+          </span>
         );
       case "processing":
         return (
-          <div className="flex items-center gap-1.5 text-primary-600">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="font-medium">Processing</span>
-          </div>
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            Processing
+          </span>
         );
       case "failed":
         return (
-          <div className="flex items-center gap-1.5 text-error-600">
-            <XCircle className="h-4 w-4" />
-            <span className="font-medium">Failed</span>
-          </div>
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+            <XCircle className="h-3 w-3 mr-1" />
+            Failed
+          </span>
         );
       case "cancelled":
         return (
-          <div className="flex items-center gap-1.5 text-gray-600">
-            <XCircle className="h-4 w-4" />
-            <span className="font-medium">Cancelled</span>
-          </div>
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+            <X className="h-3 w-3 mr-1" />
+            Cancelled
+          </span>
         );
       default:
         return (
-          <div className="flex items-center gap-1.5 text-gray-500">
-            <Clock className="h-4 w-4" />
-            <span className="font-medium">Pending</span>
-          </div>
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+            <Clock className="h-3 w-3 mr-1" />
+            Pending
+          </span>
         );
     }
   };
@@ -291,33 +291,40 @@ export default function Home() {
   const otherBatches = batches?.filter(b => !["processing", "completed"].includes(b.status)) || [];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-blue-50">
-      <div className="flex-1 p-8 max-w-7xl mx-auto">
-        <div className="mb-8 text-center">
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full blur-xl opacity-60"></div>
-              <div className="relative p-3 bg-gradient-to-br from-primary-500 to-primary-600 text-white rounded-full shadow-lg">
-                <Sparkles className="h-7 w-7" />
+    <div className="min-h-screen bg-gray-50">
+      <div className="bg-white border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-8 py-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-4xl font-light text-gray-900 tracking-wide">
+                <span className="font-normal">CLARITY</span>
+              </h1>
+              <p className="text-sm text-gray-500 mt-2 tracking-wide uppercase">Intelligent Payee Classification</p>
+            </div>
+            <div className="flex items-center gap-6">
+              <div className="text-right">
+                <p className="text-2xl font-light text-gray-900">95%</p>
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Accuracy Target</p>
+              </div>
+              <div className="h-12 w-px bg-gray-200"></div>
+              <div className="text-right">
+                <p className="text-2xl font-light text-gray-900">3</p>
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Categories</p>
               </div>
             </div>
-            <h1 className="text-5xl font-bold bg-gradient-to-r from-primary-600 to-purple-600 bg-clip-text text-transparent">
-              Clarity
-            </h1>
           </div>
-          <p className="text-lg text-gray-600 font-light">Transform your payee data with AI-powered intelligence</p>
         </div>
+      </div>
+      <div className="flex-1 p-8 max-w-7xl mx-auto">
 
       {/* Upload Section */}
-      <Card className="mb-8 shadow-xl border-0 overflow-hidden">
-        <div className="bg-gradient-to-r from-primary-500 to-primary-600 p-1"></div>
+      <Card className="mb-8 border border-gray-200 shadow-sm">
         <CardHeader>
-          <CardTitle className="text-2xl font-semibold flex items-center gap-2">
-            <UploadIcon className="h-6 w-6 text-primary-600" />
+          <CardTitle className="text-xl font-semibold text-gray-900">
             Upload New File
           </CardTitle>
-          <CardDescription className="text-base">
-            Upload a CSV or Excel file containing payee data. Our AI will automatically classify each payee as Individual, Business, or Government.
+          <CardDescription>
+            Upload a CSV or Excel file containing payee data for AI classification
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -334,19 +341,17 @@ export default function Home() {
                 variant="outline"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
-                className="border-2 border-primary-400 hover:bg-primary-50 transition-all duration-200"
               >
-                <UploadIcon className="mr-2 h-5 w-5 text-primary-600" />
-                <span className="text-primary-700 font-medium">Choose File</span>
+                <UploadIcon className="mr-2 h-4 w-4" />
+                Choose File
               </Button>
               {selectedFile && (
-                <div className="flex items-center gap-2 px-4 py-2 bg-primary-50 rounded-lg border border-primary-200">
-                  <FileSpreadsheet className="h-4 w-4 text-primary-600" />
-                  <span className="text-sm font-medium text-gray-700">{selectedFile.name}</span>
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <FileSpreadsheet className="h-4 w-4" />
+                  <span>{selectedFile.name}</span>
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-6 w-6 p-0 hover:bg-primary-100"
                     onClick={() => {
                       setSelectedFile(null);
                       if (fileInputRef.current) {
@@ -354,27 +359,20 @@ export default function Home() {
                       }
                     }}
                   >
-                    <X className="h-3 w-3" />
+                    <X className="h-4 w-4" />
                   </Button>
                 </div>
               )}
             </div>
             {selectedFile && !previewData && (
-              <Button 
-                onClick={handleUpload} 
-                disabled={isUploading}
-                className="bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white shadow-lg transition-all duration-200"
-              >
+              <Button onClick={handleUpload} disabled={isUploading}>
                 {isUploading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Analyzing file...
                   </>
                 ) : (
-                  <>
-                    <ArrowRight className="mr-2 h-4 w-4" />
-                    Next: Select Column
-                  </>
+                  "Next"
                 )}
               </Button>
             )}
@@ -402,7 +400,6 @@ export default function Home() {
                   <Button
                     onClick={handleProcessFile}
                     disabled={!selectedColumn || processMutation.isPending}
-                    className="bg-gradient-to-r from-success-500 to-success-600 hover:from-success-600 hover:to-emerald-700 text-white shadow-lg transition-all duration-200"
                   >
                     {processMutation.isPending ? (
                       <>
@@ -410,10 +407,7 @@ export default function Home() {
                         Processing...
                       </>
                     ) : (
-                      <>
-                        <CheckCircle2 className="mr-2 h-4 w-4" />
-                        Process File
-                      </>
+                      "Process File"
                     )}
                   </Button>
                   <Button
@@ -438,11 +432,9 @@ export default function Home() {
 
       {/* Active Jobs */}
       {processingBatches.length > 0 && (
-        <Card className="mb-8 shadow-xl border-0 overflow-hidden">
-          <div className="bg-gradient-to-r from-orange-500 to-amber-500 p-1"></div>
+        <Card className="mb-8 border border-gray-200 shadow-sm">
           <CardHeader>
-            <CardTitle className="text-2xl font-semibold flex items-center gap-2">
-              <Activity className="h-6 w-6 text-orange-600" />
+            <CardTitle className="text-xl font-semibold text-gray-900">
               Active Jobs
             </CardTitle>
           </CardHeader>
@@ -459,11 +451,9 @@ export default function Home() {
                     </div>
                     <Button
                       size="sm"
-                      variant="destructive"
+                      variant="outline"
                       onClick={() => cancelMutation.mutate(batch.id)}
-                      className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-md"
                     >
-                      <X className="h-3 w-3 mr-1" />
                       Cancel
                     </Button>
                   </div>
@@ -477,11 +467,9 @@ export default function Home() {
 
       {/* All Jobs Table */}
       {batches && batches.length > 0 && (
-        <Card className="shadow-xl border-0 overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-500 to-indigo-500 p-1"></div>
+        <Card className="border border-gray-200 shadow-sm">
           <CardHeader>
-            <CardTitle className="text-2xl font-semibold flex items-center gap-2">
-              <ClipboardList className="h-6 w-6 text-blue-600" />
+            <CardTitle className="text-xl font-semibold text-gray-900">
               Classification History
             </CardTitle>
           </CardHeader>
@@ -528,9 +516,8 @@ export default function Home() {
                             size="sm"
                             variant="outline"
                             onClick={() => window.location.href = `/api/classifications/export/${batch.id}`}
-                            className="border-success-400 hover:bg-success-50 text-success-600"
                           >
-                            <Download className="h-3 w-3" />
+                            <Download className="h-4 w-4" />
                           </Button>
                         )}
                         <Button
