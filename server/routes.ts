@@ -356,8 +356,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const csvData = classifications.map(c => {
         const originalData = (c.originalData as Record<string, any>) || {};
         
-        // Check if this is a duplicate by looking at the reasoning
-        const isDuplicate = c.reasoning && c.reasoning.includes('Duplicate payee detected');
+        // Extract duplicate ID from reasoning if present
+        const duplicateMatch = c.reasoning && c.reasoning.match(/\[(duplicate_id\d+)\]/);
+        const duplicateId = duplicateMatch ? duplicateMatch[1] : "";
         
         return {
           ...originalData, // Original columns come first
@@ -369,7 +370,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           clarity_reasoning: c.reasoning || "",
           clarity_status: c.status,
           clarity_cleaned_name: c.cleanedName,
-          clarity_duplicate_detected: isDuplicate ? "Yes" : "No",
+          clarity_duplicate_id: duplicateId,
           clarity_original_name: c.originalName,
           clarity_address: c.address || "",
           clarity_city: c.city || "",

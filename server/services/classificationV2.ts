@@ -235,10 +235,45 @@ export class OptimizedClassificationService {
     console.log(`Processing batch of ${payees.length} payees for batch ${batchId}`);
     const batchStartTime = Date.now();
     
-    // Track duplicates within this specific file upload
-    const batchDuplicates = new Set<string>();
+    // Enhanced duplicate tracking with duplicate IDs
+    const duplicateGroups = new Map<string, string>(); // normalized name -> duplicate ID
+    const duplicateIdMap = new Map<string, number>(); // duplicate ID -> count
+    let duplicateIdCounter = 1;
     let duplicatesFound = 0;
     let lowConfidenceCount = 0;
+    
+    // First pass: Build duplicate groups by analyzing all names
+    const normalizedPayees: Array<{original: string, normalized: string, superNormalized: string}> = [];
+    for (const payee of payees) {
+      const normalized = this.normalizePayeeName(payee.originalName);
+      const superNormalized = this.superNormalizeForDuplicates(normalized);
+      normalizedPayees.push({
+        original: payee.originalName,
+        normalized: normalized,
+        superNormalized: superNormalized
+      });
+    }
+    
+    // Find duplicate groups using super normalization
+    const groupsMap = new Map<string, string[]>(); // superNormalized -> array of original names
+    for (const np of normalizedPayees) {
+      if (!groupsMap.has(np.superNormalized)) {
+        groupsMap.set(np.superNormalized, []);
+      }
+      groupsMap.get(np.superNormalized)!.push(np.original);
+    }
+    
+    // Assign duplicate IDs to groups with more than one member
+    for (const [superNorm, names] of groupsMap) {
+      if (names.length > 1) {
+        const duplicateId = `duplicate_id${duplicateIdCounter}`;
+        duplicateIdCounter++;
+        for (const name of names) {
+          duplicateGroups.set(name.toLowerCase(), duplicateId);
+        }
+        console.log(`Found duplicate group ${duplicateId}: ${names.join(', ')}`);
+      }
+    }
     
     // Process all payees in a single batch request
     try {
@@ -253,15 +288,12 @@ export class OptimizedClassificationService {
         const payee = payees[j];
         const normalizedName = this.normalizePayeeName(payee.originalName);
         
-        // Check for duplicates within this file upload only
-        const isDup = batchDuplicates.has(normalizedName);
-        if (isDup) {
+        // Check if this payee belongs to a duplicate group
+        const duplicateId = duplicateGroups.get(payee.originalName.toLowerCase());
+        if (duplicateId) {
           duplicatesFound++;
-          // For duplicates, still save them but mark as duplicate in reasoning
-          result.reasoning = `DUPLICATE: This payee appears multiple times in this file. ${result.reasoning}`;
-        } else {
-          // Add to batch duplicates set for checking subsequent records
-          batchDuplicates.add(normalizedName);
+          // Include duplicate ID in reasoning
+          result.reasoning = `[${duplicateId}] ${result.reasoning}`;
         }
         
         // Save all records, but flag low confidence ones for review
@@ -406,6 +438,16 @@ Return concise JSON:
       .replace(/\s+/g, ' ') // Normalize spaces
       .replace(/\b(llc|incorporated|inc|corp|corporation|co|company|ltd|limited|lp|llp|pllc|plc|enterprises|enterprise|ent|group|services|service|solutions|solution|associates|assoc|partners|partnership|holdings|holding|international|intl|global|worldwide|systems|system|technologies|technology|tech|industries|industry|consulting|consultants|consultant|management|mgmt|development|dev|investments|investment|capital|ventures|venture|properties|property|realty|trust|foundation|institute|organization|org|association|assn|society|club)\b/g, '')
       .replace(/\s+/g, ' ') // Normalize spaces again after removal
+      .trim();
+  }
+  
+  private superNormalizeForDuplicates(name: string): string {
+    // Super aggressive normalization for duplicate detection
+    return name
+      .toLowerCase()
+      .replace(/[^\w]/g, '') // Remove ALL non-word characters including spaces
+      .replace(/\b(street|str|st|avenue|ave|av|road|rd|boulevard|blvd|drive|dr|lane|ln|court|ct|place|pl|circle|cir|highway|hwy|parkway|pkwy|way|suite|ste|building|bldg|floor|fl|unit|apt|apartment|room|rm)\b/g, '') // Remove address suffixes
+      .replace(/\b(north|south|east|west|n|s|e|w|ne|nw|se|sw)\b/g, '') // Remove directionals
       .trim();
   }
   

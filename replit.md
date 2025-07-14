@@ -234,3 +234,20 @@ Preferred communication style: Simple, everyday language.
   - Better reasoning requirements
 - **UI Simplification**: Removed dashboard metrics from upload page per user request
 - **Performance**: Maintains high-speed processing with improved accuracy targeting
+
+### January 15, 2025 - Enhanced Duplicate Detection with ID Grouping
+- **Advanced Duplicate Detection**: Implemented sophisticated duplicate detection that catches variations:
+  - Case variations: christa vs Christa vs CHRISTA
+  - Spacing variations: birch street vs birchstreet
+  - Mixed case variations: john smith vs John Smith vs JOhn SmiTH
+- **Duplicate ID System**: Assigns unique duplicate IDs to group similar names:
+  - duplicate_id1 for all Christa variations
+  - duplicate_id2 for all Birch Street variations
+  - duplicate_id3 for all John Smith variations
+- **Super Normalization**: Added aggressive normalization for duplicate detection:
+  - Removes ALL non-word characters including spaces
+  - Strips address suffixes (street, ave, road, etc.)
+  - Removes directionals (north, south, east, west)
+- **Export Enhancement**: Added clarity_duplicate_id column to exported CSV
+- **Batch-Level Detection**: Duplicates are detected within each batch upload
+- **Duplicate Tracking**: Reasoning field includes [duplicate_idX] prefix for grouped duplicates
