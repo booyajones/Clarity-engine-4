@@ -378,40 +378,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Test OpenAI connectivity
-  app.get("/api/test-openai", async (req, res) => {
-    try {
-      const testClient = new OpenAI({ 
-        apiKey: process.env.OPENAI_API_KEY,
-        timeout: 10000
-      });
-      
-      const start = Date.now();
-      const response = await testClient.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [{
-          role: "user",
-          content: "Test connection. Reply with 'OK'"
-        }],
-        max_tokens: 10
-      });
-      
-      const elapsed = Date.now() - start;
-      res.json({
-        success: true,
-        responseTime: elapsed,
-        message: response.choices[0]?.message?.content || 'No response'
-      });
-    } catch (error: any) {
-      console.error("OpenAI test error:", error);
-      res.status(500).json({
-        success: false,
-        error: error.message,
-        type: error.constructor.name
-      });
-    }
-  });
-
   const httpServer = createServer(app);
   return httpServer;
 }

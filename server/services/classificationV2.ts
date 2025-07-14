@@ -7,12 +7,11 @@ import fs from 'fs';
 import path from 'path';
 import XLSX from 'xlsx';
 
-// Initialize OpenAI with balanced performance settings
+// Initialize OpenAI with Tier 5 performance settings
 const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY || '',
-  maxRetries: 2,
-  timeout: 60000, // 60 second timeout for larger batches
-  dangerouslyAllowBrowser: false
+  apiKey: process.env.OPENAI_API_KEY,
+  maxRetries: 5,
+  timeout: 20000 // 20 second timeout for faster retries
 });
 
 interface ClassificationResult {
@@ -152,8 +151,8 @@ export class OptimizedClassificationService {
     stream: Readable,
     signal: AbortSignal
   ): Promise<void> {
-    const BATCH_SIZE = 100; // Smaller batch for more frequent progress updates
-    const MAX_CONCURRENT = 20; // Aggressive concurrency for parallelism
+    const BATCH_SIZE = 500; // Maximum batch size for Tier 5  
+    const MAX_CONCURRENT = 200; // Maximum concurrency for 30,000 RPM
     let buffer: PayeeData[] = [];
     let totalProcessed = 0;
     let totalRecords = 0;
@@ -204,23 +203,16 @@ export class OptimizedClassificationService {
       const elapsedSeconds = (Date.now() - startTime) / 1000;
       const recordsPerSecond = totalProcessed / elapsedSeconds;
       
-      // Calculate accuracy from saved classifications
-      const savedClassifications = await storage.getBatchClassifications(batchId);
-      const avgConfidence = savedClassifications.length > 0 
-        ? savedClassifications.reduce((sum, c) => sum + c.confidence, 0) / savedClassifications.length
-        : 0;
-      
       await storage.updateUploadBatch(batchId, {
         status: "completed",
         processedRecords: totalProcessed,
         totalRecords,
-        accuracy: avgConfidence,
         currentStep: "Completed",
         progressMessage: `Completed! Processed ${totalProcessed} records in ${elapsedSeconds.toFixed(1)}s (${recordsPerSecond.toFixed(1)} records/sec)`,
         completedAt: new Date()
       });
       
-      console.log(`Batch ${batchId} completed: ${totalProcessed} records in ${elapsedSeconds}s (${recordsPerSecond.toFixed(1)} rec/s), accuracy: ${(avgConfidence * 100).toFixed(1)}%`);
+      console.log(`Batch ${batchId} completed: ${totalProcessed} records in ${elapsedSeconds}s (${recordsPerSecond.toFixed(1)} rec/s)`);
     }
   }
   
@@ -288,17 +280,12 @@ export class OptimizedClassificationService {
       }
     }
     
-    // Save classifications in optimized batches
-    const SAVE_BATCH_SIZE = 100; // Smaller batches for faster DB writes
-    const savePromises = [];
-    
+    // Save classifications in larger batches for better performance
+    const SAVE_BATCH_SIZE = 500;
     for (let i = 0; i < classifications.length; i += SAVE_BATCH_SIZE) {
       const batch = classifications.slice(i, i + SAVE_BATCH_SIZE);
-      savePromises.push(storage.createPayeeClassifications(batch));
+      await storage.createPayeeClassifications(batch);
     }
-    
-    // Save in parallel for better performance
-    await Promise.all(savePromises);
   }
   
   private async classifyPayee(payee: PayeeData): Promise<ClassificationResult> {
@@ -384,203 +371,15 @@ You must respond in valid JSON format like this: {"payeeType":"Business","confid
     return keys[0]; // Default to first column
   }
   
-  // New batch classification method that processes multiple payees in parallel
+  // New batch classification method for better performance
   private async classifyBatch(payees: PayeeData[]): Promise<ClassificationResult[]> {
-    const CHUNK_SIZE = 10; // Smaller chunks to avoid timeouts
-    const MAX_PARALLEL = 10; // Controlled parallelism
     const results: ClassificationResult[] = [];
     
-    // Split into chunks
-    const chunks: PayeeData[][] = [];
-    for (let i = 0; i < payees.length; i += CHUNK_SIZE) {
-      chunks.push(payees.slice(i, i + CHUNK_SIZE));
-    }
+    // Process in parallel without delays for maximum speed
+    const promises = payees.map(payee => this.classifyPayee(payee));
     
-    console.log(`Processing ${chunks.length} chunks of max ${CHUNK_SIZE} payees each with ${MAX_PARALLEL} parallel`);
-    
-    // Process chunks with controlled concurrency to avoid rate limits
-    const allPromises = [];
-    for (let i = 0; i < chunks.length; i += MAX_PARALLEL) {
-      const batch = chunks.slice(i, i + MAX_PARALLEL).map(chunk => this.classifyChunk(chunk));
-      allPromises.push(...batch);
-      if (i + MAX_PARALLEL < chunks.length) {
-        // Process in waves to avoid overwhelming the API
-        const batchResults = await Promise.allSettled(batch);
-        batchResults.forEach((result, idx) => {
-          if (result.status === 'fulfilled') {
-            results.push(...result.value);
-          } else {
-            console.error(`Chunk ${i + idx} failed:`, result.reason);
-            const failedChunk = chunks[i + idx];
-            results.push(...failedChunk.map(() => ({
-              payeeType: "Individual" as const,
-              confidence: 0.5,
-              reasoning: "Classification failed"
-            })));
-          }
-        });
-      }
-    }
-    
-    try {
-      const batchResults = await Promise.allSettled(allPromises);
-      
-      batchResults.forEach((result, idx) => {
-        if (result.status === 'fulfilled') {
-          results.push(...result.value);
-        } else {
-          console.error(`Chunk ${idx} failed:`, result.reason);
-          // Add fallback results for failed chunk
-          const failedChunk = chunks[idx];
-          results.push(...failedChunk.map(() => ({
-            payeeType: "Individual" as const,
-            confidence: 0.5,
-            reasoning: "Classification failed"
-          })));
-        }
-      });
-    } catch (err) {
-      console.error(`Batch processing error:`, err);
-    }
-    
-    return results;
-  }
-  
-  private async classifyChunk(payees: PayeeData[]): Promise<ClassificationResult[]> {
-    // Pre-classify obvious cases without API calls
-    const preClassified: Array<{ idx: number; result: ClassificationResult }> = [];
-    const needsApi: Array<{ idx: number; payee: PayeeData }> = [];
-    
-    payees.forEach((payee, idx) => {
-      const quickResult = this.quickClassify(payee.originalName);
-      if (quickResult) {
-        preClassified.push({ idx, result: quickResult });
-      } else {
-        needsApi.push({ idx, payee });
-      }
-    });
-    
-    console.log(`Chunk of ${payees.length}: ${preClassified.length} pre-classified, ${needsApi.length} need API`);
-    
-    // If all were pre-classified, return immediately
-    if (needsApi.length === 0) {
-      const results: ClassificationResult[] = new Array(payees.length);
-      preClassified.forEach(({ idx, result }) => {
-        results[idx] = result;
-      });
-      return results;
-    }
-    
-    // Call API only for payees that need it
-    const apiPayeeList = needsApi.map((item, i) => 
-      `${i + 1}. ${item.payee.originalName}${item.payee.city ? `, ${item.payee.city}` : ''}`
-    ).join('\n');
-    
-    console.log(`Calling OpenAI for ${needsApi.length} payees...`);
-    const chunkStart = Date.now();
-    
-    try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o", // Best accuracy model
-        messages: [{
-          role: "system",
-          content: `You are an expert financial payee classifier with deep knowledge of business entities, government organizations, and individual naming patterns.
-
-For each payee, analyze carefully and provide accurate classification with realistic confidence scores based on:
-- Entity type indicators (LLC, Inc, Corp, etc.)
-- Business naming patterns and industry keywords
-- Government agency patterns
-- Individual name patterns
-
-IMPORTANT: 
-- For clear business entities (with LLC, Inc, Corp, etc.), use 0.95+ confidence
-- For obvious government agencies (Department of, City of, etc.), use 0.95+ confidence
-- For clear individual names (first + last name pattern), use 0.90-0.95 confidence
-- For ambiguous cases, use 0.70-0.85 confidence
-- Only use below 0.70 for truly unclear/nonsensical entries
-- For businesses, assign accurate SIC codes based on the business name/industry
-- Provide detailed reasoning explaining your classification decision
-
-Return a JSON object with a "results" array containing objects with: id (matching the number), payeeType (Individual/Business/Government), confidence (0-1), sicCode (if business, 4 digits), sicDescription (if business), and reasoning (detailed explanation).
-
-Example: {"results":[{"id":"1","payeeType":"Business","confidence":0.88,"sicCode":"5411","sicDescription":"Grocery Stores","reasoning":"'Walmart Inc' is clearly a business entity with Inc suffix, known retail corporation specializing in grocery and general merchandise"}]}`
-        }, {
-          role: "user",
-          content: `Classify these payees and respond with JSON:\n${apiPayeeList}`
-        }],
-        temperature: 0,
-        max_tokens: Math.min(needsApi.length * 80, 4000), // Dynamic tokens based on batch size
-        response_format: { type: "json_object" }
-      });
-      
-      const elapsed = (Date.now() - chunkStart) / 1000;
-      console.log(`OpenAI response received in ${elapsed}s`);
-      
-      const content = response.choices[0]?.message?.content || '{"results":[]}';
-      const parsed = JSON.parse(content);
-      const apiResults = parsed.results || [];
-      
-      // Combine pre-classified and API results
-      const results: ClassificationResult[] = new Array(payees.length);
-      
-      // Add pre-classified results
-      preClassified.forEach(({ idx, result }) => {
-        results[idx] = result;
-        this.processedNames.set(this.normalizePayeeName(payees[idx].originalName), result);
-      });
-      
-      // Add API results
-      needsApi.forEach((item, i) => {
-        const apiResult = apiResults.find(r => r.id === String(i + 1));
-        if (apiResult) {
-          const classification: ClassificationResult = {
-            payeeType: apiResult.payeeType || "Individual",
-            confidence: apiResult.confidence || 0.85,
-            sicCode: apiResult.sicCode,
-            sicDescription: apiResult.sicDescription,
-            reasoning: apiResult.reasoning || "Classified by AI"
-          };
-          results[item.idx] = classification;
-          this.processedNames.set(this.normalizePayeeName(item.payee.originalName), classification);
-        } else {
-          results[item.idx] = {
-            payeeType: "Individual",
-            confidence: 0.5,
-            reasoning: "No API response received - low confidence default"
-          };
-        }
-      });
-      
-      return results;
-    } catch (error) {
-      console.error(`Chunk classification error:`, error);
-      // Return low-confidence fallback for all payees in chunk
-      return payees.map((payee) => {
-        // Make educated guess based on name patterns
-        const name = payee.originalName.toLowerCase();
-        let payeeType: "Individual" | "Business" | "Government" = "Individual";
-        
-        if (name.includes('llc') || name.includes('inc') || name.includes('corp') || 
-            name.includes('company') || name.includes('enterprises') || name.includes('ltd')) {
-          payeeType = "Business";
-        } else if (name.includes('department') || name.includes('city of') || 
-                   name.includes('state of') || name.includes('county')) {
-          payeeType = "Government";
-        }
-        
-        return {
-          payeeType,
-          confidence: 0.5, // Low confidence due to API failure
-          reasoning: `Classification failed (API timeout/error) - using pattern matching fallback`
-        };
-      });
-    }
-  }
-  
-  private quickClassify(name: string): ClassificationResult | null {
-    // Disable pre-classification to ensure all payees go through OpenAI
-    // for higher quality and confidence
-    return null;
+    const classificationResults = await Promise.all(promises);
+    return classificationResults;
   }
   
   cancelJob(batchId: number): void {
