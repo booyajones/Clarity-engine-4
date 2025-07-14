@@ -209,6 +209,8 @@ export default function Home() {
     const file = event.target.files?.[0];
     if (file) {
       setSelectedFile(file);
+      setIsUploading(true);
+      previewMutation.mutate(file);
     }
   };
 
@@ -364,17 +366,11 @@ export default function Home() {
                 </div>
               )}
             </div>
-            {selectedFile && !previewData && (
-              <Button onClick={handleUpload} disabled={isUploading}>
-                {isUploading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Analyzing file...
-                  </>
-                ) : (
-                  "Next"
-                )}
-              </Button>
+            {selectedFile && !previewData && isUploading && (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Analyzing file structure...</span>
+              </div>
             )}
             
             {/* Column Selection */}
