@@ -88,80 +88,70 @@ export class OptimizedClassificationService {
   private createCsvStream(filePath: string, payeeColumn?: string): Readable {
     const payeeStream = new Readable({ objectMode: true, read() {} });
     let rowIndex = 0;
-    let foundAnyData = false;
-    let totalRows = 0;
     
     console.log(`Creating CSV stream for file: ${filePath}, payeeColumn: "${payeeColumn}"`);
     
-    console.log(`Creating CSV parser...`);
-    let parseEvents = 0;
+    // Read entire file content to debug
+    const fileContent = fs.readFileSync(filePath, 'utf-8');
+    console.log(`File length: ${fileContent.length} characters`);
     
-    const csvStream = csv({
-      skipLinesWithError: false,
-      strict: false,
-      columns: true, // Treat first line as headers
-      skip_empty_lines: true,
-      trim: true
-    });
+    // Split by line and process manually
+    const lines = fileContent.split(/\r?\n/);
+    console.log(`Total lines in file: ${lines.length}`);
     
-    const fileStream = fs.createReadStream(filePath);
+    if (lines.length === 0) {
+      console.error('File appears to be empty');
+      payeeStream.push(null);
+      return payeeStream;
+    }
     
-    fileStream.on('error', (err) => {
-      console.error('File stream error:', err);
-    });
+    // Parse headers
+    const headerLine = lines[0];
+    const headers = headerLine.split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+    console.log('CSV headers:', headers);
     
-    fileStream.on('data', (chunk) => {
-      if (parseEvents === 0) {
-        console.log(`First chunk received, size: ${chunk.length} bytes`);
-        parseEvents++;
+    const payeeColumnIndex = headers.findIndex(h => h === payeeColumn);
+    if (payeeColumnIndex === -1) {
+      console.error(`Column "${payeeColumn}" not found in headers:`, headers);
+      payeeStream.push(null);
+      return payeeStream;
+    }
+    
+    // Process data rows
+    let processedRows = 0;
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue; // Skip empty lines
+      
+      const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+      
+      if (i <= 3) {
+        console.log(`Row ${i}: ${line}`);
+        console.log(`Parsed values:`, values);
+        console.log(`Payee value (col ${payeeColumnIndex}):`, values[payeeColumnIndex]);
       }
-    });
+      
+      if (values[payeeColumnIndex]) {
+        const row: Record<string, any> = {};
+        headers.forEach((header, idx) => {
+          row[header] = values[idx] || '';
+        });
+        
+        payeeStream.push({
+          originalName: values[payeeColumnIndex],
+          address: row['Address 1'] || row.address || row.Address,
+          city: row.City || row.city,
+          state: row.State || row.state,
+          zipCode: row.Zip || row.zip || row.ZIP,
+          originalData: row,
+          index: rowIndex++
+        });
+        processedRows++;
+      }
+    }
     
-    fileStream
-      .pipe(csvStream)
-      .on('headers', (headers) => {
-        console.log('CSV headers detected:', headers);
-      })
-      .on('data', (row: Record<string, any>) => {
-        totalRows++;
-        const nameCol = payeeColumn || this.findNameColumn(row);
-        
-        // Log first few rows for debugging
-        if (totalRows <= 3) {
-          console.log(`Row ${totalRows} - Looking for column "${nameCol}" in:`, Object.keys(row));
-          console.log(`Value in "${nameCol}":`, row[nameCol]);
-          console.log(`Full row data:`, JSON.stringify(row));
-        }
-        
-        if (nameCol && row[nameCol]) {
-          foundAnyData = true;
-          payeeStream.push({
-            originalName: row[nameCol],
-            address: row.address || row.Address || row.ADDRESS || row['Address 1'],
-            city: row.city || row.City || row.CITY,
-            state: row.state || row.State || row.STATE,
-            zipCode: row.zip || row.ZIP || row.zipCode || row.zip_code || row.Zip,
-            originalData: row,
-            index: rowIndex++
-          });
-        } else if (!foundAnyData && totalRows <= 3) {
-          console.log(`Could not find payee data in row ${totalRows}. Column "${nameCol}" not found or empty.`);
-          console.log(`Available columns:`, Object.keys(row));
-          console.log(`Row data:`, row);
-        }
-      })
-      .on('end', () => {
-        console.log(`CSV stream ended. Total rows: ${totalRows}, Found ${rowIndex} payee records`);
-        if (totalRows > 0 && rowIndex === 0) {
-          console.error(`WARNING: Found ${totalRows} rows but extracted 0 payee records. Check column name: "${payeeColumn}"`);
-        }
-        payeeStream.push(null);
-      })
-      .on('error', (err) => {
-        console.error('CSV parser error:', err);
-        console.error('Error details:', err.message);
-        payeeStream.destroy(err);
-      });
+    console.log(`Manual CSV parsing complete. Processed ${processedRows} payee records from ${lines.length - 1} data rows`);
+    payeeStream.push(null);
     
     return payeeStream;
   }
