@@ -48,12 +48,20 @@ export class OptimizedClassificationService {
       throw new Error(`File not found: ${filePath}`);
     }
     
+    // Get file stats
+    const stats = fs.statSync(filePath);
+    console.log(`File stats: size=${stats.size} bytes`);
+    
+    // Read first few lines to debug
+    const firstLines = fs.readFileSync(filePath, 'utf8').split('\n').slice(0, 3);
+    console.log(`First 3 lines of file:`, firstLines);
+    
     const abortController = new AbortController();
     this.activeJobs.set(batchId, abortController);
     
     try {
       const ext = path.extname(filePath).toLowerCase();
-      console.log(`Processing ${ext} file for batch ${batchId}`);
+      console.log(`Processing ${ext} file for batch ${batchId}, payeeColumn="${payeeColumn}"`);
       
       const payeeStream = ext === '.csv' 
         ? this.createCsvStream(filePath, payeeColumn)
