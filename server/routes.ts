@@ -388,6 +388,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           business: classifications.filter(c => c.payeeType === "Business").length,
           individual: classifications.filter(c => c.payeeType === "Individual").length,
           government: classifications.filter(c => c.payeeType === "Government").length,
+          insurance: classifications.filter(c => c.payeeType === "Insurance").length,
+          banking: classifications.filter(c => c.payeeType === "Banking").length,
+          internalTransfer: classifications.filter(c => c.payeeType === "Internal Transfer").length,
           averageConfidence: classifications.reduce((sum, c) => sum + c.confidence, 0) / classifications.length,
           duplicates: classifications.filter(c => c.reasoning?.includes("duplicate_id")).length,
         }
@@ -472,6 +475,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Test classification error:", error);
       res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // Keyword Exclusion Management API Routes
+  
+  // Get all exclusion keywords
+  app.get("/api/keywords", async (req, res) => {
+    try {
+      const keywords = await storage.getExclusionKeywords();
+      res.json(keywords);
+    } catch (error) {
+      console.error("Error fetching keywords:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Add new exclusion keywords
+  app.post("/api/keywords", async (req, res) => {
+    try {
+      const { keywords, addedBy, notes } = req.body;
+      
+      if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
+        return res.status(400).json({ error: "Keywords array is required" });
+      }
+      
+      if (!addedBy) {
+        return res.status(400).json({ error: "addedBy field is required" });
+      }
+
+      const { keywordExclusionService } = await import("./services/keywordExclusion");
+      const results = await keywordExclusionService.addKeywords(keywords, addedBy, notes);
+      
+      res.json({ 
+        success: true, 
+        added: results.length,
+        keywords: results 
+      });
+    } catch (error) {
+      console.error("Error adding keywords:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Update exclusion keyword
+  app.patch("/api/keywords/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updates = req.body;
+      
+      const updatedKeyword = await storage.updateExclusionKeyword(id, updates);
+      res.json(updatedKeyword);
+    } catch (error) {
+      console.error("Error updating keyword:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Delete exclusion keyword
+  app.delete("/api/keywords/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteExclusionKeyword(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting keyword:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Test keyword matching
+  app.post("/api/keywords/test", async (req, res) => {
+    try {
+      const { keyword, testNames } = req.body;
+      
+      if (!keyword || !testNames || !Array.isArray(testNames)) {
+        return res.status(400).json({ error: "keyword and testNames array are required" });
+      }
+
+      const { keywordExclusionService } = await import("./services/keywordExclusion");
+      const results = await keywordExclusionService.testKeywordMatching(keyword, testNames);
+      
+      res.json(results);
+    } catch (error) {
+      console.error("Error testing keyword:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Check single payee for exclusion
+  app.post("/api/keywords/check", async (req, res) => {
+    try {
+      const { payeeName, batchId } = req.body;
+      
+      if (!payeeName) {
+        return res.status(400).json({ error: "payeeName is required" });
+      }
+
+      const { keywordExclusionService } = await import("./services/keywordExclusion");
+      const result = await keywordExclusionService.checkExclusion(payeeName, batchId);
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error checking exclusion:", error);
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 

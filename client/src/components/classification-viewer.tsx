@@ -50,7 +50,7 @@ interface ClassificationData {
   id: number;
   originalName: string;
   cleanedName: string;
-  payeeType: "Individual" | "Business" | "Government";
+  payeeType: "Individual" | "Business" | "Government" | "Insurance" | "Banking" | "Internal Transfer";
   confidence: number;
   sicCode?: string;
   sicDescription?: string;
@@ -85,6 +85,9 @@ interface ClassificationResponse {
     business: number;
     individual: number;
     government: number;
+    insurance: number;
+    banking: number;
+    internalTransfer: number;
     averageConfidence: number;
     duplicates: number;
   };
@@ -370,7 +373,7 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
 
       <div className="max-w-7xl mx-auto p-8 space-y-6">
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center">
@@ -378,18 +381,6 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                 <div className="ml-4">
                   <p className="text-2xl font-bold">{data.summary.total}</p>
                   <p className="text-xs text-gray-500">Total Records</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center">
-                <Building2 className="h-8 w-8 text-blue-500" />
-                <div className="ml-4">
-                  <p className="text-2xl font-bold">{data.summary.business}</p>
-                  <p className="text-xs text-gray-500">Businesses</p>
                 </div>
               </div>
             </CardContent>
@@ -410,10 +401,58 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center">
+                <Building2 className="h-8 w-8 text-blue-500" />
+                <div className="ml-4">
+                  <p className="text-2xl font-bold">{data.summary.business}</p>
+                  <p className="text-xs text-gray-500">Businesses</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center">
                 <LandmarkIcon className="h-8 w-8 text-purple-500" />
                 <div className="ml-4">
                   <p className="text-2xl font-bold">{data.summary.government}</p>
                   <p className="text-xs text-gray-500">Government</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center">
+                <Building2 className="h-8 w-8 text-red-500" />
+                <div className="ml-4">
+                  <p className="text-2xl font-bold">{data.summary.insurance || 0}</p>
+                  <p className="text-xs text-gray-500">Insurance</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center">
+                <Building2 className="h-8 w-8 text-emerald-500" />
+                <div className="ml-4">
+                  <p className="text-2xl font-bold">{data.summary.banking || 0}</p>
+                  <p className="text-xs text-gray-500">Banking</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center">
+                <ArrowRight className="h-8 w-8 text-indigo-500" />
+                <div className="ml-4">
+                  <p className="text-2xl font-bold">{data.summary.internalTransfer || 0}</p>
+                  <p className="text-xs text-gray-500">Internal Transfer</p>
                 </div>
               </div>
             </CardContent>
@@ -463,9 +502,12 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="Business">Business</SelectItem>
                   <SelectItem value="Individual">Individual</SelectItem>
+                  <SelectItem value="Business">Business</SelectItem>
                   <SelectItem value="Government">Government</SelectItem>
+                  <SelectItem value="Insurance">Insurance</SelectItem>
+                  <SelectItem value="Banking">Banking</SelectItem>
+                  <SelectItem value="Internal Transfer">Internal Transfer</SelectItem>
                 </SelectContent>
               </Select>
               

@@ -66,6 +66,25 @@ export const classificationRules = pgTable("classification_rules", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const exclusionKeywords = pgTable("exclusion_keywords", {
+  id: serial("id").primaryKey(),
+  keyword: text("keyword").notNull().unique(),
+  addedBy: text("added_by").notNull(),
+  notes: text("notes"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const exclusionLogs = pgTable("exclusion_logs", {
+  id: serial("id").primaryKey(),
+  payeeName: text("payee_name").notNull(),
+  matchedKeyword: text("matched_keyword").notNull(),
+  reason: text("reason").notNull(),
+  batchId: integer("batch_id"),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
@@ -96,6 +115,17 @@ export const insertClassificationRuleSchema = createInsertSchema(classificationR
   createdAt: true,
 });
 
+export const insertExclusionKeywordSchema = createInsertSchema(exclusionKeywords).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertExclusionLogSchema = createInsertSchema(exclusionLogs).omit({
+  id: true,
+  timestamp: true,
+});
+
 // Select types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -107,3 +137,7 @@ export type SicCode = typeof sicCodes.$inferSelect;
 export type InsertSicCode = z.infer<typeof insertSicCodeSchema>;
 export type ClassificationRule = typeof classificationRules.$inferSelect;
 export type InsertClassificationRule = z.infer<typeof insertClassificationRuleSchema>;
+export type ExclusionKeyword = typeof exclusionKeywords.$inferSelect;
+export type InsertExclusionKeyword = z.infer<typeof insertExclusionKeywordSchema>;
+export type ExclusionLog = typeof exclusionLogs.$inferSelect;
+export type InsertExclusionLog = z.infer<typeof insertExclusionLogSchema>;

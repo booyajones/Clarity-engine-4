@@ -7,6 +7,7 @@ import csv from 'csv-parser';
 import fs from 'fs';
 import path from 'path';
 import XLSX from 'xlsx';
+import { keywordExclusionService } from './keywordExclusion';
 
 // Initialize OpenAI with Tier 5 performance settings
 const openai = new OpenAI({ 
@@ -16,12 +17,14 @@ const openai = new OpenAI({
 });
 
 interface ClassificationResult {
-  payeeType: "Individual" | "Business" | "Government";
+  payeeType: "Individual" | "Business" | "Government" | "Tax/Government" | "Insurance" | "Banking" | "Internal Transfer";
   confidence: number;
   sicCode?: string;
   sicDescription?: string;
   reasoning: string;
   flagForReview?: boolean;
+  isExcluded?: boolean;
+  exclusionReason?: string;
 }
 
 interface PayeeData {
@@ -424,27 +427,49 @@ export class OptimizedClassificationService {
   private async classifyPayee(payee: PayeeData): Promise<ClassificationResult> {
     const normalizedName = this.normalizePayeeName(payee.originalName);
     
-    // Don't check cache here - duplicate detection is handled in processBatch
+    // Check for exclusion keywords first
+    const exclusionResult = await keywordExclusionService.checkExclusion(payee.originalName);
+    if (exclusionResult.isExcluded) {
+      return {
+        payeeType: "Individual", // Default excluded items to Individual
+        confidence: 0.0,
+        reasoning: exclusionResult.reason || "Excluded by keyword filter",
+        isExcluded: true,
+        exclusionReason: exclusionResult.reason,
+      };
+    }
     
     try {
       const response = await openai.chat.completions.create({
         model: "gpt-4o", // Use GPT-4o for best accuracy
         messages: [{
           role: "system",
-          content: `Classify payees as Business, Individual, or Government with 95%+ confidence.
+          content: `Classify payees into these categories with high confidence:
 
-Business: LLC/INC/CORP/CO/LTD suffixes, business keywords, brand names
-Individual: Personal names without business indicators  
-Government: City/County/State of, agencies, departments
+CATEGORIES:
+• Individual: Personal names, employees, contractors, students (includes Individual/Contractors, Employees, Students)
+• Business: Companies with LLC/INC/CORP suffixes, brand names, commercial entities
+• Government: City/County/State agencies, departments, tax authorities (includes Tax/Government)
+• Insurance: Insurance companies, carriers, brokers, agents
+• Banking: Banks, credit unions, financial institutions
+• Internal Transfer: Internal company names, departments, subsidiaries, inter-company transfers
 
-Return concise JSON:
-{"payeeType":"Business|Individual|Government","confidence":0.95-0.99,"sicCode":"XXXX","sicDescription":"Name","reasoning":"Brief reason","flagForReview":false}`
+CLASSIFICATION RULES:
+- Individual: Personal names without business indicators, employee payroll, contractors, students
+- Business: Clear business suffixes (LLC, INC, CORP, CO, LTD), brand names, commercial operations
+- Government: Government agencies, tax authorities, municipal departments, state/federal entities
+- Insurance: Insurance-related entities, carriers, brokers, agents
+- Banking: Banks, credit unions, financial institutions, payment processors
+- Internal Transfer: Internal company references, departments, subsidiaries, inter-company movements
+
+Return JSON:
+{"payeeType":"Individual|Business|Government|Insurance|Banking|Internal Transfer","confidence":0.80-0.99,"sicCode":"XXXX","sicDescription":"Industry description","reasoning":"Brief classification reason","flagForReview":false}`
         }, {
           role: "user",
           content: `Classify this payee: "${payee.originalName}"${payee.address ? `, Address: ${payee.address}` : ''}`
         }],
         temperature: 0,
-        max_tokens: 500, // Further increased to prevent any truncation
+        max_tokens: 500,
         response_format: { type: "json_object" }
       });
       

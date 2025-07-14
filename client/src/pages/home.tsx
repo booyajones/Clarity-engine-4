@@ -16,6 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ProgressTracker } from "@/components/progress-tracker";
 import { ClassificationViewer } from "@/components/classification-viewer";
+import { KeywordManager } from "@/components/keyword-manager";
 import {
   Select,
   SelectContent,
@@ -53,6 +54,7 @@ export default function Home() {
   } | null>(null);
   const [selectedColumn, setSelectedColumn] = useState<string>("");
   const [viewingBatchId, setViewingBatchId] = useState<number | null>(null);
+  const [currentView, setCurrentView] = useState<"upload" | "keywords">("upload");
 
   const { data: batches, isLoading } = useQuery<UploadBatch[]>({
     queryKey: ["/api/upload/batches"],
@@ -333,6 +335,11 @@ export default function Home() {
     );
   }
 
+  // If viewing keyword manager, show that component
+  if (currentView === "keywords") {
+    return <KeywordManager onBack={() => setCurrentView("upload")} />;
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-100">
@@ -351,9 +358,31 @@ export default function Home() {
               </div>
               <div className="h-12 w-px bg-gray-200"></div>
               <div className="text-right">
-                <p className="text-2xl font-light text-gray-900">3</p>
+                <p className="text-2xl font-light text-gray-900">6</p>
                 <p className="text-xs text-gray-500 uppercase tracking-wide">Categories</p>
               </div>
+            </div>
+          </div>
+          
+          {/* Navigation */}
+          <div className="mt-6 border-t border-gray-200 pt-6">
+            <div className="flex gap-4">
+              <Button
+                variant={currentView === "upload" ? "default" : "outline"}
+                onClick={() => setCurrentView("upload")}
+                className="flex items-center gap-2"
+              >
+                <UploadIcon className="h-4 w-4" />
+                Upload & Process
+              </Button>
+              <Button
+                variant={currentView === "keywords" ? "default" : "outline"}
+                onClick={() => setCurrentView("keywords")}
+                className="flex items-center gap-2"
+              >
+                <ClipboardList className="h-4 w-4" />
+                Keyword Management
+              </Button>
             </div>
           </div>
         </div>

@@ -4,6 +4,8 @@ import {
   payeeClassifications, 
   sicCodes,
   classificationRules,
+  exclusionKeywords,
+  exclusionLogs,
   type User, 
   type InsertUser,
   type UploadBatch,
@@ -13,7 +15,11 @@ import {
   type SicCode,
   type InsertSicCode,
   type ClassificationRule,
-  type InsertClassificationRule
+  type InsertClassificationRule,
+  type ExclusionKeyword,
+  type InsertExclusionKeyword,
+  type ExclusionLog,
+  type InsertExclusionLog
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, lt, count, sql } from "drizzle-orm";
@@ -52,6 +58,13 @@ export interface IStorage {
   // Classification rules
   getClassificationRules(): Promise<ClassificationRule[]>;
   createClassificationRule(rule: InsertClassificationRule): Promise<ClassificationRule>;
+
+  // Exclusion keyword operations
+  getExclusionKeywords(): Promise<ExclusionKeyword[]>;
+  createExclusionKeyword(keyword: InsertExclusionKeyword): Promise<ExclusionKeyword>;
+  updateExclusionKeyword(id: number, updates: Partial<ExclusionKeyword>): Promise<ExclusionKeyword>;
+  deleteExclusionKeyword(id: number): Promise<void>;
+  createExclusionLog(log: InsertExclusionLog): Promise<ExclusionLog>;
 
   // Delete operations
   deleteUploadBatch(id: number): Promise<void>;
@@ -224,6 +237,42 @@ export class DatabaseStorage implements IStorage {
       .values(rule)
       .returning();
     return classificationRule;
+  }
+
+  async getExclusionKeywords(): Promise<ExclusionKeyword[]> {
+    return await db
+      .select()
+      .from(exclusionKeywords)
+      .orderBy(exclusionKeywords.createdAt);
+  }
+
+  async createExclusionKeyword(keyword: InsertExclusionKeyword): Promise<ExclusionKeyword> {
+    const [exclusionKeyword] = await db
+      .insert(exclusionKeywords)
+      .values(keyword)
+      .returning();
+    return exclusionKeyword;
+  }
+
+  async updateExclusionKeyword(id: number, updates: Partial<ExclusionKeyword>): Promise<ExclusionKeyword> {
+    const [exclusionKeyword] = await db
+      .update(exclusionKeywords)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(exclusionKeywords.id, id))
+      .returning();
+    return exclusionKeyword;
+  }
+
+  async deleteExclusionKeyword(id: number): Promise<void> {
+    await db.delete(exclusionKeywords).where(eq(exclusionKeywords.id, id));
+  }
+
+  async createExclusionLog(log: InsertExclusionLog): Promise<ExclusionLog> {
+    const [exclusionLog] = await db
+      .insert(exclusionLogs)
+      .values(log)
+      .returning();
+    return exclusionLog;
   }
 
   async deleteUploadBatch(id: number): Promise<void> {

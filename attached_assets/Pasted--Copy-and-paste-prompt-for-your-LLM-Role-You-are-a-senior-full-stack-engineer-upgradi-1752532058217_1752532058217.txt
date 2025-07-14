@@ -1,0 +1,62 @@
+**Copy-and-paste prompt for your LLM**
+
+> **Role**
+> You are a senior full-stack engineer upgrading our payee-screening service.
+>
+> **Task**
+> Build a **Keyword Exclusion Management** feature that lets analysts load, view, add, edit, and delete exclusion keywords, then automatically flags any payee name that contains one of those keywords as a **whole word**. Partial substrings must not trigger a flag.
+>
+> **Functional Requirements**
+>
+> 1. **Persistent store**
+>
+>    * Create a lightweight keyword table or collection with fields: `keyword` (string, lower-cased), `added_by`, `added_at`, `notes`.
+> 2. **CRUD endpoints** (or CLI commands)
+>
+>    * `POST /keywords` – add one or many keywords. Reject duplicates.
+>    * `GET /keywords` – list all keywords with pagination and basic search.
+>    * `PATCH /keywords/{id}` – update a keyword or its notes.
+>    * `DELETE /keywords/{id}` – remove a keyword.
+> 3. **Whole-word matching logic**
+>
+>    * Normalize payee names: trim, collapse extra spaces, lower-case.
+>    * Use a word-boundary regex or tokenization so “bank” flags “Bank of America” and “Bank of the West” but not “bankruptcy”.
+>    * Handle common punctuation and delimiters (comma, period, slash, ampersand).
+>    * Case-insensitive.
+> 4. **Flagging service**
+>
+>    * Accept a single payee name or batch list.
+>    * Return `flagged: true/false`, the matched keyword, and a human-readable reason.
+> 5. **Audit trail**
+>
+>    * Log the payee name, matched keyword, timestamp, and caller for each flag event.
+> 6. **Unit and integration tests**
+>
+>    * Cover positive and negative cases, including tricky abbreviations like “VA” versus “Vascular Institute”.
+>
+> **Non-functional Requirements**
+>
+> * Response in under 100 ms for single payee checks.
+> * Scalable to at least 50 k keywords without degrading lookup speed.
+> * Secure endpoints with role-based access (analyst can CRUD, viewer can only read).
+>
+> **Deliverables**
+>
+> 1. Updated data model diagram.
+> 2. REST (or gRPC) endpoint spec with sample requests and responses.
+> 3. Reference implementation in the language you judge most appropriate (Python FastAPI, Node Express, or Go Fiber are fine).
+> 4. Regex or tokenizer snippet showing exact whole-word logic.
+> 5. Test suite and example test run output.
+> 6. Short README covering setup, environment variables, and deployment notes.
+>
+> **Examples for your test suite**
+>
+> * **Keywords:** bank, va
+> * “Bank of America” → flagged (keyword: bank)
+> * “First National Bank” → flagged (keyword: bank)
+> * “Vascular Institute” → **not** flagged
+> * “VA Medical Center” → flagged (keyword: va)
+> * “NAVAL AVIATION” → not flagged
+>
+> **Output format**
+> Return a concise, well-commented code bundle plus the README. Focus on clarity and ease of integration.
