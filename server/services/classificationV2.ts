@@ -81,13 +81,22 @@ export class OptimizedClassificationService {
     const payeeStream = new Readable({ objectMode: true, read() {} });
     let rowIndex = 0;
     let foundAnyData = false;
+    let totalRows = 0;
     
-    console.log(`Creating CSV stream for file: ${filePath}, payeeColumn: ${payeeColumn}`);
+    console.log(`Creating CSV stream for file: ${filePath}, payeeColumn: "${payeeColumn}"`);
     
     fs.createReadStream(filePath)
       .pipe(csv())
       .on('data', (row: Record<string, any>) => {
+        totalRows++;
         const nameCol = payeeColumn || this.findNameColumn(row);
+        
+        // Log first few rows for debugging
+        if (totalRows <= 3) {
+          console.log(`Row ${totalRows} - Looking for column "${nameCol}" in:`, Object.keys(row));
+          console.log(`Value in "${nameCol}":`, row[nameCol]);
+        }
+        
         if (nameCol && row[nameCol]) {
           foundAnyData = true;
           payeeStream.push({
@@ -99,12 +108,17 @@ export class OptimizedClassificationService {
             originalData: row,
             index: rowIndex++
           });
-        } else if (rowIndex === 0) {
-          console.log(`Could not find name column. Available columns:`, Object.keys(row));
+        } else if (!foundAnyData && totalRows <= 3) {
+          console.log(`Could not find payee data in row ${totalRows}. Column "${nameCol}" not found or empty.`);
+          console.log(`Available columns:`, Object.keys(row));
+          console.log(`Row data:`, row);
         }
       })
       .on('end', () => {
-        console.log(`CSV stream ended. Found ${rowIndex} payee records`);
+        console.log(`CSV stream ended. Total rows: ${totalRows}, Found ${rowIndex} payee records`);
+        if (totalRows > 0 && rowIndex === 0) {
+          console.error(`WARNING: Found ${totalRows} rows but extracted 0 payee records. Check column name: "${payeeColumn}"`);
+        }
         payeeStream.push(null);
       })
       .on('error', (err) => {
