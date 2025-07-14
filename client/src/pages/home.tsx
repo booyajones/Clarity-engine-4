@@ -15,6 +15,13 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { ProgressTracker } from "@/components/progress-tracker";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface UploadBatch {
   id: number;
@@ -38,20 +45,74 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [previewData, setPreviewData] = useState<{
+    filename: string;
+    headers: string[];
+    tempFileName: string;
+  } | null>(null);
+  const [selectedColumn, setSelectedColumn] = useState<string>("");
 
   const { data: batches, isLoading } = useQuery<UploadBatch[]>({
     queryKey: ["/api/upload/batches"],
     refetchInterval: 1000, // Poll every second
   });
 
-  const uploadMutation = useMutation({
+  const previewMutation = useMutation({
     mutationFn: async (file: File) => {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("/api/upload", {
+      const res = await fetch("/api/upload/preview", {
         method: "POST",
         body: formData,
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(errorData.error || `${res.status}: ${res.statusText}`);
+      }
+      
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setPreviewData(data);
+      setIsUploading(false);
+      // Try to auto-select payee column
+      const possibleColumns = ["payee", "payee_name", "name", "vendor", "customer_name", "company"];
+      const found = data.headers.find(h => 
+        possibleColumns.some(col => h.toLowerCase().includes(col))
+      );
+      if (found) {
+        setSelectedColumn(found);
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Preview Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+      setIsUploading(false);
+    },
+  });
+
+  const processMutation = useMutation({
+    mutationFn: async ({ tempFileName, originalFilename, payeeColumn }: {
+      tempFileName: string;
+      originalFilename: string;
+      payeeColumn: string;
+    }) => {
+      const res = await fetch("/api/upload/process", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          tempFileName,
+          originalFilename,
+          payeeColumn,
+        }),
         credentials: "include",
       });
 
@@ -68,6 +129,8 @@ export default function Home() {
         description: "File uploaded successfully. Processing will begin shortly.",
       });
       setSelectedFile(null);
+      setPreviewData(null);
+      setSelectedColumn("");
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -75,13 +138,10 @@ export default function Home() {
     },
     onError: (error: Error) => {
       toast({
-        title: "Upload Failed",
+        title: "Processing Failed",
         description: error.message,
         variant: "destructive",
       });
-    },
-    onSettled: () => {
-      setIsUploading(false);
     },
   });
 
@@ -155,7 +215,17 @@ export default function Home() {
   const handleUpload = async () => {
     if (!selectedFile) return;
     setIsUploading(true);
-    uploadMutation.mutate(selectedFile);
+    previewMutation.mutate(selectedFile);
+  };
+
+  const handleProcessFile = () => {
+    if (!previewData || !selectedColumn) return;
+    
+    processMutation.mutate({
+      tempFileName: previewData.tempFileName,
+      originalFilename: previewData.filename,
+      payeeColumn: selectedColumn,
+    });
   };
 
   const formatDuration = (start: string, end?: string) => {
@@ -246,20 +316,70 @@ export default function Home() {
                 </div>
               )}
             </div>
-            {selectedFile && (
+            {selectedFile && !previewData && (
               <Button onClick={handleUpload} disabled={isUploading}>
                 {isUploading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Uploading...
+                    Analyzing file...
                   </>
                 ) : (
                   <>
                     <UploadIcon className="mr-2 h-4 w-4" />
-                    Upload & Process
+                    Next
                   </>
                 )}
               </Button>
+            )}
+            
+            {/* Column Selection */}
+            {previewData && (
+              <div className="space-y-4 border-t pt-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Select the column containing payee names:</label>
+                  <Select value={selectedColumn} onValueChange={setSelectedColumn}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Choose a column" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {previewData.headers.map((header) => (
+                        <SelectItem key={header} value={header}>
+                          {header}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleProcessFile}
+                    disabled={!selectedColumn || processMutation.isPending}
+                  >
+                    {processMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>Process File</>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setPreviewData(null);
+                      setSelectedColumn("");
+                      setSelectedFile(null);
+                      if (fileInputRef.current) {
+                        fileInputRef.current.value = "";
+                      }
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
             )}
           </div>
         </CardContent>

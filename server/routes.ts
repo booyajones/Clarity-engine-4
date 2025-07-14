@@ -127,36 +127,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Simple direct upload endpoint
-  app.post("/api/upload", upload.single("file"), async (req: MulterRequest, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ error: "No file uploaded" });
-      }
-
-      const userId = 1; // TODO: Get from session/auth
-      const batch = await storage.createUploadBatch({
-        filename: generateFinancialBatchName(),
-        originalFilename: req.file.originalname,
-        totalRecords: 0,
-        userId,
-      });
-
-      // Process file in background - will auto-detect payee column
-      processFileAsync(req.file, batch.id);
-
-      res.json({ 
-        batchId: batch.id, 
-        status: "processing",
-        message: "File uploaded successfully and processing has started",
-        filename: batch.filename
-      });
-    } catch (error) {
-      console.error("Error uploading file:", error);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
-
   // Upload and preview file headers
   app.post("/api/upload/preview", upload.single("file"), async (req: MulterRequest, res) => {
     try {
