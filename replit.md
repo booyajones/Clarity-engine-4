@@ -277,3 +277,16 @@ Preferred communication style: Simple, everyday language.
   - Consolidated table view for all historical jobs
   - Single download button per completed job
 - **Real-time Updates**: 1-second polling for live progress tracking
+
+### January 15, 2025 (Evening) - CSV Processing Fix & Progress Tracker Improvement
+- **Fixed Large CSV Processing**: Resolved issue where 1.9MB CSV files were processing 0 records
+  - Issue was file extension detection on temporary files without extensions
+  - Made CSV parser default for files without extensions
+  - Successfully processed 26,015 records at 28.4 records/second
+- **Improved Progress Tracking**: Fixed confusing progress indicator that showed "100%" while still processing
+  - Changed from "Processed X/Y (100%)" to "Processing... X records classified so far"
+  - Updated frontend to show animated progress bar for streaming operations
+  - No longer shows misleading percentages when total count unknown
+- **UI Enhancement**: Immediate column selection after file upload without "Next" button
+  - Streamlined workflow: Choose File → Column selection appears automatically
+  - Preserved font themes and professional "cold clarity" aesthetic

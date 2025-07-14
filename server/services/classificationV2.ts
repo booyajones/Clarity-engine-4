@@ -229,9 +229,9 @@ export class OptimizedClassificationService {
         const recordsPerSecond = totalProcessed / elapsedSeconds;
         await storage.updateUploadBatch(batchId, {
           processedRecords: totalProcessed,
-          totalRecords,
+          totalRecords: 0, // Don't update totalRecords since we don't know the final count yet
           currentStep: `Processing at ${recordsPerSecond.toFixed(1)} records/sec`,
-          progressMessage: `Processed ${totalProcessed}/${totalRecords} (${Math.round(totalProcessed/totalRecords*100)}%)`
+          progressMessage: `Processing... ${totalProcessed} records classified so far`
         });
       }
     }
