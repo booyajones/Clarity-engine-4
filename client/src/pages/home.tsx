@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload as UploadIcon, Download, Loader2, X, FileSpreadsheet, CheckCircle2, XCircle, Clock, AlertCircle, Activity, ArrowRight, ClipboardList, Sparkles } from "lucide-react";
+import { Upload as UploadIcon, Download, Loader2, X, FileSpreadsheet, CheckCircle2, XCircle, Clock, AlertCircle, Activity, ArrowRight, ClipboardList, Sparkles, Eye } from "lucide-react";
 import { useState, useRef } from "react";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { ProgressTracker } from "@/components/progress-tracker";
+import { ClassificationViewer } from "@/components/classification-viewer";
 import {
   Select,
   SelectContent,
@@ -51,6 +52,7 @@ export default function Home() {
     tempFileName: string;
   } | null>(null);
   const [selectedColumn, setSelectedColumn] = useState<string>("");
+  const [viewingBatchId, setViewingBatchId] = useState<number | null>(null);
 
   const { data: batches, isLoading } = useQuery<UploadBatch[]>({
     queryKey: ["/api/upload/batches"],
@@ -288,9 +290,48 @@ export default function Home() {
     }
   };
 
+  const handleDownload = async (batchId: number, filename: string) => {
+    try {
+      const response = await fetch(`/api/classifications/export/${batchId}`);
+      if (!response.ok) throw new Error('Download failed');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = `classified_${filename}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      toast({
+        title: "Downloaded",
+        description: "Classification results downloaded successfully.",
+      });
+    } catch (error) {
+      toast({
+        title: "Download Failed",
+        description: "Could not download the file. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const processingBatches = batches?.filter(b => b.status === "processing") || [];
   const completedBatches = batches?.filter(b => b.status === "completed") || [];
   const otherBatches = batches?.filter(b => !["processing", "completed"].includes(b.status)) || [];
+
+  // If viewing a specific batch, show the classification viewer
+  if (viewingBatchId) {
+    return (
+      <ClassificationViewer 
+        batchId={viewingBatchId} 
+        onBack={() => setViewingBatchId(null)} 
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -508,18 +549,30 @@ export default function Home() {
                     <TableCell>
                       <div className="flex gap-2">
                         {batch.status === "completed" && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => window.location.href = `/api/classifications/export/${batch.id}`}
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setViewingBatchId(batch.id)}
+                              title="View Results"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleDownload(batch.id, batch.originalFilename)}
+                              title="Download CSV"
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </>
                         )}
                         <Button
                           size="sm"
                           variant="ghost"
                           onClick={() => deleteMutation.mutate(batch.id)}
+                          title="Delete"
                         >
                           <X className="h-4 w-4" />
                         </Button>

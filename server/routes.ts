@@ -341,6 +341,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get classifications for viewing
+  app.get("/api/classifications/:id", async (req, res) => {
+    try {
+      const batchId = parseInt(req.params.id);
+      const classifications = await storage.getBatchClassifications(batchId);
+      const batch = await storage.getUploadBatch(batchId);
+
+      if (!batch) {
+        return res.status(404).json({ error: "Batch not found" });
+      }
+
+      // Return structured data for viewing
+      const viewData = classifications.map(c => {
+        const originalData = (c.originalData as Record<string, any>) || {};
+        
+        // Extract duplicate ID from reasoning if present
+        const duplicateMatch = c.reasoning && c.reasoning.match(/\[(duplicate_id\d+)\]/);
+        const duplicateId = duplicateMatch ? duplicateMatch[1] : "";
+        
+        return {
+          id: c.id,
+          originalName: c.originalName,
+          cleanedName: c.cleanedName,
+          payeeType: c.payeeType,
+          confidence: c.confidence,
+          sicCode: c.sicCode,
+          sicDescription: c.sicDescription,
+          reasoning: c.reasoning,
+          status: c.status,
+          address: c.address,
+          city: c.city,
+          state: c.state,
+          zipCode: c.zipCode,
+          duplicateId,
+          originalData,
+          createdAt: c.createdAt,
+        };
+      });
+
+      res.json({
+        batch,
+        classifications: viewData,
+        summary: {
+          total: classifications.length,
+          business: classifications.filter(c => c.payeeType === "Business").length,
+          individual: classifications.filter(c => c.payeeType === "Individual").length,
+          government: classifications.filter(c => c.payeeType === "Government").length,
+          averageConfidence: classifications.reduce((sum, c) => sum + c.confidence, 0) / classifications.length,
+          duplicates: classifications.filter(c => c.reasoning?.includes("duplicate_id")).length,
+        }
+      });
+    } catch (error) {
+      console.error("Error fetching classifications:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Export classifications  
   app.get("/api/classifications/export/:id", async (req, res) => {
     try {
