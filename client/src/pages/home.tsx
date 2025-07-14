@@ -49,10 +49,18 @@ export default function Home() {
       const formData = new FormData();
       formData.append("file", file);
 
-      return apiRequest("/api/upload", {
+      const res = await fetch("/api/upload", {
         method: "POST",
         body: formData,
+        credentials: "include",
       });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(errorData.error || `${res.status}: ${res.statusText}`);
+      }
+      
+      return res.json();
     },
     onSuccess: () => {
       toast({
@@ -79,9 +87,17 @@ export default function Home() {
 
   const cancelMutation = useMutation({
     mutationFn: async (batchId: number) => {
-      return apiRequest(`/api/upload/batches/${batchId}/cancel`, {
+      const res = await fetch(`/api/upload/batches/${batchId}/cancel`, {
         method: "POST",
+        credentials: "include",
       });
+
+      if (!res.ok) {
+        const text = await res.text() || res.statusText;
+        throw new Error(`${res.status}: ${text}`);
+      }
+      
+      return res.json();
     },
     onSuccess: () => {
       toast({
@@ -101,9 +117,17 @@ export default function Home() {
 
   const deleteMutation = useMutation({
     mutationFn: async (batchId: number) => {
-      return apiRequest(`/api/upload/batches/${batchId}`, {
+      const res = await fetch(`/api/upload/batches/${batchId}`, {
         method: "DELETE",
+        credentials: "include",
       });
+
+      if (!res.ok) {
+        const text = await res.text() || res.statusText;
+        throw new Error(`${res.status}: ${text}`);
+      }
+      
+      return res.json();
     },
     onSuccess: () => {
       toast({
