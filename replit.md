@@ -251,3 +251,22 @@ Preferred communication style: Simple, everyday language.
 - **Export Enhancement**: Added clarity_duplicate_id column to exported CSV
 - **Batch-Level Detection**: Duplicates are detected within each batch upload
 - **Duplicate Tracking**: Reasoning field includes [duplicate_idX] prefix for grouped duplicates
+
+### January 15, 2025 (Later) - UI Overhaul & Accuracy Fix
+- **Unified Single Page**: Consolidated entire application into one elegant page
+  - Removed separate Classifications and Downloads pages
+  - Combined upload, active jobs, and classification history in single view
+  - Streamlined user experience with everything accessible from one location
+- **Fixed Accuracy Calculation**: Changed from "% of records with 95% confidence" to actual average confidence score
+  - Old: 100% accuracy if all records had 95%+ confidence
+  - New: Shows true average confidence (e.g., 96.77% for mixed confidence levels)
+- **Enhanced Job Tracking**: 
+  - Added duration display showing how long each job takes
+  - Shows "Running for: Xm Ys" for active jobs
+  - Shows total duration for completed jobs
+- **Improved UI Design**:
+  - Clean card-based layout with clear sections
+  - Active jobs displayed prominently at top when running
+  - Consolidated table view for all historical jobs
+  - Single download button per completed job
+- **Real-time Updates**: 1-second polling for live progress tracking

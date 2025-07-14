@@ -204,10 +204,10 @@ export class OptimizedClassificationService {
       const elapsedSeconds = (Date.now() - startTime) / 1000;
       const recordsPerSecond = totalProcessed / elapsedSeconds;
       
-      // Calculate accuracy (percentage of records with 95%+ confidence)
+      // Calculate accuracy as average confidence score
       const classifications = await storage.getBatchClassifications(batchId);
-      const highConfidenceCount = classifications.filter(c => c.confidence >= 0.95).length;
-      const accuracy = classifications.length > 0 ? highConfidenceCount / classifications.length : 0;
+      const totalConfidence = classifications.reduce((sum, c) => sum + c.confidence, 0);
+      const accuracy = classifications.length > 0 ? totalConfidence / classifications.length : 0;
       
       await storage.updateUploadBatch(batchId, {
         status: "completed",
