@@ -162,13 +162,16 @@ export class DatabaseStorage implements IStorage {
     pendingReview: number;
     filesProcessed: number;
   }> {
+    // Only count classifications from existing batches
     const [totalPayeesResult] = await db
       .select({ count: count() })
-      .from(payeeClassifications);
+      .from(payeeClassifications)
+      .innerJoin(uploadBatches, eq(payeeClassifications.batchId, uploadBatches.id));
 
     const [pendingReviewResult] = await db
       .select({ count: count() })
       .from(payeeClassifications)
+      .innerJoin(uploadBatches, eq(payeeClassifications.batchId, uploadBatches.id))
       .where(eq(payeeClassifications.status, "pending-review"));
 
     const [filesProcessedResult] = await db
@@ -180,7 +183,8 @@ export class DatabaseStorage implements IStorage {
       .select({ 
         avgAccuracy: sql<number>`AVG(${payeeClassifications.confidence})` 
       })
-      .from(payeeClassifications);
+      .from(payeeClassifications)
+      .innerJoin(uploadBatches, eq(payeeClassifications.batchId, uploadBatches.id));
 
     return {
       totalPayees: totalPayeesResult.count,
