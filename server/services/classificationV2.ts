@@ -93,8 +93,16 @@ export class OptimizedClassificationService {
     
     console.log(`Creating CSV stream for file: ${filePath}, payeeColumn: "${payeeColumn}"`);
     
-    fs.createReadStream(filePath)
-      .pipe(csv())
+    const csvStream = fs.createReadStream(filePath)
+      .pipe(csv({
+        skipLinesWithError: true,
+        strict: false
+      }));
+      
+    csvStream
+      .on('headers', (headers) => {
+        console.log('CSV headers detected:', headers);
+      })
       .on('data', (row: Record<string, any>) => {
         totalRows++;
         const nameCol = payeeColumn || this.findNameColumn(row);
@@ -109,10 +117,10 @@ export class OptimizedClassificationService {
           foundAnyData = true;
           payeeStream.push({
             originalName: row[nameCol],
-            address: row.address || row.Address || row.ADDRESS,
+            address: row.address || row.Address || row.ADDRESS || row['Address 1'],
             city: row.city || row.City || row.CITY,
             state: row.state || row.State || row.STATE,
-            zipCode: row.zip || row.ZIP || row.zipCode || row.zip_code,
+            zipCode: row.zip || row.ZIP || row.zipCode || row.zip_code || row.Zip,
             originalData: row,
             index: rowIndex++
           });
