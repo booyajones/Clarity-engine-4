@@ -1,5 +1,6 @@
 import { storage } from "../storage";
-import { type InsertPayeeClassification } from "@shared/schema";
+import { type InsertPayeeClassification, type PayeeClassification, payeeClassifications } from "@shared/schema";
+import { db } from "../db";
 import OpenAI from 'openai';
 import { Readable } from 'stream';
 import csv from 'csv-parser';
@@ -34,6 +35,29 @@ interface PayeeData {
 export class OptimizedClassificationService {
   private activeJobs = new Map<number, AbortController>();
   private processedNames = new Map<string, ClassificationResult>();
+  private existingPayees = new Map<string, PayeeClassification>();
+  
+  private async loadExistingPayees(): Promise<void> {
+    console.log('Loading existing payees for duplicate detection...');
+    try {
+      const allPayees = await db.select().from(payeeClassifications);
+      this.existingPayees.clear();
+      
+      for (const payee of allPayees) {
+        const normalized = this.normalizePayeeName(payee.originalName);
+        this.existingPayees.set(normalized, payee);
+      }
+      
+      console.log(`Loaded ${this.existingPayees.size} existing payees for duplicate checking`);
+    } catch (error) {
+      console.error('Failed to load existing payees:', error);
+    }
+  }
+  
+  private isDuplicate(name: string): boolean {
+    const normalized = this.normalizePayeeName(name);
+    return this.existingPayees.has(normalized) || this.processedNames.has(normalized);
+  }
   
   async processFileStream(
     batchId: number,
@@ -49,6 +73,9 @@ export class OptimizedClassificationService {
     
     const abortController = new AbortController();
     this.activeJobs.set(batchId, abortController);
+    
+    // Load all existing payees for duplicate detection
+    await this.loadExistingPayees();
     
     try {
       const ext = path.extname(filePath).toLowerCase();
@@ -245,45 +272,42 @@ export class OptimizedClassificationService {
       for (let j = 0; j < results.length; j++) {
         const result = results[j];
         const payee = payees[j];
+        
+        // Skip duplicates
+        if (this.isDuplicate(payee.originalName)) {
+          console.log(`Skipping duplicate: ${payee.originalName}`);
+          continue;
+        }
+        
+        // Only save if confidence is 95% or higher
+        if (result.confidence >= 0.95) {
+          classifications.push({
+            batchId,
+            originalName: payee.originalName,
+            cleanedName: this.normalizePayeeName(payee.originalName),
+            address: payee.address || null,
+            city: payee.city || null,
+            state: payee.state || null,
+            zipCode: payee.zipCode || null,
+            payeeType: result.payeeType,
+            confidence: result.confidence,
+            sicCode: result.sicCode || null,
+            sicDescription: result.sicDescription || null,
+            status: "auto-classified",
+            originalData: payee.originalData,
+            reasoning: result.reasoning,
+          });
           
-        classifications.push({
-          batchId,
-          originalName: payee.originalName,
-          cleanedName: this.normalizePayeeName(payee.originalName),
-          address: payee.address || null,
-          city: payee.city || null,
-          state: payee.state || null,
-          zipCode: payee.zipCode || null,
-          payeeType: result.payeeType,
-          confidence: result.confidence,
-          sicCode: result.sicCode || null,
-          sicDescription: result.sicDescription || null,
-          status: "auto-classified",
-          originalData: payee.originalData,
-          reasoning: result.reasoning,
-        });
+          // Add to processed names cache
+          this.processedNames.set(this.normalizePayeeName(payee.originalName), result);
+        } else {
+          console.log(`Skipping low confidence (${result.confidence}): ${payee.originalName}`);
+        }
       }
     } catch (error) {
       console.error(`Batch processing error:`, error);
-      // Add fallback classifications for failed batch
-      for (const payee of payees) {
-        classifications.push({
-          batchId,
-          originalName: payee.originalName,
-          cleanedName: this.normalizePayeeName(payee.originalName),
-          address: payee.address || null,
-          city: payee.city || null,
-          state: payee.state || null,
-          zipCode: payee.zipCode || null,
-          payeeType: "Individual",
-          confidence: 0.5,
-          sicCode: null,
-          sicDescription: null,
-          status: "auto-classified",
-          originalData: payee.originalData,
-          reasoning: `Classification failed: ${error.message}`,
-        });
-      }
+      // Don't add fallback classifications - skip failed records entirely
+      // Only high confidence (95%+) records should be saved
     }
     
     // Save classifications in larger batches for better performance
@@ -345,7 +369,8 @@ You must respond in valid JSON format like this: {"payeeType":"Business","confid
       .toLowerCase()
       .replace(/[^\w\s]/g, '') // Remove punctuation
       .replace(/\s+/g, ' ') // Normalize spaces
-      .replace(/\b(llc|inc|corp|co|ltd|lp|llp|pllc|enterprises|ent|company|group|services|solutions)\b/g, '')
+      .replace(/\b(llc|incorporated|inc|corp|corporation|co|company|ltd|limited|lp|llp|pllc|plc|enterprises|enterprise|ent|group|services|service|solutions|solution|associates|assoc|partners|partnership|holdings|holding|international|intl|global|worldwide|systems|system|technologies|technology|tech|industries|industry|consulting|consultants|consultant|management|mgmt|development|dev|investments|investment|capital|ventures|venture|properties|property|realty|trust|foundation|institute|organization|org|association|assn|society|club)\b/g, '')
+      .replace(/\s+/g, ' ') // Normalize spaces again after removal
       .trim();
   }
   
