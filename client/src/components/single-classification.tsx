@@ -50,11 +50,7 @@ export function SingleClassification() {
 
   const classifyMutation = useMutation({
     mutationFn: async (name: string) => {
-      const response = await apiRequest("/api/classify-single", {
-        method: "POST",
-        body: JSON.stringify({ payeeName: name }),
-        headers: { "Content-Type": "application/json" }
-      });
+      const response = await apiRequest("POST", "/api/classify-single", { payeeName: name });
       return response.json();
     },
     onSuccess: (data) => {
