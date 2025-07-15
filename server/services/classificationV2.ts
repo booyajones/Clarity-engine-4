@@ -434,15 +434,23 @@ export class OptimizedClassificationService {
     // Check for exclusion keywords first
     const exclusionResult = await keywordExclusionService.checkExclusion(payee.originalName);
     if (exclusionResult.isExcluded) {
+      // Still classify excluded items properly, but mark them as excluded
+      const classification = await this.performOpenAIClassification(payee);
       return {
-        payeeType: "Individual", // Default excluded items to Individual
+        payeeType: classification.payeeType,
         confidence: 1.0, // 100% confidence for exclusions since they are correctly identified
-        reasoning: exclusionResult.reason || "Excluded by keyword filter",
+        sicCode: classification.sicCode,
+        sicDescription: classification.sicDescription,
+        reasoning: `${exclusionResult.reason || "Excluded by keyword filter"}. Classification: ${classification.reasoning}`,
         isExcluded: true,
         exclusionKeyword: exclusionResult.matchedKeyword,
       };
     }
     
+    return this.performOpenAIClassification(payee);
+  }
+
+  private async performOpenAIClassification(payee: PayeeData): Promise<ClassificationResult> {
     try {
       const response = await openai.chat.completions.create({
         model: "gpt-4o", // Use GPT-4o for best accuracy

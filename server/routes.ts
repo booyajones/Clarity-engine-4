@@ -376,6 +376,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           zipCode: c.zipCode,
           duplicateId,
           originalData,
+          isExcluded: c.isExcluded,
+          exclusionKeyword: c.exclusionKeyword,
           createdAt: c.createdAt,
         };
       });
@@ -436,6 +438,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           clarity_city: c.city || "",
           clarity_state: c.state || "",
           clarity_zip_code: c.zipCode || "",
+          clarity_excluded: c.isExcluded ? "Yes" : "No",
+          clarity_exclusion_keyword: c.exclusionKeyword || "",
         };
       });
 

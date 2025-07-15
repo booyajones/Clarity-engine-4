@@ -166,8 +166,8 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
     if (!data || filteredAndSortedClassifications.length === 0) return;
 
     const headers = [
-      "Original Name", "Cleaned Name", "Type", "Confidence", "SIC Code", 
-      "SIC Description", "Address", "City", "State", "ZIP", "Reasoning"
+      "Original Name", "Cleaned Name", "Type", "Confidence", "Excluded", "Exclusion Keyword", 
+      "SIC Code", "SIC Description", "Address", "City", "State", "ZIP", "Reasoning"
     ];
 
     const csvContent = [
@@ -177,6 +177,8 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
         `"${classification.cleanedName}"`,
         `"${classification.payeeType}"`,
         `"${Math.round(classification.confidence * 100)}%"`,
+        `"${classification.isExcluded ? 'Yes' : 'No'}"`,
+        `"${classification.exclusionKeyword || ""}"`,
         `"${classification.sicCode || ""}"`,
         `"${classification.sicDescription || ""}"`,
         `"${classification.address || ""}"`,
