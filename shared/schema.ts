@@ -36,7 +36,7 @@ export const payeeClassifications = pgTable("payee_classifications", {
   city: text("city"),
   state: text("state"),
   zipCode: text("zip_code"),
-  payeeType: text("payee_type").notNull(), // Individual, Business, Government
+  payeeType: text("payee_type").notNull(), // Individual, Business, Government, Insurance, Banking, Internal Transfer, Unknown
   confidence: real("confidence").notNull(),
   sicCode: text("sic_code"),
   sicDescription: text("sic_description"),

@@ -30,7 +30,7 @@ export interface PayeeClassification {
   city: string | null;
   state: string | null;
   zipCode: string | null;
-  payeeType: "Individual" | "Business" | "Government";
+  payeeType: "Individual" | "Business" | "Government" | "Insurance" | "Banking" | "Internal Transfer" | "Unknown";
   confidence: number;
   sicCode: string | null;
   sicDescription: string | null;

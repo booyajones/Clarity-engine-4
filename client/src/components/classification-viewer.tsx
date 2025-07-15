@@ -37,6 +37,10 @@ import {
   Building2,
   User,
   LandmarkIcon,
+  Shield,
+  Banknote,
+  ArrowLeftRight,
+  HelpCircle,
   TrendingUp,
   FileSpreadsheet,
   Copy,
@@ -51,7 +55,7 @@ interface ClassificationData {
   id: number;
   originalName: string;
   cleanedName: string;
-  payeeType: "Individual" | "Business" | "Government" | "Insurance" | "Banking" | "Internal Transfer";
+  payeeType: "Individual" | "Business" | "Government" | "Insurance" | "Banking" | "Internal Transfer" | "Unknown";
   confidence: number;
   sicCode?: string;
   sicDescription?: string;
@@ -91,6 +95,7 @@ interface ClassificationResponse {
     insurance: number;
     banking: number;
     internalTransfer: number;
+    unknown: number;
     averageConfidence: number;
     duplicates: number;
   };
@@ -293,8 +298,16 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
         return <User className="h-4 w-4" />;
       case "Government":
         return <LandmarkIcon className="h-4 w-4" />;
+      case "Insurance":
+        return <Shield className="h-4 w-4" />;
+      case "Banking":
+        return <Banknote className="h-4 w-4" />;
+      case "Internal Transfer":
+        return <ArrowLeftRight className="h-4 w-4" />;
+      case "Unknown":
+        return <HelpCircle className="h-4 w-4" />;
       default:
-        return null;
+        return <HelpCircle className="h-4 w-4" />;
     }
   };
 
@@ -306,6 +319,14 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
         return "bg-green-100 text-green-800";
       case "Government":
         return "bg-purple-100 text-purple-800";
+      case "Insurance":
+        return "bg-orange-100 text-orange-800";
+      case "Banking":
+        return "bg-yellow-100 text-yellow-800";
+      case "Internal Transfer":
+        return "bg-indigo-100 text-indigo-800";
+      case "Unknown":
+        return "bg-gray-100 text-gray-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -378,7 +399,7 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
 
       <div className="max-w-7xl mx-auto p-8 space-y-6">
         {/* Summary Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 gap-4">
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center">
@@ -430,7 +451,7 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center">
-                <Building2 className="h-8 w-8 text-red-500" />
+                <Shield className="h-8 w-8 text-orange-500" />
                 <div className="ml-4">
                   <p className="text-2xl font-bold">{data.summary.insurance || 0}</p>
                   <p className="text-xs text-gray-500">Insurance</p>
@@ -442,7 +463,7 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center">
-                <Building2 className="h-8 w-8 text-emerald-500" />
+                <Banknote className="h-8 w-8 text-emerald-500" />
                 <div className="ml-4">
                   <p className="text-2xl font-bold">{data.summary.banking || 0}</p>
                   <p className="text-xs text-gray-500">Banking</p>
@@ -454,10 +475,22 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center">
-                <ArrowRight className="h-8 w-8 text-indigo-500" />
+                <ArrowLeftRight className="h-8 w-8 text-indigo-500" />
                 <div className="ml-4">
                   <p className="text-2xl font-bold">{data.summary.internalTransfer || 0}</p>
                   <p className="text-xs text-gray-500">Internal Transfer</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center">
+                <HelpCircle className="h-8 w-8 text-gray-500" />
+                <div className="ml-4">
+                  <p className="text-2xl font-bold">{data.summary.unknown || 0}</p>
+                  <p className="text-xs text-gray-500">Unknown</p>
                 </div>
               </div>
             </CardContent>
@@ -513,6 +546,7 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                   <SelectItem value="Insurance">Insurance</SelectItem>
                   <SelectItem value="Banking">Banking</SelectItem>
                   <SelectItem value="Internal Transfer">Internal Transfer</SelectItem>
+                  <SelectItem value="Unknown">Unknown</SelectItem>
                 </SelectContent>
               </Select>
               

@@ -23,7 +23,7 @@ const openai = new OpenAI({
 });
 
 interface ClassificationResult {
-  payeeType: "Individual" | "Business" | "Government" | "Tax/Government" | "Insurance" | "Banking" | "Internal Transfer";
+  payeeType: "Individual" | "Business" | "Government" | "Tax/Government" | "Insurance" | "Banking" | "Internal Transfer" | "Unknown";
   confidence: number;
   sicCode?: string;
   sicDescription?: string;
@@ -475,7 +475,8 @@ CATEGORIES:
 • Government: City/County/State agencies, departments, tax authorities (includes Tax/Government)
 • Insurance: Insurance companies, carriers, brokers, agents
 • Banking: Banks, credit unions, financial institutions
-• Internal Transfer: Internal company names, departments, subsidiaries, inter-company transfers
+• Internal Transfer: ONLY when explicitly mentions "transfer", "internal transfer", or clear internal company references
+• Unknown: Gibberish, unclear abbreviations, incomplete data, or ambiguous payee names that cannot be classified
 
 CLASSIFICATION RULES:
 - Individual: Personal names without business indicators, employee payroll, contractors, students
@@ -483,7 +484,8 @@ CLASSIFICATION RULES:
 - Government: Government agencies, tax authorities, municipal departments, state/federal entities
 - Insurance: Insurance-related entities, carriers, brokers, agents
 - Banking: Banks, credit unions, financial institutions, payment processors
-- Internal Transfer: Internal company references, departments, subsidiaries, inter-company movements
+- Internal Transfer: ONLY when text explicitly contains "transfer", "internal", or clear inter-company language
+- Unknown: Use for gibberish text, unclear abbreviations, incomplete names, or truly ambiguous entries
 
 CONFIDENCE TARGETS:
 - Only return confidence 0.95+ for high-certainty classifications
@@ -493,7 +495,7 @@ CONFIDENCE TARGETS:
 - Clear personal names (First Last pattern) = 0.96+ confidence
 
 Return JSON:
-{"payeeType":"Individual|Business|Government|Insurance|Banking|Internal Transfer","confidence":0.95-0.99,"sicCode":"XXXX","sicDescription":"Industry description","reasoning":"Brief classification reason","flagForReview":false}`
+{"payeeType":"Individual|Business|Government|Insurance|Banking|Internal Transfer|Unknown","confidence":0.95-0.99,"sicCode":"XXXX","sicDescription":"Industry description","reasoning":"Brief classification reason","flagForReview":false}`
         }, {
           role: "user",
           content: `Classify this payee: "${payee.originalName}"${payee.address ? `, Address: ${payee.address}` : ''}`
@@ -514,7 +516,7 @@ Return JSON:
         
         // Fallback classification with low confidence
         return {
-          payeeType: "Individual",
+          payeeType: "Unknown",
           confidence: 0.5,
           sicCode: null,
           sicDescription: null,
@@ -524,7 +526,7 @@ Return JSON:
       }
       
       const classification: ClassificationResult = {
-        payeeType: result.payeeType || "Individual",
+        payeeType: result.payeeType || "Unknown",
         confidence: Math.min(Math.max(result.confidence || 0.85, 0), 1),
         sicCode: result.sicCode,
         sicDescription: result.sicDescription,
@@ -538,7 +540,7 @@ Return JSON:
       
       // Return a fallback classification instead of throwing
       return {
-        payeeType: "Individual",
+        payeeType: "Unknown",
         confidence: 0.5,
         sicCode: null,
         sicDescription: null,

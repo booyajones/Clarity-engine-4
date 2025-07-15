@@ -414,6 +414,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           insurance: classifications.filter(c => c.payeeType === "Insurance").length,
           banking: classifications.filter(c => c.payeeType === "Banking").length,
           internalTransfer: classifications.filter(c => c.payeeType === "Internal Transfer").length,
+          unknown: classifications.filter(c => c.payeeType === "Unknown").length,
           averageConfidence: classifications.reduce((sum, c) => sum + c.confidence, 0) / classifications.length,
           duplicates: classifications.filter(c => c.reasoning?.includes("duplicate_id")).length,
         }
