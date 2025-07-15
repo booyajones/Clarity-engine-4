@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { ProgressTracker } from "@/components/progress-tracker";
 import { ClassificationViewer } from "@/components/classification-viewer";
 import { KeywordManager } from "@/components/keyword-manager";
+import { SingleClassification } from "@/components/single-classification";
 import {
   Select,
   SelectContent,
@@ -54,7 +55,7 @@ export default function Home() {
   } | null>(null);
   const [selectedColumn, setSelectedColumn] = useState<string>("");
   const [viewingBatchId, setViewingBatchId] = useState<number | null>(null);
-  const [currentView, setCurrentView] = useState<"upload" | "keywords">("upload");
+  const [currentView, setCurrentView] = useState<"upload" | "keywords" | "single">("upload");
 
   const { data: batches, isLoading } = useQuery<UploadBatch[]>({
     queryKey: ["/api/upload/batches"],
