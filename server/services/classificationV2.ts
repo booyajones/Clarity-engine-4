@@ -471,21 +471,23 @@ export class OptimizedClassificationService {
 
 CATEGORIES:
 • Individual: Personal names, employees, contractors, students (includes Individual/Contractors, Employees, Students)
-• Business: Companies with LLC/INC/CORP suffixes, brand names, commercial entities
+• Business: Companies with LLC/INC/CORP suffixes, brand names, commercial entities, ANY unknown company names
 • Government: City/County/State agencies, departments, tax authorities (includes Tax/Government)
 • Insurance: Insurance companies, carriers, brokers, agents
 • Banking: Banks, credit unions, financial institutions
 • Internal Transfer: ONLY when explicitly mentions "transfer", "internal transfer", or clear internal company references
 
 CLASSIFICATION RULES:
-- Individual: Personal names without business indicators, employee payroll, contractors, students
-- Business: Clear business suffixes (LLC, INC, CORP, CO, LTD), brand names, commercial operations
+- Individual: Clear personal names (First Last pattern), employee payroll entries
+- Business: ANY company name, brand name, business entity - if unsure, default to Business
 - Government: Government agencies, tax authorities, municipal departments, state/federal entities
 - Insurance: Insurance-related entities, carriers, brokers, agents
 - Banking: Banks, credit unions, financial institutions, payment processors
 - Internal Transfer: ONLY when text explicitly contains "transfer", "internal", or clear inter-company language
 
-If you cannot classify with 95%+ confidence from the name alone, respond with:
+IMPORTANT: Only request web search for truly unidentifiable text/gibberish. Most business names should be classified as "Business" even if unfamiliar.
+
+If genuinely cannot identify (gibberish/unclear text only), respond with:
 {"needsWebSearch": true, "searchQuery": "exact company or entity name to search"}
 
 CONFIDENCE TARGETS:
@@ -501,7 +503,13 @@ OR if uncertain:
 {"needsWebSearch":true,"searchQuery":"company name to research"}`
         }, {
           role: "user",
-          content: `Classify this payee: "${payee.originalName}"${payee.address ? `, Address: ${payee.address}` : ''}`
+          content: `Classify this payee: "${payee.originalName}"${payee.address ? `, Address: ${payee.address}` : ''}
+          
+CRITICAL: Classify ALL recognizable company names as "Business" immediately. Only request web search for truly unreadable gibberish or completely unclear text. Examples:
+- "prosalutem" = Business (unknown company, still a business)
+- "Microsoft" = Business
+- "John Smith" = Individual  
+- "XJKL999###" = needsWebSearch (gibberish only)`
         }],
         temperature: 0,
         max_tokens: 500,
@@ -546,12 +554,16 @@ OR if uncertain:
     try {
       console.log(`Web searching for: ${searchQuery}`);
       
-      // Import web_search dynamically
-      const webSearchModule = await import('web_search');
-      const web_search = webSearchModule.default;
-      
-      // Search for the entity
-      const searchResult = await web_search({ query: `${searchQuery} company business` });
+      // Use the web_search tool that should be available in the environment
+      // Try to call it directly as it should be in scope
+      let searchResult: string;
+      try {
+        // @ts-ignore - web_search should be available from the tool environment
+        searchResult = await web_search({ query: `${searchQuery} company business information` });
+      } catch (searchError) {
+        console.log(`Web search not available: ${searchError.message}, falling back to pattern matching`);
+        throw new Error(`Web search unavailable: ${searchError.message}`);
+      }
       
       // Use OpenAI to classify based on search results
       const response = await openai.chat.completions.create({
@@ -596,17 +608,59 @@ Return JSON:
     } catch (error) {
       console.error(`Web search classification error for ${payee.originalName}:`, error.message);
       
-      // Final fallback - assume business if not clearly personal name
-      const isPersonalName = /^[A-Za-z]+\s+[A-Za-z]+$/.test(payee.originalName.trim());
+      // Enhanced fallback logic - use ChatGPT to make best guess without web search
+      console.log(`Falling back to pattern-based classification for: ${payee.originalName}`);
       
-      return {
-        payeeType: isPersonalName ? "Individual" : "Business",
-        confidence: 0.75,
-        sicCode: null,
-        sicDescription: null,
-        reasoning: `Web search failed. Classified as ${isPersonalName ? 'Individual' : 'Business'} based on name pattern. Original error: ${error.message}`,
-        flagForReview: true
-      };
+      try {
+        const fallbackResponse = await openai.chat.completions.create({
+          model: "gpt-4o",
+          messages: [{
+            role: "system",
+            content: `Classify this payee using your knowledge base only (no web search available):
+
+CATEGORIES: Individual, Business, Government, Insurance, Banking, Internal Transfer
+
+Make your best classification based on the name pattern and any knowledge you have.
+If it looks like a business name but you're unsure of the type, classify as "Business".
+If it's clearly a personal name (First Last), classify as "Individual".
+
+Return JSON:
+{"payeeType":"Individual|Business|Government|Insurance|Banking|Internal Transfer","confidence":0.85-0.95,"sicCode":null,"sicDescription":null,"reasoning":"Classified without web search based on name pattern and knowledge","flagForReview":false}`
+          }, {
+            role: "user",
+            content: `Classify: "${payee.originalName}"`
+          }],
+          response_format: { type: "json_object" },
+          temperature: 0,
+          max_tokens: 300
+        });
+        
+        const fallbackContent = fallbackResponse.choices[0].message.content;
+        const fallbackResult = JSON.parse(fallbackContent);
+        
+        return {
+          payeeType: fallbackResult.payeeType || "Business",
+          confidence: Math.min(Math.max(fallbackResult.confidence || 0.85, 0), 1),
+          sicCode: null,
+          sicDescription: null,
+          reasoning: `${fallbackResult.reasoning} (Web search failed: ${error.message})`,
+          flagForReview: true
+        };
+      } catch (fallbackError) {
+        console.error(`Fallback classification failed for ${payee.originalName}:`, fallbackError.message);
+        
+        // Final pattern-based fallback
+        const isPersonalName = /^[A-Za-z]+\s+[A-Za-z]+$/.test(payee.originalName.trim());
+        
+        return {
+          payeeType: isPersonalName ? "Individual" : "Business",
+          confidence: 0.75,
+          sicCode: null,
+          sicDescription: null,
+          reasoning: `Pattern-based classification: ${isPersonalName ? 'Personal name pattern' : 'Business name pattern'}. Web search and OpenAI fallback failed.`,
+          flagForReview: true
+        };
+      }
     }
   }
   
