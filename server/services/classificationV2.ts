@@ -476,7 +476,6 @@ CATEGORIES:
 • Insurance: Insurance companies, carriers, brokers, agents
 • Banking: Banks, credit unions, financial institutions
 • Internal Transfer: ONLY when explicitly mentions "transfer", "internal transfer", or clear internal company references
-• Unknown: Gibberish, unclear abbreviations, incomplete data, or ambiguous payee names that cannot be classified
 
 CLASSIFICATION RULES:
 - Individual: Personal names without business indicators, employee payroll, contractors, students
@@ -485,17 +484,21 @@ CLASSIFICATION RULES:
 - Insurance: Insurance-related entities, carriers, brokers, agents
 - Banking: Banks, credit unions, financial institutions, payment processors
 - Internal Transfer: ONLY when text explicitly contains "transfer", "internal", or clear inter-company language
-- Unknown: Use for gibberish text, unclear abbreviations, incomplete names, or truly ambiguous entries
+
+If you cannot classify with 95%+ confidence from the name alone, respond with:
+{"needsWebSearch": true, "searchQuery": "exact company or entity name to search"}
 
 CONFIDENCE TARGETS:
 - Only return confidence 0.95+ for high-certainty classifications
-- If confidence would be below 0.95, still classify but set flagForReview: true
 - Business entities with clear suffixes (LLC, INC, CORP) = 0.98+ confidence
 - Government agencies with clear prefixes (City of, County of, State of) = 0.98+ confidence
 - Clear personal names (First Last pattern) = 0.96+ confidence
 
 Return JSON:
-{"payeeType":"Individual|Business|Government|Insurance|Banking|Internal Transfer|Unknown","confidence":0.95-0.99,"sicCode":"XXXX","sicDescription":"Industry description","reasoning":"Brief classification reason","flagForReview":false}`
+{"payeeType":"Individual|Business|Government|Insurance|Banking|Internal Transfer","confidence":0.95-0.99,"sicCode":"XXXX","sicDescription":"Industry description","reasoning":"Brief classification reason","flagForReview":false}
+
+OR if uncertain:
+{"needsWebSearch":true,"searchQuery":"company name to research"}`
         }, {
           role: "user",
           content: `Classify this payee: "${payee.originalName}"${payee.address ? `, Address: ${payee.address}` : ''}`
@@ -512,17 +515,13 @@ Return JSON:
         result = JSON.parse(responseContent);
       } catch (parseError) {
         console.error(`JSON parse error for ${payee.originalName}:`, parseError.message);
-        console.error(`Raw response: ${responseContent}`);
-        
-        // Fallback classification with low confidence
-        return {
-          payeeType: "Unknown",
-          confidence: 0.5,
-          sicCode: null,
-          sicDescription: null,
-          reasoning: `Failed to parse AI response: ${parseError.message}. Using fallback classification.`,
-          flagForReview: true
-        };
+        // If parsing fails, try web search as fallback
+        return await this.performWebSearchClassification(payee, payee.originalName);
+      }
+      
+      // If OpenAI suggests web search, perform it
+      if (result.needsWebSearch && result.searchQuery) {
+        return await this.performWebSearchClassification(payee, result.searchQuery);
       }
       
       const classification: ClassificationResult = {
@@ -538,13 +537,74 @@ Return JSON:
     } catch (error) {
       console.error(`OpenAI API error for ${payee.originalName}:`, error.message);
       
-      // Return a fallback classification instead of throwing
+      // Try web search as fallback for API errors
+      return await this.performWebSearchClassification(payee, payee.originalName);
+    }
+  }
+
+  private async performWebSearchClassification(payee: PayeeData, searchQuery: string): Promise<ClassificationResult> {
+    try {
+      console.log(`Web searching for: ${searchQuery}`);
+      
+      // Import web_search dynamically
+      const webSearchModule = await import('web_search');
+      const web_search = webSearchModule.default;
+      
+      // Search for the entity
+      const searchResult = await web_search({ query: `${searchQuery} company business` });
+      
+      // Use OpenAI to classify based on search results
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [{
+          role: "system",
+          content: `Based on web search results, classify this payee into categories:
+
+CATEGORIES:
+• Individual: Personal names, employees, contractors, students
+• Business: Companies, corporations, commercial entities, brands
+• Government: Government agencies, departments, municipalities
+• Insurance: Insurance companies, carriers, brokers
+• Banking: Banks, credit unions, financial institutions  
+• Internal Transfer: Internal company transfers only
+
+Provide high confidence (95%+) classification based on the search results.
+
+Return JSON:
+{"payeeType":"Individual|Business|Government|Insurance|Banking|Internal Transfer","confidence":0.95-0.99,"sicCode":"XXXX","sicDescription":"Industry description","reasoning":"Web search enhanced: [key findings]","flagForReview":false}`
+        }, {
+          role: "user", 
+          content: `Classify "${payee.originalName}" based on these search results:\n\n${searchResult.slice(0, 2000)}`
+        }],
+        response_format: { type: "json_object" },
+        temperature: 0,
+        max_tokens: 600
+      });
+
+      const responseContent = response.choices[0].message.content;
+      const result = JSON.parse(responseContent);
+      
       return {
-        payeeType: "Unknown",
-        confidence: 0.5,
+        payeeType: result.payeeType || "Business",
+        confidence: Math.min(Math.max(result.confidence || 0.95, 0), 1),
+        sicCode: result.sicCode,
+        sicDescription: result.sicDescription,
+        reasoning: result.reasoning || `Web search enhanced classification for ${payee.originalName}`,
+        flagForReview: result.flagForReview || false
+      };
+
+    } catch (error) {
+      console.error(`Web search classification error for ${payee.originalName}:`, error.message);
+      
+      // Final fallback - assume business if not clearly personal name
+      const isPersonalName = /^[A-Za-z]+\s+[A-Za-z]+$/.test(payee.originalName.trim());
+      
+      return {
+        payeeType: isPersonalName ? "Individual" : "Business",
+        confidence: 0.75,
         sicCode: null,
         sicDescription: null,
-        reasoning: `Classification API error: ${error.message}. Using fallback classification.`,
+        reasoning: `Web search failed. Classified as ${isPersonalName ? 'Individual' : 'Business'} based on name pattern. Original error: ${error.message}`,
         flagForReview: true
       };
     }
