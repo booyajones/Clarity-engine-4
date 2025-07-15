@@ -608,6 +608,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Single payee classification endpoint
+  app.post("/api/classify-single", async (req, res) => {
+    try {
+      const { payeeName } = req.body;
+      
+      if (!payeeName || typeof payeeName !== 'string') {
+        return res.status(400).json({ error: "payeeName is required and must be a string" });
+      }
+
+      const { OptimizedClassificationService } = await import("./services/classificationV2");
+      const classificationService = new OptimizedClassificationService();
+      
+      // Create a minimal payee data object
+      const payeeData = {
+        originalName: payeeName.trim(),
+        address: "",
+        city: "",
+        state: "",
+        zipCode: "",
+        originalData: {}
+      };
+
+      // Classify the single payee
+      const result = await classificationService.classifyPayee(payeeData);
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Single classification error:", error);
+      res.status(500).json({ 
+        error: "Classification failed", 
+        details: error.message 
+      });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

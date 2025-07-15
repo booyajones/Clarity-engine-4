@@ -341,6 +341,58 @@ export default function Home() {
     return <KeywordManager onBack={() => setCurrentView("upload")} />;
   }
 
+  // If viewing single classification, show that component
+  if (currentView === "single") {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="bg-white border-b border-gray-100">
+          <div className="max-w-7xl mx-auto px-8 py-8">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-4xl font-light text-gray-900 tracking-wide">
+                  <span className="font-normal">CLARITY ENGINE</span>
+                </h1>
+                <p className="text-sm text-gray-500 mt-2 tracking-wide uppercase">Quick Single Payee Classification</p>
+              </div>
+            </div>
+            
+            {/* Navigation */}
+            <div className="mt-6 border-t border-gray-200 pt-6">
+              <div className="flex gap-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setCurrentView("upload")}
+                  className="flex items-center gap-2"
+                >
+                  <UploadIcon className="h-4 w-4" />
+                  Upload & Process
+                </Button>
+                <Button
+                  variant="default"
+                  className="flex items-center gap-2"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Quick Classify
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setCurrentView("keywords")}
+                  className="flex items-center gap-2"
+                >
+                  <ClipboardList className="h-4 w-4" />
+                  Keyword Management
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 p-8 max-w-7xl mx-auto">
+          <SingleClassification />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-100">
@@ -375,6 +427,14 @@ export default function Home() {
               >
                 <UploadIcon className="h-4 w-4" />
                 Upload & Process
+              </Button>
+              <Button
+                variant={currentView === "single" ? "default" : "outline"}
+                onClick={() => setCurrentView("single")}
+                className="flex items-center gap-2"
+              >
+                <Sparkles className="h-4 w-4" />
+                Quick Classify
               </Button>
               <Button
                 variant={currentView === "keywords" ? "default" : "outline"}

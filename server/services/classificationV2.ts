@@ -558,7 +558,19 @@ CRITICAL: Classify ALL recognizable company names as "Business" immediately. Onl
       console.log(`Web searching for: ${searchQuery}`);
       
       // Use the actual web_search function available in Replit environment
-      const searchResult = await web_search({ query: `${searchQuery} company business information` });
+      let searchResult: string;
+      try {
+        // Try to use the global web_search function
+        if (typeof (global as any).web_search === 'function') {
+          searchResult = await (global as any).web_search({ query: `${searchQuery} company business information` });
+        } else {
+          // Fallback to enhanced OpenAI approach
+          searchResult = await this.fallbackWebSearch({ query: `${searchQuery} company business information` });
+        }
+      } catch (error) {
+        console.log(`Web search failed, using fallback: ${error.message}`);
+        searchResult = await this.fallbackWebSearch({ query: `${searchQuery} company business information` });
+      }
       
       // Use OpenAI to classify based on search results
       const response = await openai.chat.completions.create({
@@ -825,16 +837,43 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
     return classificationResults;
   }
   
-  private async getWebSearchFunction() {
-    // Import the web_search function dynamically
-    try {
-      // The web_search function should be available in the tool environment
-      const webSearchModule = await import('web_search');
-      return webSearchModule.web_search || webSearchModule.default;
-    } catch (error) {
-      console.log('Web search module not found, using fallback');
-      return this.fallbackWebSearch;
+  // Public method for single payee classification
+  async classifyPayee(payeeData: PayeeData): Promise<ClassificationResult> {
+    // Check for exclusion first
+    const exclusionResult = await keywordExclusionService.checkExclusion(payeeData.originalName);
+    if (exclusionResult.isExcluded) {
+      return {
+        payeeType: "Unknown",
+        confidence: 0,
+        reasoning: `Excluded due to keyword: ${exclusionResult.exclusionKeyword}`,
+        isExcluded: true,
+        exclusionKeyword: exclusionResult.exclusionKeyword
+      };
     }
+
+    // Perform OpenAI classification first
+    const openaiResult = await this.performOpenAIClassification(payeeData, payeeData.originalName);
+    
+    // If confidence is high enough, return the result
+    if (openaiResult.confidence >= 0.80) {
+      return openaiResult;
+    }
+
+    // If confidence is low and name seems unclear, try web search
+    if (this.shouldTriggerWebSearch(payeeData.originalName, openaiResult.confidence)) {
+      try {
+        const webSearchResult = await this.performWebSearchClassification(payeeData, payeeData.originalName);
+        // Use web search result if it has higher confidence
+        if (webSearchResult.confidence > openaiResult.confidence) {
+          return webSearchResult;
+        }
+      } catch (error) {
+        console.log(`Web search failed for ${payeeData.originalName}: ${error.message}`);
+      }
+    }
+
+    // Return the OpenAI result as final classification
+    return openaiResult;
   }
 
   private async fallbackWebSearch(params: { query: string }): Promise<string> {
