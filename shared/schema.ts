@@ -44,6 +44,8 @@ export const payeeClassifications = pgTable("payee_classifications", {
   status: text("status").notNull().default("auto-classified"), // auto-classified, user-confirmed, user-corrected, pending-review
   reviewedBy: integer("reviewed_by"),
   originalData: jsonb("original_data"), // Store original CSV row data
+  isExcluded: boolean("is_excluded").default(false),
+  exclusionKeyword: text("exclusion_keyword"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

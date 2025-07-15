@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   ArrowLeft,
+  ArrowRight,
   Download,
   Search,
   Filter,
@@ -62,6 +63,8 @@ interface ClassificationData {
   zipCode?: string;
   duplicateId?: string;
   originalData: Record<string, any>;
+  isExcluded?: boolean;
+  exclusionKeyword?: string;
   createdAt: string;
 }
 
@@ -555,6 +558,15 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                     </TableHead>
                     <TableHead 
                       className="cursor-pointer hover:bg-gray-50 select-none"
+                      onClick={() => handleSort("isExcluded")}
+                    >
+                      <div className="flex items-center gap-2">
+                        Excluded
+                        {getSortIcon("isExcluded")}
+                      </div>
+                    </TableHead>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-gray-50 select-none"
                       onClick={() => handleSort("sicDescription")}
                     >
                       <div className="flex items-center gap-2">
@@ -602,6 +614,18 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                         <span className={`font-medium ${getConfidenceColor(classification.confidence)}`}>
                           {Math.round(classification.confidence * 100)}%
                         </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className={`text-sm font-medium ${classification.isExcluded ? 'text-red-600' : 'text-green-600'}`}>
+                            {classification.isExcluded ? 'Yes' : 'No'}
+                          </span>
+                          {classification.exclusionKeyword && (
+                            <span className="text-xs text-gray-500 max-w-xs truncate">
+                              {classification.exclusionKeyword}
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col">

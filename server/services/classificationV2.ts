@@ -24,7 +24,7 @@ interface ClassificationResult {
   reasoning: string;
   flagForReview?: boolean;
   isExcluded?: boolean;
-  exclusionReason?: string;
+  exclusionKeyword?: string;
 }
 
 interface PayeeData {
@@ -382,6 +382,8 @@ export class OptimizedClassificationService {
           status: flagForReview ? "pending-review" : "auto-classified",
           originalData: payee.originalData,
           reasoning: result.reasoning,
+          isExcluded: result.isExcluded || false,
+          exclusionKeyword: result.exclusionKeyword || null,
         });
       }
       
@@ -405,6 +407,8 @@ export class OptimizedClassificationService {
           status: "pending-review",
           originalData: payee.originalData,
           reasoning: `Classification failed: ${error.message}. Defaulted to Individual with low confidence.`,
+          isExcluded: false,
+          exclusionKeyword: null,
         });
       }
     }
@@ -432,10 +436,10 @@ export class OptimizedClassificationService {
     if (exclusionResult.isExcluded) {
       return {
         payeeType: "Individual", // Default excluded items to Individual
-        confidence: 0.0,
+        confidence: 1.0, // 100% confidence for exclusions since they are correctly identified
         reasoning: exclusionResult.reason || "Excluded by keyword filter",
         isExcluded: true,
-        exclusionReason: exclusionResult.reason,
+        exclusionKeyword: exclusionResult.matchedKeyword,
       };
     }
     
@@ -444,7 +448,7 @@ export class OptimizedClassificationService {
         model: "gpt-4o", // Use GPT-4o for best accuracy
         messages: [{
           role: "system",
-          content: `Classify payees into these categories with high confidence:
+          content: `Classify payees into these categories with HIGH CONFIDENCE (95%+):
 
 CATEGORIES:
 • Individual: Personal names, employees, contractors, students (includes Individual/Contractors, Employees, Students)
@@ -462,8 +466,15 @@ CLASSIFICATION RULES:
 - Banking: Banks, credit unions, financial institutions, payment processors
 - Internal Transfer: Internal company references, departments, subsidiaries, inter-company movements
 
+CONFIDENCE TARGETS:
+- Only return confidence 0.95+ for high-certainty classifications
+- If confidence would be below 0.95, still classify but set flagForReview: true
+- Business entities with clear suffixes (LLC, INC, CORP) = 0.98+ confidence
+- Government agencies with clear prefixes (City of, County of, State of) = 0.98+ confidence
+- Clear personal names (First Last pattern) = 0.96+ confidence
+
 Return JSON:
-{"payeeType":"Individual|Business|Government|Insurance|Banking|Internal Transfer","confidence":0.80-0.99,"sicCode":"XXXX","sicDescription":"Industry description","reasoning":"Brief classification reason","flagForReview":false}`
+{"payeeType":"Individual|Business|Government|Insurance|Banking|Internal Transfer","confidence":0.95-0.99,"sicCode":"XXXX","sicDescription":"Industry description","reasoning":"Brief classification reason","flagForReview":false}`
         }, {
           role: "user",
           content: `Classify this payee: "${payee.originalName}"${payee.address ? `, Address: ${payee.address}` : ''}`
