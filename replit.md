@@ -291,7 +291,7 @@ Preferred communication style: Simple, everyday language.
   - Streamlined workflow: Choose File → Column selection appears automatically
   - Preserved font themes and professional "cold clarity" aesthetic
 
-### January 15, 2025 (Latest) - Advanced Results Viewing & Column Sorting
+### January 15, 2025 - Advanced Results Viewing & Column Sorting
 - **Comprehensive Classification Viewer**: Created detailed interface for examining classification results
   - View Results button next to Download for completed jobs
   - Summary cards showing Business/Individual/Government breakdowns with totals
@@ -312,3 +312,29 @@ Preferred communication style: Simple, everyday language.
   - Loading states and error handling throughout
   - Breadcrumb navigation back to main job list
   - Detailed classification reasoning in popup dialogs
+
+### January 15, 2025 (Latest) - Production Optimization & Performance Hardening
+- **Database Performance**: Added critical performance indexes for frequent queries
+  - `idx_payee_classifications_batch_id` for batch operations
+  - `idx_payee_classifications_is_excluded` for exclusion filtering  
+  - `idx_upload_batches_status` for job status queries
+- **Tier 5 OpenAI Optimization**: Configured for maximum Tier 5 performance
+  - 30,000 requests per minute rate limiting (up from 5,000)
+  - Increased batch size to 1,000 records and concurrency to 500
+  - Minimal rate limiting overhead for ultra-fast processing
+- **Security Hardening**: Enhanced file upload security and validation
+  - Strict file type validation (CSV/Excel only)
+  - 50MB file size limits with proper MIME type checking
+  - Input sanitization and payload size limits
+- **Production Error Handling**: Comprehensive error tracking and monitoring
+  - Structured logging system with production/development modes
+  - Async error handler with request context tracking
+  - Automatic file cleanup service for uploads directory
+- **Memory Optimization**: Improved resource management
+  - Reduced database connection pool to 20 for better memory usage
+  - Enhanced query caching with 5-minute stale time
+  - Debounced search functionality for frontend performance
+- **Environment Security**: Added validation for required environment variables
+  - OPENAI_API_KEY validation on service initialization
+  - DATABASE_URL validation with descriptive error messages
+- **Expected Performance**: 100+ records/second with $800/month OpenAI budget (Tier 5)

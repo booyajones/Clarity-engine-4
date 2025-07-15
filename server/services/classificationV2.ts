@@ -8,6 +8,12 @@ import fs from 'fs';
 import path from 'path';
 import XLSX from 'xlsx';
 import { keywordExclusionService } from './keywordExclusion';
+import { openaiRateLimiter } from './rateLimiter';
+
+// Validate OpenAI API key
+if (!process.env.OPENAI_API_KEY) {
+  throw new Error('OPENAI_API_KEY environment variable is required');
+}
 
 // Initialize OpenAI with Tier 5 performance settings
 const openai = new OpenAI({ 
@@ -191,8 +197,8 @@ export class OptimizedClassificationService {
     stream: Readable,
     signal: AbortSignal
   ): Promise<void> {
-    const BATCH_SIZE = 500; // Maximum batch size for Tier 5  
-    const MAX_CONCURRENT = 200; // Maximum concurrency for 30,000 RPM
+    const BATCH_SIZE = 1000; // Maximum batch size for Tier 5  
+    const MAX_CONCURRENT = 500; // Maximum concurrency for 30,000 RPM
     let buffer: PayeeData[] = [];
     let totalProcessed = 0;
     let totalRecords = 0;
@@ -452,6 +458,11 @@ export class OptimizedClassificationService {
 
   private async performOpenAIClassification(payee: PayeeData): Promise<ClassificationResult> {
     try {
+      // Light rate limiting for Tier 5 (30,000 RPM)
+      if (!(await openaiRateLimiter.canMakeRequest())) {
+        await new Promise(resolve => setTimeout(resolve, 10)); // Very brief pause
+      }
+      
       const response = await openai.chat.completions.create({
         model: "gpt-4o", // Use GPT-4o for best accuracy
         messages: [{

@@ -3,8 +3,12 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+// Security and optimization middleware
+app.use(express.json({ limit: '10mb' })); // Limit JSON payload size
+app.use(express.urlencoded({ extended: false, limit: '10mb' }));
+
+// Trust proxy for better security behind reverse proxies
+app.set('trust proxy', 1);
 
 app.use((req, res, next) => {
   const start = Date.now();
