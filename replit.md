@@ -313,6 +313,17 @@ Preferred communication style: Simple, everyday language.
   - Breadcrumb navigation back to main job list
   - Detailed classification reasoning in popup dialogs
 
+### January 15, 2025 - Exclusion System Fix & Complete Classification
+- **Fixed Exclusion 0% Confidence Issue**: Completely rewrote exclusion logic to classify FIRST, then mark as excluded
+- **Full Classification Preserved**: Excluded payees now retain proper classification, confidence scores, and SIC codes
+- **Enhanced Reasoning**: Exclusion messages show both exclusion reason AND original AI classification reasoning
+- **Working Examples**:
+  - Bank of America: Banking (98% confidence) + Excluded due to "bank" keyword  
+  - Wells Fargo Bank: Banking (98% confidence) + Excluded due to "bank" keyword
+  - Microsoft: Business (98% confidence) + Not excluded
+- **Single Classification Feature**: Added one-off Quick Classify tab for instant payee testing
+- **API Endpoint**: `/api/classify-single` for manual testing and integration
+
 ### January 15, 2025 (Latest) - Production Optimization & Performance Hardening
 - **Database Performance**: Added critical performance indexes for frequent queries
   - `idx_payee_classifications_batch_id` for batch operations

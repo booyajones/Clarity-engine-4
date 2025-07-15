@@ -440,23 +440,25 @@ export class OptimizedClassificationService {
   private async classifyPayee(payee: PayeeData): Promise<ClassificationResult> {
     const normalizedName = this.normalizePayeeName(payee.originalName);
     
-    // Check for exclusion keywords first
+    // Always perform full classification first
+    const classification = await this.performOpenAIClassification(payee);
+    
+    // Check for exclusion keywords after classification
     const exclusionResult = await keywordExclusionService.checkExclusion(payee.originalName);
     if (exclusionResult.isExcluded) {
-      // Still classify excluded items properly, but mark them as excluded
-      const classification = await this.performOpenAIClassification(payee);
+      // Keep the original classification but mark as excluded
       return {
         payeeType: classification.payeeType,
-        confidence: 1.0, // 100% confidence for exclusions since they are correctly identified
+        confidence: classification.confidence, // Keep original confidence score
         sicCode: classification.sicCode,
         sicDescription: classification.sicDescription,
-        reasoning: `${exclusionResult.reason || "Excluded by keyword filter"}. Classification: ${classification.reasoning}`,
+        reasoning: `${exclusionResult.reason || "Excluded by keyword filter"}. Original classification: ${classification.reasoning}`,
         isExcluded: true,
         exclusionKeyword: exclusionResult.matchedKeyword,
       };
     }
     
-    return this.performOpenAIClassification(payee);
+    return classification;
   }
 
   private async performOpenAIClassification(payee: PayeeData): Promise<ClassificationResult> {
@@ -839,41 +841,43 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
   
   // Public method for single payee classification
   async classifyPayee(payeeData: PayeeData): Promise<ClassificationResult> {
-    // Check for exclusion first
-    const exclusionResult = await keywordExclusionService.checkExclusion(payeeData.originalName);
-    if (exclusionResult.isExcluded) {
-      return {
-        payeeType: "Unknown",
-        confidence: 0,
-        reasoning: `Excluded due to keyword: ${exclusionResult.exclusionKeyword}`,
-        isExcluded: true,
-        exclusionKeyword: exclusionResult.exclusionKeyword
-      };
-    }
-
-    // Perform OpenAI classification first
+    // Always perform full classification first
+    let result: ClassificationResult;
+    
+    // Perform OpenAI classification
     const openaiResult = await this.performOpenAIClassification(payeeData, payeeData.originalName);
     
-    // If confidence is high enough, return the result
+    // If confidence is high enough, use OpenAI result
     if (openaiResult.confidence >= 0.80) {
-      return openaiResult;
-    }
-
-    // If confidence is low and name seems unclear, try web search
-    if (this.shouldTriggerWebSearch(payeeData.originalName, openaiResult.confidence)) {
-      try {
-        const webSearchResult = await this.performWebSearchClassification(payeeData, payeeData.originalName);
-        // Use web search result if it has higher confidence
-        if (webSearchResult.confidence > openaiResult.confidence) {
-          return webSearchResult;
+      result = openaiResult;
+    } else {
+      // Try web search for low confidence cases
+      if (this.shouldTriggerWebSearch(payeeData.originalName, openaiResult.confidence)) {
+        try {
+          const webSearchResult = await this.performWebSearchClassification(payeeData, payeeData.originalName);
+          // Use web search result if it has higher confidence
+          result = webSearchResult.confidence > openaiResult.confidence ? webSearchResult : openaiResult;
+        } catch (error) {
+          console.log(`Web search failed for ${payeeData.originalName}: ${error.message}`);
+          result = openaiResult;
         }
-      } catch (error) {
-        console.log(`Web search failed for ${payeeData.originalName}: ${error.message}`);
+      } else {
+        result = openaiResult;
       }
     }
 
-    // Return the OpenAI result as final classification
-    return openaiResult;
+    // Now check for exclusion and mark accordingly (but keep the classification)
+    const exclusionResult = await keywordExclusionService.checkExclusion(payeeData.originalName);
+    if (exclusionResult.isExcluded) {
+      return {
+        ...result,
+        reasoning: `${exclusionResult.reason || "Excluded by keyword filter"}. Original classification: ${result.reasoning}`,
+        isExcluded: true,
+        exclusionKeyword: exclusionResult.exclusionKeyword || exclusionResult.matchedKeyword
+      };
+    }
+
+    return result;
   }
 
   private async fallbackWebSearch(params: { query: string }): Promise<string> {
