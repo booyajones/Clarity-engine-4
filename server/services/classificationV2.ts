@@ -167,16 +167,28 @@ export class OptimizedClassificationService {
     const payeeStream = new Readable({ objectMode: true, read() {} });
     
     try {
+      console.log(`📊 Processing Excel file: ${filePath}`);
+      console.log(`📊 Payee column specified: ${payeeColumn}`);
+      
       const workbook = XLSX.readFile(filePath);
+      console.log(`📊 Workbook loaded. Sheet names: ${workbook.SheetNames.join(', ')}`);
+      
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
       
+      console.log(`📊 JSON data length: ${jsonData.length}`);
+      console.log(`📊 First 3 rows:`, jsonData.slice(0, 3));
+      
       let rowIndex = 0;
+      let processedCount = 0;
+      
       for (const row of jsonData) {
         const nameCol = payeeColumn || this.findNameColumn(row as Record<string, any>);
+        console.log(`📊 Row ${rowIndex}: nameCol="${nameCol}", value="${(row as any)[nameCol || '']}"`, Object.keys(row));
+        
         if (nameCol && (row as any)[nameCol]) {
-          payeeStream.push({
+          const payeeData = {
             originalName: (row as any)[nameCol],
             address: (row as any).address || (row as any).Address,
             city: (row as any).city || (row as any).City,
@@ -184,11 +196,19 @@ export class OptimizedClassificationService {
             zipCode: (row as any).zip || (row as any).ZIP || (row as any).zipCode,
             originalData: row,
             index: rowIndex++
-          });
+          };
+          
+          console.log(`📊 Processing payee: ${payeeData.originalName}`);
+          payeeStream.push(payeeData);
+          processedCount++;
         }
+        rowIndex++;
       }
+      
+      console.log(`📊 Total processed: ${processedCount} out of ${jsonData.length} rows`);
       payeeStream.push(null);
     } catch (err) {
+      console.error(`📊 Excel processing error:`, err);
       payeeStream.destroy(err as Error);
     }
     
