@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { classificationService } from "./services/classification";
 import multer from "multer";
 import csv from "csv-parser";
-import * as XLSX from "xlsx";
+import XLSX from "xlsx";
 import fs from "fs";
 import path from "path";
 import { z } from "zod";
@@ -172,11 +172,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         headers = firstRow;
       } else if (ext === ".xlsx" || ext === ".xls") {
-        const workbook = XLSX.readFile(filePath);
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][];
-        headers = jsonData[0] || [];
+        console.log(`Processing Excel file: ${filePath}, extension: ${ext}`);
+        console.log(`XLSX object:`, typeof XLSX, Object.keys(XLSX));
+        
+        try {
+          const workbook = XLSX.readFile(filePath);
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][];
+          headers = jsonData[0] || [];
+          console.log(`Excel headers extracted:`, headers);
+        } catch (xlsxError) {
+          console.error("XLSX processing error:", xlsxError);
+          throw xlsxError;
+        }
       }
 
       // Don't delete the temp file yet, we need it for processing
