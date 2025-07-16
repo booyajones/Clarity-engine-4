@@ -41,7 +41,8 @@ export interface IStorage {
   createPayeeClassifications(classifications: InsertPayeeClassification[]): Promise<PayeeClassification[]>;
   getPayeeClassification(id: number): Promise<PayeeClassification | undefined>;
   updatePayeeClassification(id: number, updates: Partial<PayeeClassification>): Promise<PayeeClassification>;
-  getBatchClassifications(batchId: number): Promise<PayeeClassification[]>;
+  getBatchClassifications(batchId: number, limit?: number, offset?: number): Promise<PayeeClassification[]>;
+  getBatchClassificationCount(batchId: number): Promise<number>;
   getPendingReviewClassifications(limit?: number): Promise<PayeeClassification[]>;
   getClassificationStats(): Promise<{
     totalPayees: number;
@@ -149,12 +150,31 @@ export class DatabaseStorage implements IStorage {
     return classification;
   }
 
-  async getBatchClassifications(batchId: number): Promise<PayeeClassification[]> {
-    return await db
+  async getBatchClassifications(batchId: number, limit?: number, offset?: number): Promise<PayeeClassification[]> {
+    let query = db
       .select()
       .from(payeeClassifications)
       .where(eq(payeeClassifications.batchId, batchId))
       .orderBy(desc(payeeClassifications.createdAt));
+    
+    if (limit !== undefined) {
+      query = query.limit(limit);
+    }
+    
+    if (offset !== undefined) {
+      query = query.offset(offset);
+    }
+    
+    return await query;
+  }
+
+  async getBatchClassificationCount(batchId: number): Promise<number> {
+    const result = await db
+      .select({ count: count() })
+      .from(payeeClassifications)
+      .where(eq(payeeClassifications.batchId, batchId));
+    
+    return result[0]?.count || 0;
   }
 
   async getPendingReviewClassifications(limit = 50): Promise<PayeeClassification[]> {

@@ -99,6 +99,17 @@ interface ClassificationResponse {
     averageConfidence: number;
     duplicates: number;
   };
+  isLargeDataset?: boolean;
+  totalRecords?: number;
+  threshold?: number;
+  message?: string;
+  pagination?: {
+    page: number;
+    limit: number;
+    totalCount: number;
+    totalPages: number;
+    hasMore: boolean;
+  };
 }
 
 interface ClassificationViewerProps {
@@ -112,6 +123,8 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
   const [selectedType, setSelectedType] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("originalName");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(100);
 
   const handleSort = (column: string) => {
     if (sortBy === column) {
@@ -133,7 +146,12 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
   const [selectedClassification, setSelectedClassification] = useState<ClassificationData | null>(null);
 
   const { data, isLoading, error } = useQuery<ClassificationResponse>({
-    queryKey: ["/api/classifications", batchId],
+    queryKey: ["/api/classifications", batchId, currentPage, pageSize],
+    queryFn: async () => {
+      const response = await fetch(`/api/classifications/${batchId}?page=${currentPage}&limit=${pageSize}`);
+      if (!response.ok) throw new Error('Failed to fetch classifications');
+      return response.json();
+    },
   });
 
   const handleDownload = async (filtered = false) => {
@@ -362,6 +380,87 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
 
   if (!data) return null;
 
+  // Handle large datasets
+  if (data.isLargeDataset) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="bg-white border-b border-gray-100">
+          <div className="max-w-7xl mx-auto px-8 py-8">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <Button variant="ghost" onClick={onBack}>
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Jobs
+                </Button>
+                <div>
+                  <h1 className="text-2xl font-semibold text-gray-900">
+                    {data.batch.originalFilename}
+                  </h1>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Classification Results • {data.totalRecords} total records
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="max-w-4xl mx-auto p-8">
+          <Card className="p-8 text-center">
+            <div className="flex flex-col items-center gap-4">
+              <div className="p-3 bg-amber-100 rounded-full">
+                <TrendingUp className="h-8 w-8 text-amber-600" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+                  Large Dataset Detected
+                </h2>
+                <p className="text-gray-600 max-w-2xl">
+                  {data.message}
+                </p>
+              </div>
+              <div className="flex gap-4 mt-4">
+                <Button onClick={() => handleDownload()} className="bg-primary-500 hover:bg-primary-600">
+                  <Download className="h-4 w-4 mr-2" />
+                  Download Full Results
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => window.location.reload()}
+                >
+                  <Eye className="h-4 w-4 mr-2" />
+                  View Anyway (May be slow)
+                </Button>
+              </div>
+              <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-gray-900">
+                      {data.totalRecords?.toLocaleString()}
+                    </div>
+                    <div className="text-gray-600">Total Records</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">
+                      {Math.round((data.summary.averageConfidence || 0) * 100)}%
+                    </div>
+                    <div className="text-gray-600">Avg Confidence</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {data.threshold}+
+                    </div>
+                    <div className="text-gray-600">Threshold</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-100">
@@ -378,6 +477,9 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                 </h1>
                 <p className="text-sm text-gray-500 mt-1">
                   Classification Results • {data.summary.total} total records
+                  {data.pagination && (
+                    <span> • Page {data.pagination.page} of {data.pagination.totalPages}</span>
+                  )}
                 </p>
               </div>
             </div>
@@ -800,6 +902,51 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                   ))}
                 </TableBody>
               </Table>
+              
+              {/* Pagination Controls */}
+              {data.pagination && data.pagination.totalPages > 1 && (
+                <div className="flex items-center justify-between px-6 py-4 border-t">
+                  <div className="text-sm text-gray-500">
+                    Showing {((data.pagination.page - 1) * data.pagination.limit) + 1} to {Math.min(data.pagination.page * data.pagination.limit, data.pagination.totalCount)} of {data.pagination.totalCount} results
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                    
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(5, data.pagination.totalPages) }, (_, i) => {
+                        const page = Math.max(1, Math.min(data.pagination.totalPages, currentPage - 2 + i));
+                        return (
+                          <Button
+                            key={page}
+                            variant={currentPage === page ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setCurrentPage(page)}
+                            className="w-8 h-8"
+                          >
+                            {page}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(Math.min(data.pagination.totalPages, currentPage + 1))}
+                      disabled={currentPage === data.pagination.totalPages}
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

@@ -380,16 +380,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get classifications for viewing
+  // Get classifications for viewing with pagination
   app.get("/api/classifications/:id", async (req, res) => {
     try {
       const batchId = parseInt(req.params.id);
-      const classifications = await storage.getBatchClassifications(batchId);
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 100;
+      const offset = (page - 1) * limit;
+      
       const batch = await storage.getUploadBatch(batchId);
-
       if (!batch) {
         return res.status(404).json({ error: "Batch not found" });
       }
+
+      // Check if dataset is too large for viewing
+      const totalRecords = batch.totalRecords || 0;
+      const LARGE_DATASET_THRESHOLD = 1000;
+      
+      if (totalRecords > LARGE_DATASET_THRESHOLD && page === 1) {
+        return res.json({
+          batch,
+          isLargeDataset: true,
+          totalRecords,
+          threshold: LARGE_DATASET_THRESHOLD,
+          message: `This dataset contains ${totalRecords} records. For better performance, we recommend downloading the full results instead of viewing them here.`,
+          classifications: [],
+          summary: {
+            total: totalRecords,
+            business: 0,
+            individual: 0,
+            government: 0,
+            insurance: 0,
+            banking: 0,
+            internalTransfer: 0,
+            unknown: 0,
+            averageConfidence: batch.accuracy || 0,
+            duplicates: 0,
+          }
+        });
+      }
+
+      // For normal datasets, load with pagination
+      const classifications = await storage.getBatchClassifications(batchId, limit, offset);
+      const totalCount = await storage.getBatchClassificationCount(batchId);
 
       // Return structured data for viewing
       const viewData = classifications.map(c => {
@@ -421,20 +454,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       });
 
+      // Calculate summary from current page or provide batch-level summary
+      const summary = {
+        total: totalCount,
+        business: classifications.filter(c => c.payeeType === "Business").length,
+        individual: classifications.filter(c => c.payeeType === "Individual").length,
+        government: classifications.filter(c => c.payeeType === "Government").length,
+        insurance: classifications.filter(c => c.payeeType === "Insurance").length,
+        banking: classifications.filter(c => c.payeeType === "Banking").length,
+        internalTransfer: classifications.filter(c => c.payeeType === "Internal Transfer").length,
+        unknown: classifications.filter(c => c.payeeType === "Unknown").length,
+        averageConfidence: batch.accuracy || 0,
+        duplicates: classifications.filter(c => c.reasoning?.includes("duplicate_id")).length,
+      };
+
       res.json({
         batch,
         classifications: viewData,
-        summary: {
-          total: classifications.length,
-          business: classifications.filter(c => c.payeeType === "Business").length,
-          individual: classifications.filter(c => c.payeeType === "Individual").length,
-          government: classifications.filter(c => c.payeeType === "Government").length,
-          insurance: classifications.filter(c => c.payeeType === "Insurance").length,
-          banking: classifications.filter(c => c.payeeType === "Banking").length,
-          internalTransfer: classifications.filter(c => c.payeeType === "Internal Transfer").length,
-          unknown: classifications.filter(c => c.payeeType === "Unknown").length,
-          averageConfidence: classifications.reduce((sum, c) => sum + c.confidence, 0) / classifications.length,
-          duplicates: classifications.filter(c => c.reasoning?.includes("duplicate_id")).length,
+        summary,
+        pagination: {
+          page,
+          limit,
+          totalCount,
+          totalPages: Math.ceil(totalCount / limit),
+          hasMore: offset + limit < totalCount
         }
       });
     } catch (error) {
