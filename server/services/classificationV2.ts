@@ -84,8 +84,10 @@ export class OptimizedClassificationService {
       let payeeStream: Readable;
       
       if (ext === '.xlsx' || ext === '.xls') {
-        console.log(`📊 Creating Excel stream for ${ext} file...`);
-        payeeStream = this.createExcelStream(filePath, payeeColumn);
+        console.log(`📊 Converting Excel to CSV for processing...`);
+        // Convert Excel to CSV first, then process as CSV
+        const csvFilePath = await this.convertExcelToCsv(filePath);
+        payeeStream = this.createCsvStream(csvFilePath, payeeColumn);
       } else {
         console.log(`📊 Creating CSV stream for ${ext} file (or no extension)...`);
         payeeStream = this.createCsvStream(filePath, payeeColumn);
@@ -98,14 +100,21 @@ export class OptimizedClassificationService {
       throw error;
     } finally {
       this.activeJobs.delete(batchId);
-      // Clean up file after processing
+      // Clean up files after processing
       try {
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
-          console.log(`Deleted file: ${filePath}`);
+          console.log(`Deleted original file: ${filePath}`);
+        }
+        
+        // Clean up temporary CSV file if it exists
+        const csvFilePath = filePath + '.csv';
+        if (fs.existsSync(csvFilePath)) {
+          fs.unlinkSync(csvFilePath);
+          console.log(`Deleted temporary CSV file: ${csvFilePath}`);
         }
       } catch (e) {
-        console.error(`Failed to delete file ${filePath}:`, e);
+        console.error(`Failed to delete files:`, e);
       }
     }
   }
@@ -172,65 +181,29 @@ export class OptimizedClassificationService {
     return payeeStream;
   }
   
-  private createExcelStream(filePath: string, payeeColumn?: string): Readable {
-    const payeeStream = new Readable({ objectMode: true, read() {} });
+  private async convertExcelToCsv(excelFilePath: string): Promise<string> {
+    console.log(`📊 Converting Excel file to CSV: ${excelFilePath}`);
     
     try {
-      console.log(`📊 Processing Excel file: ${filePath}`);
-      console.log(`📊 Payee column specified: ${payeeColumn}`);
-      
-      const workbook = XLSX.readFile(filePath);
-      console.log(`📊 Workbook loaded. Sheet names: ${workbook.SheetNames.join(', ')}`);
-      
+      const workbook = XLSX.readFile(excelFilePath);
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
       
-      console.log(`📊 JSON data length: ${jsonData.length}`);
-      console.log(`📊 First 3 rows:`, jsonData.slice(0, 3));
+      console.log(`📊 Converting sheet "${sheetName}" to CSV`);
       
-      let rowIndex = 0;
-      let processedCount = 0;
+      // Convert to CSV format
+      const csvData = XLSX.utils.sheet_to_csv(worksheet);
       
-      // Use setTimeout to make this async so it doesn't block
-      setTimeout(() => {
-        try {
-          for (const row of jsonData) {
-            const nameCol = payeeColumn || this.findNameColumn(row as Record<string, any>);
-            console.log(`📊 Row ${rowIndex}: nameCol="${nameCol}", value="${(row as any)[nameCol || '']}"`, Object.keys(row));
-            
-            if (nameCol && (row as any)[nameCol]) {
-              const payeeData = {
-                originalName: (row as any)[nameCol],
-                address: (row as any).address || (row as any).Address,
-                city: (row as any).city || (row as any).City,
-                state: (row as any).state || (row as any).State,
-                zipCode: (row as any).zip || (row as any).ZIP || (row as any).zipCode,
-                originalData: row,
-                index: rowIndex++
-              };
-              
-              console.log(`📊 Processing payee: ${payeeData.originalName}`);
-              payeeStream.push(payeeData);
-              processedCount++;
-            }
-            rowIndex++;
-          }
-          
-          console.log(`📊 Total processed: ${processedCount} out of ${jsonData.length} rows`);
-          payeeStream.push(null);
-        } catch (err) {
-          console.error(`📊 Excel processing error in setTimeout:`, err);
-          payeeStream.destroy(err as Error);
-        }
-      }, 0);
+      // Write to temporary CSV file
+      const csvFilePath = excelFilePath + '.csv';
+      fs.writeFileSync(csvFilePath, csvData);
       
+      console.log(`📊 Excel converted to CSV: ${csvFilePath}`);
+      return csvFilePath;
     } catch (err) {
-      console.error(`📊 Excel processing error:`, err);
-      payeeStream.destroy(err as Error);
+      console.error(`📊 Excel to CSV conversion error:`, err);
+      throw err;
     }
-    
-    return payeeStream;
   }
   
   private async processPayeeStream(
