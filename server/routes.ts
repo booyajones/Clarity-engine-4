@@ -218,7 +218,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // Process file in background with selected column
-      processFileAsync({ filename: tempFileName, originalname: originalFilename, path: `uploads/${tempFileName}` }, batch.id, payeeColumn);
+      // Add original extension to temp filename for proper processing
+      const originalExt = path.extname(originalFilename || '').toLowerCase();
+      const tempFilePath = `uploads/${tempFileName}`;
+      
+      processFileAsync({ 
+        filename: tempFileName, 
+        originalname: originalFilename, 
+        path: tempFilePath,
+        extension: originalExt 
+      }, batch.id, payeeColumn);
 
       res.json({ 
         batchId: batch.id, 
@@ -659,12 +668,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 async function processFileAsync(file: any, batchId: number, payeeColumn?: string) {
   try {
     console.log(`Starting optimized file processing for batch ${batchId}, file: ${file.originalname}`);
+    console.log(`File extension: ${file.extension}, file path: ${file.path}`);
     
     // Use the new optimized classification service
     const { optimizedClassificationService } = await import('./services/classificationV2');
     
-    // Process file with streaming to avoid memory issues
-    await optimizedClassificationService.processFileStream(batchId, file.path, payeeColumn);
+    // Process file with streaming to avoid memory issues, pass extension info
+    await optimizedClassificationService.processFileStream(batchId, file.path, payeeColumn, file.extension);
     
     console.log(`File processing completed for batch ${batchId}`);
   } catch (error) {

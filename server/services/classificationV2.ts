@@ -51,7 +51,8 @@ export class OptimizedClassificationService {
   async processFileStream(
     batchId: number,
     filePath: string,
-    payeeColumn?: string
+    payeeColumn?: string,
+    fileExtension?: string
   ): Promise<void> {
     console.log(`Starting processFileStream for batch ${batchId}, file: ${filePath}`);
     
@@ -72,15 +73,23 @@ export class OptimizedClassificationService {
     this.activeJobs.set(batchId, abortController);
     
     try {
-      const ext = path.extname(filePath).toLowerCase();
+      // Use provided extension or detect from file path
+      const ext = fileExtension || path.extname(filePath).toLowerCase();
       console.log(`File path: ${filePath}`);
+      console.log(`Provided extension: "${fileExtension}"`);
       console.log(`Detected extension: "${ext}"`);
       console.log(`Processing ${ext} file for batch ${batchId}, payeeColumn="${payeeColumn}"`);
       
       console.log(`About to create stream for ${ext} file...`);
-      const payeeStream = ext === '.csv' || !ext 
-        ? this.createCsvStream(filePath, payeeColumn)
-        : this.createExcelStream(filePath, payeeColumn);
+      let payeeStream: Readable;
+      
+      if (ext === '.xlsx' || ext === '.xls') {
+        console.log(`📊 Creating Excel stream for ${ext} file...`);
+        payeeStream = this.createExcelStream(filePath, payeeColumn);
+      } else {
+        console.log(`📊 Creating CSV stream for ${ext} file (or no extension)...`);
+        payeeStream = this.createCsvStream(filePath, payeeColumn);
+      }
       
       console.log(`Stream created, starting processPayeeStream...`);
       await this.processPayeeStream(batchId, payeeStream, abortController.signal);
@@ -183,30 +192,39 @@ export class OptimizedClassificationService {
       let rowIndex = 0;
       let processedCount = 0;
       
-      for (const row of jsonData) {
-        const nameCol = payeeColumn || this.findNameColumn(row as Record<string, any>);
-        console.log(`📊 Row ${rowIndex}: nameCol="${nameCol}", value="${(row as any)[nameCol || '']}"`, Object.keys(row));
-        
-        if (nameCol && (row as any)[nameCol]) {
-          const payeeData = {
-            originalName: (row as any)[nameCol],
-            address: (row as any).address || (row as any).Address,
-            city: (row as any).city || (row as any).City,
-            state: (row as any).state || (row as any).State,
-            zipCode: (row as any).zip || (row as any).ZIP || (row as any).zipCode,
-            originalData: row,
-            index: rowIndex++
-          };
+      // Use setTimeout to make this async so it doesn't block
+      setTimeout(() => {
+        try {
+          for (const row of jsonData) {
+            const nameCol = payeeColumn || this.findNameColumn(row as Record<string, any>);
+            console.log(`📊 Row ${rowIndex}: nameCol="${nameCol}", value="${(row as any)[nameCol || '']}"`, Object.keys(row));
+            
+            if (nameCol && (row as any)[nameCol]) {
+              const payeeData = {
+                originalName: (row as any)[nameCol],
+                address: (row as any).address || (row as any).Address,
+                city: (row as any).city || (row as any).City,
+                state: (row as any).state || (row as any).State,
+                zipCode: (row as any).zip || (row as any).ZIP || (row as any).zipCode,
+                originalData: row,
+                index: rowIndex++
+              };
+              
+              console.log(`📊 Processing payee: ${payeeData.originalName}`);
+              payeeStream.push(payeeData);
+              processedCount++;
+            }
+            rowIndex++;
+          }
           
-          console.log(`📊 Processing payee: ${payeeData.originalName}`);
-          payeeStream.push(payeeData);
-          processedCount++;
+          console.log(`📊 Total processed: ${processedCount} out of ${jsonData.length} rows`);
+          payeeStream.push(null);
+        } catch (err) {
+          console.error(`📊 Excel processing error in setTimeout:`, err);
+          payeeStream.destroy(err as Error);
         }
-        rowIndex++;
-      }
+      }, 0);
       
-      console.log(`📊 Total processed: ${processedCount} out of ${jsonData.length} rows`);
-      payeeStream.push(null);
     } catch (err) {
       console.error(`📊 Excel processing error:`, err);
       payeeStream.destroy(err as Error);
