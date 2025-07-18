@@ -921,10 +921,23 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                     
                     <div className="flex items-center gap-1">
                       {Array.from({ length: Math.min(5, data.pagination.totalPages) }, (_, i) => {
-                        const page = Math.max(1, Math.min(data.pagination.totalPages, currentPage - 2 + i));
+                        let page;
+                        if (data.pagination.totalPages <= 5) {
+                          // For 5 or fewer pages, show all of them
+                          page = i + 1;
+                        } else {
+                          // For more than 5 pages, show pages around current page
+                          if (currentPage <= 3) {
+                            page = i + 1;
+                          } else if (currentPage >= data.pagination.totalPages - 2) {
+                            page = data.pagination.totalPages - 4 + i;
+                          } else {
+                            page = currentPage - 2 + i;
+                          }
+                        }
                         return (
                           <Button
-                            key={page}
+                            key={`page-${i}`}
                             variant={currentPage === page ? "default" : "outline"}
                             size="sm"
                             onClick={() => setCurrentPage(page)}

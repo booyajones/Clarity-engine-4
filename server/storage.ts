@@ -56,6 +56,20 @@ export interface IStorage {
   createSicCode(sicCode: InsertSicCode): Promise<SicCode>;
   findSicCodeByPattern(pattern: string): Promise<SicCode | undefined>;
 
+  // Batch summary
+  getBatchSummary(batchId: number): Promise<{
+    total: number;
+    business: number;
+    individual: number;
+    government: number;
+    insurance: number;
+    banking: number;
+    internalTransfer: number;
+    unknown: number;
+    excluded: number;
+    duplicates: number;
+  }>;
+
   // Classification rules
   getClassificationRules(): Promise<ClassificationRule[]>;
   createClassificationRule(rule: InsertClassificationRule): Promise<ClassificationRule>;
@@ -242,6 +256,91 @@ export class DatabaseStorage implements IStorage {
       .where(sql`${sicCodes.description} ILIKE ${'%' + pattern + '%'}`)
       .limit(1);
     return code || undefined;
+  }
+
+  async getBatchSummary(batchId: number): Promise<{
+    total: number;
+    business: number;
+    individual: number;
+    government: number;
+    insurance: number;
+    banking: number;
+    internalTransfer: number;
+    unknown: number;
+    excluded: number;
+    duplicates: number;
+  }> {
+    const result = await db
+      .select({
+        payeeType: payeeClassifications.payeeType,
+        isExcluded: payeeClassifications.isExcluded,
+        count: sql<number>`COUNT(*)`
+      })
+      .from(payeeClassifications)
+      .where(eq(payeeClassifications.batchId, batchId))
+      .groupBy(payeeClassifications.payeeType, payeeClassifications.isExcluded);
+
+    const summary = {
+      total: 0,
+      business: 0,
+      individual: 0,
+      government: 0,
+      insurance: 0,
+      banking: 0,
+      internalTransfer: 0,
+      unknown: 0,
+      excluded: 0,
+      duplicates: 0
+    };
+
+    result.forEach(row => {
+      const count = Number(row.count);
+      summary.total += count;
+      
+      // Count excluded records separately
+      if (row.isExcluded) {
+        summary.excluded += count;
+      }
+      
+      // Always count by type, regardless of exclusion status
+      const type = row.payeeType;
+      switch(type) {
+        case 'Business':
+          summary.business += count;
+          break;
+        case 'Individual':
+          summary.individual += count;
+          break;
+        case 'Government':
+          summary.government += count;
+          break;
+        case 'Insurance':
+          summary.insurance += count;
+          break;
+        case 'Banking':
+          summary.banking += count;
+          break;
+        case 'Internal Transfer':
+          summary.internalTransfer += count;
+          break;
+        case 'Unknown':
+          summary.unknown += count;
+          break;
+      }
+    });
+
+    // Count duplicates separately
+    const [duplicateResult] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(payeeClassifications)
+      .where(and(
+        eq(payeeClassifications.batchId, batchId),
+        sql`${payeeClassifications.reasoning} LIKE '%duplicate_id%'`
+      ));
+    
+    summary.duplicates = Number(duplicateResult?.count || 0);
+
+    return summary;
   }
 
   async getClassificationRules(): Promise<ClassificationRule[]> {

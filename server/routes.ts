@@ -454,18 +454,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       });
 
-      // Calculate summary from current page or provide batch-level summary
+      // Get full batch summary from database, not just current page
+      const batchSummary = await storage.getBatchSummary(batchId);
       const summary = {
-        total: totalCount,
-        business: classifications.filter(c => c.payeeType === "Business").length,
-        individual: classifications.filter(c => c.payeeType === "Individual").length,
-        government: classifications.filter(c => c.payeeType === "Government").length,
-        insurance: classifications.filter(c => c.payeeType === "Insurance").length,
-        banking: classifications.filter(c => c.payeeType === "Banking").length,
-        internalTransfer: classifications.filter(c => c.payeeType === "Internal Transfer").length,
-        unknown: classifications.filter(c => c.payeeType === "Unknown").length,
+        total: batchSummary.total,
+        business: batchSummary.business,
+        individual: batchSummary.individual,
+        government: batchSummary.government,
+        insurance: batchSummary.insurance,
+        banking: batchSummary.banking,
+        internalTransfer: batchSummary.internalTransfer,
+        unknown: batchSummary.unknown,
         averageConfidence: batch.accuracy || 0,
-        duplicates: classifications.filter(c => c.reasoning?.includes("duplicate_id")).length,
+        duplicates: batchSummary.duplicates,
       };
 
       res.json({
