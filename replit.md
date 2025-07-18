@@ -95,18 +95,31 @@ Preferred communication style: Simple, everyday language.
 
 ### Deployment Configuration
 
-#### Current Issue (Fixed)
-The `.replit` file contains a deployment configuration that uses `npm run dev` which is blocked by Replit Deployments for security reasons.
+#### Deployment Configuration Fix Required
+The `.replit` file contains deployment configurations that use `npm run dev` which is blocked by Replit Deployments for security reasons.
 
-#### Manual Fix Required
-To enable deployment, edit the `.replit` file and change line 11 from:
-```
-run = ["sh", "-c", "npm run dev"]
-```
-to:
-```
-run = ["sh", "-c", "npm start"]
-```
+#### Manual Fix Required (2 lines to change)
+To enable deployment, edit the `.replit` file and make these changes:
+
+1. **Change line 2** from:
+   ```
+   run = "npm run dev"
+   ```
+   to:
+   ```
+   run = "npm start"
+   ```
+
+2. **Change line 11** (in deployment section) from:
+   ```
+   run = ["sh", "-c", "npm run dev"]
+   ```
+   to:
+   ```
+   run = ["sh", "-c", "npm start"]
+   ```
+
+**Note**: The `.replit` file is protected and cannot be edited programmatically by the AI assistant. These changes must be made manually in the Replit editor.
 
 #### Deployment Commands
 - **Build**: `npm run build` (already configured correctly)
