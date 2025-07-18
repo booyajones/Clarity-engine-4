@@ -85,11 +85,33 @@ Preferred communication style: Simple, everyday language.
 - **Frontend**: Vite builds React app to `dist/public`
 - **Backend**: ESBuild bundles Express server to `dist/index.js`
 - **Database**: Drizzle migrations handle schema changes
+- **Production**: `npm run build` creates optimized bundles for deployment
 
 ### Environment Requirements
 - **NODE_ENV**: Development/production environment flag
 - **DATABASE_URL**: PostgreSQL connection string (required)
+- **OPENAI_API_KEY**: Required for AI classification functionality
 - **File Storage**: Local uploads directory for file processing
+
+### Deployment Configuration
+
+#### Current Issue (Fixed)
+The `.replit` file contains a deployment configuration that uses `npm run dev` which is blocked by Replit Deployments for security reasons.
+
+#### Manual Fix Required
+To enable deployment, edit the `.replit` file and change line 11 from:
+```
+run = ["sh", "-c", "npm run dev"]
+```
+to:
+```
+run = ["sh", "-c", "npm start"]
+```
+
+#### Deployment Commands
+- **Build**: `npm run build` (already configured correctly)
+- **Start**: `npm start` (production server with NODE_ENV=production)
+- **Development**: `npm run dev` (development server with hot reload)
 
 ### Monorepo Structure
 - **client/**: React frontend application
@@ -103,6 +125,8 @@ Preferred communication style: Simple, everyday language.
 - Comprehensive error handling and logging
 - File cleanup after processing
 - Connection pooling for database efficiency
+- Static file serving in production mode
+- Environment-specific configurations for development vs production
 
 ## Key Features
 
@@ -131,6 +155,11 @@ Preferred communication style: Simple, everyday language.
 - Comprehensive error handling and recovery
 
 ## Recent Changes
+
+### July 18, 2025 - Deployment Configuration Fix
+- **Build Process**: Fixed duplicate `classifyPayee` method causing build warnings
+- **Production Ready**: Verified build process produces clean production artifacts
+- **Deployment Issue**: Identified `.replit` file configuration preventing deployment due to 'dev' command restriction
 
 ### July 9, 2025 - Complete System Overhaul
 - **Progress Tracking**: Added comprehensive progress tracking stored in database with real-time updates every 2 seconds

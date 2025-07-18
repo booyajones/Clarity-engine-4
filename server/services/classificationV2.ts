@@ -448,29 +448,7 @@ export class OptimizedClassificationService {
     }
   }
   
-  private async classifyPayee(payee: PayeeData): Promise<ClassificationResult> {
-    const normalizedName = this.normalizePayeeName(payee.originalName);
-    
-    // Always perform full classification first
-    const classification = await this.performOpenAIClassification(payee);
-    
-    // Check for exclusion keywords after classification
-    const exclusionResult = await keywordExclusionService.checkExclusion(payee.originalName);
-    if (exclusionResult.isExcluded) {
-      // Keep the original classification but mark as excluded
-      return {
-        payeeType: classification.payeeType,
-        confidence: classification.confidence, // Keep original confidence score
-        sicCode: classification.sicCode,
-        sicDescription: classification.sicDescription,
-        reasoning: `${exclusionResult.reason || "Excluded by keyword filter"}. Original classification: ${classification.reasoning}`,
-        isExcluded: true,
-        exclusionKeyword: exclusionResult.matchedKeyword,
-      };
-    }
-    
-    return classification;
-  }
+
 
   private async performOpenAIClassification(payee: PayeeData): Promise<ClassificationResult> {
     try {
