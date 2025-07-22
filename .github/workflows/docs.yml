@@ -14,7 +14,8 @@ jobs:
     steps:
     - uses: actions/checkout@v3
       with:
-        token: ${{ secrets.GITHUB_TOKEN }}
+        token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+        persist-credentials: true
     
     - name: Setup Node.js
       uses: actions/setup-node@v3
@@ -40,6 +41,10 @@ jobs:
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         git add docs/ README.md
-        git diff --staged --quiet || git commit -m "Auto-update documentation [skip ci]"
-        git push
+        if ! git diff --staged --quiet; then
+          git commit -m "Auto-update documentation [skip ci]"
+          git push
+        else
+          echo "No documentation changes to commit"
+        fi
       if: github.event_name == 'push'
