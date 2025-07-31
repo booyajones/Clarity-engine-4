@@ -63,42 +63,44 @@ export class PayeeMatchingService {
         return { matched: false };
       }
       
-      // Find the best match from BigQuery results
-      let bestMatch = candidates[0]; // Already sorted by confidence from BigQuery
+      // Find the best match using our fuzzy matching algorithms
+      let bestMatch = null;
+      let bestConfidence = 0;
+      let bestMatchResult = null;
       
-      // Use the confidence score from BigQuery
-      let finalConfidence = bestMatch.confidence || 0.5;
-      let matchReasoning = bestMatch.matchReasoning || 'BigQuery match';
-      let matchType = 'deterministic';
-      
-      // If confidence is below threshold and AI is enabled, enhance with AI
-      if (finalConfidence < opts.confidenceThreshold && 
-          finalConfidence >= opts.aiConfidenceThreshold && 
-          opts.enableAI && 
-          this.openai) {
-        
-        const aiResult = await this.enhanceWithAI(
+      // Evaluate each candidate with our fuzzy matcher
+      for (const candidate of candidates) {
+        const fuzzyResult = await fuzzyMatcher.matchPayee(
           classification.cleanedName,
-          bestMatch.payeeName,
-          finalConfidence,
-          matchReasoning
+          candidate.payeeName
         );
         
-        if (aiResult.shouldMatch) {
-          finalConfidence = aiResult.confidence;
-          matchReasoning = aiResult.reasoning;
-          matchType = 'ai_enhanced';
-        } else {
-          // AI determined it's not a match
-          return { matched: false };
+        if (fuzzyResult.confidence > bestConfidence) {
+          bestConfidence = fuzzyResult.confidence;
+          bestMatch = candidate;
+          bestMatchResult = fuzzyResult;
         }
       }
+      
+      if (!bestMatch || !bestMatchResult) {
+        return { matched: false };
+      }
+      
+      // Use the fuzzy matcher's confidence and reasoning
+      let finalConfidence = bestMatchResult.confidence;
+      let matchReasoning = bestMatchResult.matchType === 'ai_enhanced' 
+        ? bestMatchResult.details.aiReasoning || 'AI-enhanced match'
+        : `${bestMatchResult.matchType} match with ${Math.round(finalConfidence * 100)}% confidence`;
+      let matchType = bestMatchResult.matchType;
+      
+      // The fuzzy matcher already handles AI enhancement internally
       
       // Calculate Finexio-specific match score (0-100)
       const finexioMatchScore = Math.round(finalConfidence * 100);
       
-      // Only accept matches above threshold
-      if (finalConfidence >= opts.confidenceThreshold) {
+      // Only accept matches that the fuzzy matcher determined as valid
+      // (fuzzy matcher already handles thresholds: >=0.85 direct, 0.6-0.85 AI-enhanced, <0.6 no match)
+      if (bestMatchResult.isMatch) {
         // Store the match in database
         await storage.createPayeeMatch({
           classificationId: classification.id,

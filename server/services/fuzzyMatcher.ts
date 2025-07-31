@@ -9,6 +9,9 @@ export class FuzzyMatcher {
   constructor() {
     if (process.env.OPENAI_API_KEY) {
       this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      console.log('FuzzyMatcher: OpenAI initialized successfully');
+    } else {
+      console.log('FuzzyMatcher: OpenAI not initialized - no API key');
     }
   }
   
@@ -58,8 +61,10 @@ export class FuzzyMatcher {
     
     const averageConfidence = weightedSum / totalWeight;
     
-    // If confidence is below threshold, use AI for final determination
-    if (averageConfidence >= 0.85) {
+    console.log(`Fuzzy match: "${inputName}" vs "${candidateName}" - Confidence: ${(averageConfidence * 100).toFixed(2)}%`);
+    
+    // If confidence is below 90%, use AI for final determination
+    if (averageConfidence >= 0.9) {
       return {
         isMatch: true,
         confidence: averageConfidence,
@@ -67,8 +72,10 @@ export class FuzzyMatcher {
         details: matchDetails,
       };
     } else if (averageConfidence >= 0.6 && this.openai) {
-      // Use AI for borderline cases
+      // Use AI for cases below 90% confidence
+      console.log(`Triggering AI enhancement for confidence ${(averageConfidence * 100).toFixed(2)}% (below 90% threshold)`);
       const aiResult = await this.aiMatch(inputName, candidateName, matchDetails);
+      console.log(`AI result: isMatch=${aiResult.isMatch}, confidence=${(aiResult.confidence * 100).toFixed(2)}%, type=${aiResult.matchType}`);
       return aiResult;
     } else {
       return {

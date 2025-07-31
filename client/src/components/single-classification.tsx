@@ -238,7 +238,7 @@ export function SingleClassification() {
                     ✓ Finexio Network Match
                   </p>
                   <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-100">
-                    {Math.round(result.bigQueryMatch.finexioSupplier.finexioMatchScore * 100)}% Match
+                    {Math.round(result.bigQueryMatch.finexioSupplier.finexioMatchScore)}% Match
                   </Badge>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
