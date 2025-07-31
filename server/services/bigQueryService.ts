@@ -34,17 +34,34 @@ export class BigQueryService {
     return this.isConfigured;
   }
   
-  // Schema for payee records in BigQuery
+  // Schema for payee records in BigQuery (matching your actual table structure)
   private payeeRecordSchema = z.object({
-    payee_id: z.string(),
-    payee_name: z.string(),
-    normalized_name: z.string().optional(),
-    aliases: z.array(z.string()).optional(),
-    category: z.string().optional(),
-    sic_code: z.string().optional(),
-    is_active: z.boolean().default(true),
+    id: z.string(),
+    name: z.string(),
+    category_c: z.string().optional(),
+    mcc_c: z.string().optional(),
+    primary_address_street_c: z.string().optional(),
+    primary_address_city_c: z.string().optional(),
+    primary_address_state_c: z.string().optional(),
+    primary_address_postal_code_c: z.string().optional(),
+    industry_c: z.string().optional(),
+    mastercard_business_name_c: z.string().optional(),
+    is_deleted: z.boolean().optional(),
   });
   
+  // Get table schema
+  async getTableSchema(datasetId: string, tableId: string): Promise<any> {
+    if (!this.isConfigured || !this.bigquery) {
+      throw new Error('BigQuery service not configured');
+    }
+    
+    const dataset = this.bigquery.dataset(datasetId);
+    const table = dataset.table(tableId);
+    
+    const [metadata] = await table.getMetadata();
+    return metadata.schema;
+  }
+
   // Query known payees from BigQuery
   async searchKnownPayees(payeeName: string): Promise<Array<{
     payeeId: string;
@@ -58,40 +75,27 @@ export class BigQueryService {
       throw new Error('BigQuery service not configured');
     }
     
-    const dataset = process.env.BIGQUERY_DATASET || 'payee_data';
-    const table = process.env.BIGQUERY_TABLE || 'known_payees';
+    const dataset = process.env.BIGQUERY_DATASET || 'SE_Enrichment';
+    const table = process.env.BIGQUERY_TABLE || 'supplier';
     
-    // Query with fuzzy matching using BigQuery's string functions
+    // Simple query to test connection and search
     const query = `
       SELECT 
-        payee_id,
-        payee_name,
-        normalized_name,
-        aliases,
-        category,
-        sic_code,
-        -- Calculate similarity scores
-        GREATEST(
-          -- Exact match
-          IF(LOWER(payee_name) = LOWER(@payeeName), 1.0, 0),
-          -- Normalized name match
-          IF(LOWER(normalized_name) = LOWER(@payeeName), 0.95, 0),
-          -- Contains match
-          IF(LOWER(payee_name) LIKE CONCAT('%', LOWER(@payeeName), '%'), 0.8, 0),
-          -- Levenshtein distance approximation
-          (1 - (ABS(LENGTH(payee_name) - LENGTH(@payeeName)) / GREATEST(LENGTH(payee_name), LENGTH(@payeeName)))) * 0.7
-        ) as similarity_score
+        id,
+        name,
+        category_c,
+        mcc_c,
+        industry_c,
+        mastercard_business_name_c,
+        primary_address_city_c,
+        primary_address_state_c
       FROM \`${process.env.BIGQUERY_PROJECT_ID}.${dataset}.${table}\`
-      WHERE is_active = TRUE
+      WHERE COALESCE(is_deleted, false) = false
         AND (
-          LOWER(payee_name) LIKE CONCAT('%', LOWER(@payeeName), '%')
-          OR LOWER(normalized_name) LIKE CONCAT('%', LOWER(@payeeName), '%')
-          OR EXISTS (
-            SELECT 1 FROM UNNEST(aliases) AS alias 
-            WHERE LOWER(alias) LIKE CONCAT('%', LOWER(@payeeName), '%')
-          )
+          LOWER(name) LIKE CONCAT('%', LOWER(@payeeName), '%')
+          OR LOWER(COALESCE(mastercard_business_name_c, '')) LIKE CONCAT('%', LOWER(@payeeName), '%')
         )
-      ORDER BY similarity_score DESC
+      ORDER BY name ASC
       LIMIT 10
     `;
     
@@ -104,12 +108,12 @@ export class BigQueryService {
       const [rows] = await this.bigquery.query(options);
       
       return rows.map(row => ({
-        payeeId: row.payee_id,
-        payeeName: row.payee_name,
-        normalizedName: row.normalized_name,
-        aliases: row.aliases,
-        category: row.category,
-        sicCode: row.sic_code,
+        payeeId: row.id,
+        payeeName: row.name,
+        normalizedName: row.mastercard_business_name_c || undefined,
+        aliases: undefined, // Your table doesn't have aliases
+        category: row.category_c || row.industry_c || undefined,
+        sicCode: row.mcc_c || undefined,
       }));
     } catch (error) {
       console.error('Error querying BigQuery:', error);
@@ -117,7 +121,7 @@ export class BigQueryService {
     }
   }
   
-  // Insert or update payee records in BigQuery
+  // Insert or update payee records in BigQuery (disabled for read-only access)
   async upsertPayee(payee: {
     payeeId: string;
     payeeName: string;
@@ -126,41 +130,9 @@ export class BigQueryService {
     category?: string;
     sicCode?: string;
   }): Promise<void> {
-    if (!this.isConfigured || !this.bigquery) {
-      throw new Error('BigQuery service not configured');
-    }
-    
-    const dataset = process.env.BIGQUERY_DATASET || 'payee_data';
-    const table = process.env.BIGQUERY_TABLE || 'known_payees';
-    
-    const row = {
-      payee_id: payee.payeeId,
-      payee_name: payee.payeeName,
-      normalized_name: payee.normalizedName || payee.payeeName.toLowerCase().trim(),
-      aliases: payee.aliases || [],
-      category: payee.category,
-      sic_code: payee.sicCode,
-      is_active: true,
-      updated_at: new Date().toISOString(),
-    };
-    
-    try {
-      await this.bigquery
-        .dataset(dataset)
-        .table(table)
-        .insert([row], { 
-          skipInvalidRows: false,
-          ignoreUnknownValues: false,
-          createInsertId: false,
-        });
-    } catch (error: any) {
-      // Handle duplicate key error by updating instead
-      if (error.code === 409 || error.message?.includes('duplicate')) {
-        await this.updatePayee(payee);
-      } else {
-        throw error;
-      }
-    }
+    // This method is disabled since we only have read access to the existing supplier table
+    console.log('upsertPayee disabled - read-only access to existing BigQuery table');
+    return;
   }
   
   private async updatePayee(payee: {
@@ -171,34 +143,9 @@ export class BigQueryService {
     category?: string;
     sicCode?: string;
   }): Promise<void> {
-    const dataset = process.env.BIGQUERY_DATASET || 'payee_data';
-    const table = process.env.BIGQUERY_TABLE || 'known_payees';
-    
-    const query = `
-      UPDATE \`${process.env.BIGQUERY_PROJECT_ID}.${dataset}.${table}\`
-      SET 
-        payee_name = @payeeName,
-        normalized_name = @normalizedName,
-        aliases = @aliases,
-        category = @category,
-        sic_code = @sicCode,
-        updated_at = CURRENT_TIMESTAMP()
-      WHERE payee_id = @payeeId
-    `;
-    
-    const options = {
-      query: query,
-      params: {
-        payeeId: payee.payeeId,
-        payeeName: payee.payeeName,
-        normalizedName: payee.normalizedName || payee.payeeName.toLowerCase().trim(),
-        aliases: payee.aliases || [],
-        category: payee.category,
-        sicCode: payee.sicCode,
-      },
-    };
-    
-    await this.bigquery!.query(options);
+    // This method is disabled since we only have read access to the existing supplier table
+    console.log('updatePayee disabled - read-only access to existing BigQuery table');
+    return;
   }
 }
 

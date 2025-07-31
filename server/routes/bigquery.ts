@@ -146,4 +146,24 @@ router.post('/match-batch/:batchId', async (req, res) => {
   }
 });
 
+// Get table schema
+router.post('/test-schema', async (req, res) => {
+  try {
+    const { projectId, datasetId, tableId } = req.body;
+    
+    const schema = await bigQueryService.getTableSchema(datasetId, tableId);
+    
+    res.json({
+      success: true,
+      schema: schema
+    });
+  } catch (error) {
+    console.error('BigQuery schema test failed:', error);
+    res.status(500).json({
+      error: 'BigQuery schema failed',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 export default router;
