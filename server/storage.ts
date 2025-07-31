@@ -6,6 +6,7 @@ import {
   classificationRules,
   exclusionKeywords,
   exclusionLogs,
+  payeeMatches,
   type User, 
   type InsertUser,
   type UploadBatch,
@@ -19,7 +20,9 @@ import {
   type ExclusionKeyword,
   type InsertExclusionKeyword,
   type ExclusionLog,
-  type InsertExclusionLog
+  type InsertExclusionLog,
+  type PayeeMatch,
+  type InsertPayeeMatch
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, lt, count, sql } from "drizzle-orm";
@@ -86,6 +89,14 @@ export interface IStorage {
   // Delete operations
   deleteUploadBatch(id: number): Promise<void>;
   deleteBatchClassifications(batchId: number): Promise<void>;
+  
+  // Payee matching operations
+  createPayeeMatch(match: InsertPayeeMatch): Promise<PayeeMatch>;
+  getPayeeMatch(id: number): Promise<PayeeMatch | undefined>;
+  updatePayeeMatch(id: number, updates: Partial<PayeeMatch>): Promise<PayeeMatch>;
+  getClassificationMatches(classificationId: number): Promise<PayeeMatch[]>;
+  getBatchMatches(batchId: number): Promise<PayeeMatch[]>;
+  getPayeeClassificationsByBatch(batchId: number): Promise<PayeeClassification[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -445,6 +456,64 @@ export class DatabaseStorage implements IStorage {
         updatedAt: new Date(),
       })
       .where(eq(payeeClassifications.id, id));
+  }
+  
+  // Payee matching implementations
+  async createPayeeMatch(match: InsertPayeeMatch): Promise<PayeeMatch> {
+    const [payeeMatch] = await db
+      .insert(payeeMatches)
+      .values(match)
+      .returning();
+    return payeeMatch;
+  }
+  
+  async getPayeeMatch(id: number): Promise<PayeeMatch | undefined> {
+    const [match] = await db
+      .select()
+      .from(payeeMatches)
+      .where(eq(payeeMatches.id, id));
+    return match || undefined;
+  }
+  
+  async updatePayeeMatch(id: number, updates: Partial<PayeeMatch>): Promise<PayeeMatch> {
+    const [updated] = await db
+      .update(payeeMatches)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(eq(payeeMatches.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async getClassificationMatches(classificationId: number): Promise<PayeeMatch[]> {
+    return await db
+      .select()
+      .from(payeeMatches)
+      .where(eq(payeeMatches.classificationId, classificationId))
+      .orderBy(desc(payeeMatches.matchConfidence));
+  }
+  
+  async getBatchMatches(batchId: number): Promise<PayeeMatch[]> {
+    const results = await db
+      .select()
+      .from(payeeMatches)
+      .innerJoin(
+        payeeClassifications,
+        eq(payeeMatches.classificationId, payeeClassifications.id)
+      )
+      .where(eq(payeeClassifications.batchId, batchId))
+      .orderBy(desc(payeeMatches.matchConfidence));
+    
+    return results.map(r => r.payee_matches);
+  }
+  
+  async getPayeeClassificationsByBatch(batchId: number): Promise<PayeeClassification[]> {
+    return await db
+      .select()
+      .from(payeeClassifications)
+      .where(eq(payeeClassifications.batchId, batchId));
   }
 }
 

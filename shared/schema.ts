@@ -108,6 +108,22 @@ export const exclusionLogs = pgTable("exclusion_logs", {
   timestamp: timestamp("timestamp").defaultNow().notNull(),
 });
 
+// BigQuery payee matching results
+export const payeeMatches = pgTable("payee_matches", {
+  id: serial("id").primaryKey(),
+  classificationId: integer("classification_id").notNull(),
+  bigQueryPayeeId: text("bigquery_payee_id").notNull(),
+  bigQueryPayeeName: text("bigquery_payee_name").notNull(),
+  matchConfidence: real("match_confidence").notNull(),
+  matchType: text("match_type").notNull(), // deterministic, ai_enhanced, ai_unavailable
+  matchDetails: jsonb("match_details"), // Detailed scores from each algorithm
+  isConfirmed: boolean("is_confirmed").default(false),
+  confirmedBy: integer("confirmed_by"),
+  confirmedAt: timestamp("confirmed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
@@ -149,6 +165,12 @@ export const insertExclusionLogSchema = createInsertSchema(exclusionLogs).omit({
   timestamp: true,
 });
 
+export const insertPayeeMatchSchema = createInsertSchema(payeeMatches).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Select types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -164,3 +186,5 @@ export type ExclusionKeyword = typeof exclusionKeywords.$inferSelect;
 export type InsertExclusionKeyword = z.infer<typeof insertExclusionKeywordSchema>;
 export type ExclusionLog = typeof exclusionLogs.$inferSelect;
 export type InsertExclusionLog = z.infer<typeof insertExclusionLogSchema>;
+export type PayeeMatch = typeof payeeMatches.$inferSelect;
+export type InsertPayeeMatch = z.infer<typeof insertPayeeMatchSchema>;

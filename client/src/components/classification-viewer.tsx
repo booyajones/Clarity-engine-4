@@ -50,6 +50,7 @@ import {
   ChevronsUpDown,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface ClassificationData {
   id: number;
@@ -79,6 +80,19 @@ interface ClassificationData {
   mastercardDataQualityLevel?: string;
   mastercardEnrichmentDate?: string;
   createdAt: string;
+}
+
+interface PayeeMatch {
+  id: number;
+  classificationId: number;
+  bigQueryPayeeId: string;
+  bigQueryPayeeName: string;
+  matchConfidence: number;
+  matchType: string;
+  matchDetails: any;
+  isConfirmed: boolean;
+  confirmedBy?: number;
+  confirmedAt?: string;
 }
 
 interface BatchData {
@@ -153,6 +167,8 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
       : <ChevronDown className="h-4 w-4 text-gray-600" />;
   };
   const [selectedClassification, setSelectedClassification] = useState<ClassificationData | null>(null);
+  const [payeeMatches, setPayeeMatches] = useState<PayeeMatch[]>([]);
+  const [loadingMatches, setLoadingMatches] = useState(false);
 
   const { data, isLoading, error } = useQuery<ClassificationResponse>({
     queryKey: ["/api/classifications", batchId, currentPage, pageSize],
@@ -249,6 +265,50 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
       toast({
         title: "Copy Failed",
         description: "Could not copy to clipboard.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Fetch BigQuery matches for a classification
+  const fetchPayeeMatches = async (classificationId: number) => {
+    setLoadingMatches(true);
+    try {
+      const response = await fetch(`/api/bigquery/matches/${classificationId}`);
+      if (!response.ok) throw new Error('Failed to fetch matches');
+      const data = await response.json();
+      setPayeeMatches(data.matches || []);
+    } catch (error) {
+      console.error('Error fetching matches:', error);
+      setPayeeMatches([]);
+    } finally {
+      setLoadingMatches(false);
+    }
+  };
+
+  // Confirm or reject a match
+  const handleMatchConfirmation = async (matchId: number, isCorrect: boolean) => {
+    try {
+      const response = await apiRequest(`/api/bigquery/matches/${matchId}/confirm`, {
+        method: 'POST',
+        body: JSON.stringify({ isCorrect }),
+      });
+      
+      if (response.success) {
+        toast({
+          title: isCorrect ? "Match Confirmed" : "Match Rejected",
+          description: `The match has been ${isCorrect ? 'confirmed' : 'rejected'} successfully.`,
+        });
+        
+        // Refresh matches
+        if (selectedClassification) {
+          await fetchPayeeMatches(selectedClassification.id);
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update match status.",
         variant: "destructive",
       });
     }
@@ -829,7 +889,10 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => setSelectedClassification(classification)}
+                              onClick={() => {
+                                setSelectedClassification(classification);
+                                fetchPayeeMatches(classification.id);
+                              }}
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -1003,6 +1066,74 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                     </div>
                                   </div>
                                 )}
+                                
+                                {/* BigQuery Payee Matches */}
+                                <div className="bg-purple-50 p-4 rounded-lg space-y-3">
+                                  <div className="flex items-center justify-between">
+                                    <label className="text-sm font-medium text-purple-900">BigQuery Payee Matches</label>
+                                    {loadingMatches && (
+                                      <div className="text-xs text-purple-600">Loading matches...</div>
+                                    )}
+                                  </div>
+                                  
+                                  {!loadingMatches && payeeMatches.length === 0 && (
+                                    <p className="text-sm text-purple-700">No matches found in BigQuery database</p>
+                                  )}
+                                  
+                                  {!loadingMatches && payeeMatches.length > 0 && (
+                                    <div className="space-y-2">
+                                      {payeeMatches.map((match) => (
+                                        <div key={match.id} className="bg-white p-3 rounded border border-purple-200">
+                                          <div className="flex items-start justify-between">
+                                            <div className="flex-1">
+                                              <div className="flex items-center gap-2">
+                                                <span className="font-medium text-purple-900">{match.bigQueryPayeeName}</span>
+                                                <Badge className="text-xs" variant={match.isConfirmed ? "default" : "outline"}>
+                                                  {match.matchConfidence}% match
+                                                </Badge>
+                                              </div>
+                                              <div className="text-xs text-gray-600 mt-1">
+                                                <span className="font-medium">Type:</span> {match.matchType}
+                                                {match.bigQueryPayeeId && (
+                                                  <span className="ml-2">
+                                                    <span className="font-medium">ID:</span> {match.bigQueryPayeeId}
+                                                  </span>
+                                                )}
+                                              </div>
+                                              {match.isConfirmed && match.confirmedAt && (
+                                                <div className="text-xs text-green-600 mt-1">
+                                                  ✓ Confirmed on {new Date(match.confirmedAt).toLocaleDateString()}
+                                                </div>
+                                              )}
+                                            </div>
+                                            {!match.isConfirmed && (
+                                              <div className="flex gap-1">
+                                                <Button
+                                                  size="sm"
+                                                  variant="ghost"
+                                                  className="text-green-600 hover:text-green-700"
+                                                  onClick={() => handleMatchConfirmation(match.id, true)}
+                                                >
+                                                  <CheckCircle2 className="h-4 w-4" />
+                                                </Button>
+                                                <Button
+                                                  size="sm"
+                                                  variant="ghost"
+                                                  className="text-red-600 hover:text-red-700"
+                                                  onClick={() => handleMatchConfirmation(match.id, false)}
+                                                >
+                                                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                  </svg>
+                                                </Button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             )}
                           </DialogContent>

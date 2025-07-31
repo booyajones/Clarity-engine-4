@@ -713,6 +713,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // BigQuery routes
+  const { default: bigqueryRouter } = await import('./routes/bigquery');
+  app.use('/api/bigquery', bigqueryRouter);
+  
   // Mastercard webhook endpoint
   app.post("/api/webhooks/mastercard", async (req, res) => {
     try {

@@ -10,6 +10,7 @@ import XLSX from 'xlsx';
 import { keywordExclusionService } from './keywordExclusion';
 import { openaiRateLimiter } from './rateLimiter';
 import { mastercardApi } from './mastercardApi';
+import { payeeMatchingService } from './payeeMatchingService';
 
 // Validate OpenAI API key
 if (!process.env.OPENAI_API_KEY) {
@@ -287,10 +288,15 @@ export class OptimizedClassificationService {
         completedAt: new Date()
       });
       
-      // Start Mastercard enrichment as a separate process
-      this.startEnrichmentProcess(batchId).catch(error => {
-        console.error('Error starting enrichment process:', error);
-      });
+      // Start enrichment processes in parallel
+      Promise.all([
+        this.startEnrichmentProcess(batchId).catch(error => {
+          console.error('Error starting Mastercard enrichment:', error);
+        }),
+        this.startBigQueryMatching(batchId).catch(error => {
+          console.error('Error starting BigQuery matching:', error);
+        })
+      ]);
       
       console.log(`Batch ${batchId} classification completed: ${totalProcessed} records in ${elapsedSeconds}s (${recordsPerSecond.toFixed(1)} rec/s)`);
     }
@@ -1046,6 +1052,24 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
         mastercardEnrichmentStatus: "failed",
         mastercardEnrichmentCompletedAt: new Date()
       });
+    }
+  }
+  
+  // Start BigQuery payee matching process
+  private async startBigQueryMatching(batchId: number): Promise<void> {
+    try {
+      console.log(`Starting BigQuery payee matching for batch ${batchId}`);
+      
+      // Run payee matching
+      const result = await payeeMatchingService.matchBatchPayees(batchId);
+      
+      console.log(`BigQuery matching completed for batch ${batchId}: ${result.totalMatched}/${result.totalProcessed} matches found`);
+      
+      if (result.errors > 0) {
+        console.warn(`BigQuery matching encountered ${result.errors} errors`);
+      }
+    } catch (error) {
+      console.error('BigQuery matching process failed:', error);
     }
   }
 }
