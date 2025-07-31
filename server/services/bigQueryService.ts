@@ -1,6 +1,21 @@
 import { BigQuery } from '@google-cloud/bigquery';
 import { z } from 'zod';
 
+// Interface for BigQuery search results with enhanced Finexio matching
+export interface BigQueryPayeeResult {
+  payeeId: string;
+  payeeName: string;
+  normalizedName?: string;
+  aliases?: string[];
+  category?: string;
+  sicCode?: string;
+  paymentType?: string;
+  confidence?: number;
+  matchReasoning?: string;
+  city?: string;
+  state?: string;
+}
+
 // BigQuery configuration and service for payee matching
 export class BigQueryService {
   private bigquery: BigQuery | null = null;
@@ -63,14 +78,7 @@ export class BigQueryService {
   }
 
   // Query known payees from BigQuery
-  async searchKnownPayees(payeeName: string): Promise<Array<{
-    payeeId: string;
-    payeeName: string;
-    normalizedName?: string;
-    aliases?: string[];
-    category?: string;
-    sicCode?: string;
-  }>> {
+  async searchKnownPayees(payeeName: string): Promise<BigQueryPayeeResult[]> {
     if (!this.isConfigured || !this.bigquery) {
       throw new Error('BigQuery service not configured');
     }
@@ -78,24 +86,51 @@ export class BigQueryService {
     const dataset = process.env.BIGQUERY_DATASET || 'SE_Enrichment';
     const table = process.env.BIGQUERY_TABLE || 'supplier';
     
-    // Simple query to test connection and search
+    // Query with confidence scoring based on match quality
     const query = `
-      SELECT 
-        id,
-        name,
-        category_c,
-        mcc_c,
-        industry_c,
-        mastercard_business_name_c,
-        primary_address_city_c,
-        primary_address_state_c
-      FROM \`${process.env.BIGQUERY_PROJECT_ID}.${dataset}.${table}\`
-      WHERE COALESCE(is_deleted, false) = false
-        AND (
-          LOWER(name) LIKE CONCAT('%', LOWER(@payeeName), '%')
-          OR LOWER(COALESCE(mastercard_business_name_c, '')) LIKE CONCAT('%', LOWER(@payeeName), '%')
-        )
-      ORDER BY name ASC
+      WITH match_scores AS (
+        SELECT 
+          id,
+          name,
+          category_c,
+          mcc_c,
+          industry_c,
+          payment_type_c,
+          mastercard_business_name_c,
+          primary_address_city_c,
+          primary_address_state_c,
+          -- Calculate confidence scores for different match types
+          CASE
+            -- Exact match (case-insensitive)
+            WHEN LOWER(name) = LOWER(@payeeName) THEN 1.0
+            WHEN LOWER(COALESCE(mastercard_business_name_c, '')) = LOWER(@payeeName) THEN 0.95
+            -- Strong partial match (payee name contains the full supplier name)
+            WHEN LOWER(@payeeName) LIKE CONCAT('%', LOWER(name), '%') THEN 0.85
+            -- Standard partial match (supplier name contains payee name)
+            WHEN LOWER(name) LIKE CONCAT('%', LOWER(@payeeName), '%') THEN 0.75
+            WHEN LOWER(COALESCE(mastercard_business_name_c, '')) LIKE CONCAT('%', LOWER(@payeeName), '%') THEN 0.70
+            -- Weak partial match
+            ELSE 0.5
+          END AS confidence_score,
+          -- Match reasoning
+          CASE
+            WHEN LOWER(name) = LOWER(@payeeName) THEN 'Exact name match'
+            WHEN LOWER(COALESCE(mastercard_business_name_c, '')) = LOWER(@payeeName) THEN 'Exact Mastercard name match'
+            WHEN LOWER(@payeeName) LIKE CONCAT('%', LOWER(name), '%') THEN 'Payee name contains supplier name'
+            WHEN LOWER(name) LIKE CONCAT('%', LOWER(@payeeName), '%') THEN 'Supplier name contains payee name'
+            WHEN LOWER(COALESCE(mastercard_business_name_c, '')) LIKE CONCAT('%', LOWER(@payeeName), '%') THEN 'Mastercard name contains payee name'
+            ELSE 'Partial text match'
+          END AS match_reasoning
+        FROM \`${process.env.BIGQUERY_PROJECT_ID}.${dataset}.${table}\`
+        WHERE COALESCE(is_deleted, false) = false
+          AND (
+            LOWER(name) LIKE CONCAT('%', LOWER(@payeeName), '%')
+            OR LOWER(COALESCE(mastercard_business_name_c, '')) LIKE CONCAT('%', LOWER(@payeeName), '%')
+            OR LOWER(@payeeName) LIKE CONCAT('%', LOWER(name), '%')
+          )
+      )
+      SELECT * FROM match_scores
+      ORDER BY confidence_score DESC, name ASC
       LIMIT 10
     `;
     
@@ -114,6 +149,11 @@ export class BigQueryService {
         aliases: undefined, // Your table doesn't have aliases
         category: row.category_c || row.industry_c || undefined,
         sicCode: row.mcc_c || undefined,
+        paymentType: row.payment_type_c || undefined,
+        confidence: row.confidence_score || 0.5,
+        matchReasoning: row.match_reasoning || 'Partial text match',
+        city: row.primary_address_city_c || undefined,
+        state: row.primary_address_state_c || undefined,
       }));
     } catch (error) {
       console.error('Error querying BigQuery:', error);

@@ -198,8 +198,8 @@ export class FuzzyMatcher {
     const tokens1 = new Set(s1.split(' '));
     const tokens2 = new Set(s2.split(' '));
     
-    const intersection = new Set([...tokens1].filter(x => tokens2.has(x)));
-    const union = new Set([...tokens1, ...tokens2]);
+    const intersection = new Set(Array.from(tokens1).filter(x => tokens2.has(x)));
+    const union = new Set([...Array.from(tokens1), ...Array.from(tokens2)]);
     
     const confidence = union.size > 0 ? intersection.size / union.size : 0;
     return { confidence };
@@ -248,8 +248,8 @@ export class FuzzyMatcher {
       return { confidence: s1 === s2 ? 1.0 : 0.0 };
     }
     
-    const intersection = new Set([...ngrams1].filter(x => ngrams2.has(x)));
-    const union = new Set([...ngrams1, ...ngrams2]);
+    const intersection = new Set(Array.from(ngrams1).filter(x => ngrams2.has(x)));
+    const union = new Set([...Array.from(ngrams1), ...Array.from(ngrams2)]);
     
     const confidence = intersection.size / union.size;
     return { confidence };

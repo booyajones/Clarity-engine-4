@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, Building2, User, Landmark, Shield, CreditCard, ArrowRightLeft, HelpCircle } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Loader2, Search, Building2, User, Landmark, Shield, CreditCard, ArrowRightLeft, HelpCircle, Database, Globe } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
 interface ClassificationResult {
@@ -16,6 +18,18 @@ interface ClassificationResult {
   flagForReview?: boolean;
   isExcluded?: boolean;
   exclusionKeyword?: string;
+  bigQueryMatch?: {
+    matched: boolean;
+    finexioSupplier?: {
+      id: string;
+      name: string;
+      finexioMatchScore: number;
+      paymentType: string;
+      matchReasoning: string;
+      matchType: string;
+      confidence: number;
+    };
+  };
 }
 
 const getTypeIcon = (type: string) => {
@@ -47,10 +61,18 @@ const getTypeColor = (type: string) => {
 export function SingleClassification() {
   const [payeeName, setPayeeName] = useState("");
   const [result, setResult] = useState<ClassificationResult | null>(null);
+  const [enableBigQuery, setEnableBigQuery] = useState(true);
+  const [enableMastercard, setEnableMastercard] = useState(false);
 
   const classifyMutation = useMutation({
     mutationFn: async (name: string) => {
-      const response = await apiRequest("POST", "/api/classify-single", { payeeName: name });
+      const response = await apiRequest("POST", "/api/classify-single", { 
+        payeeName: name,
+        matchingOptions: {
+          enableBigQuery,
+          enableMastercard
+        }
+      });
       return response.json();
     },
     onSuccess: (data) => {
@@ -87,32 +109,60 @@ export function SingleClassification() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="flex gap-3">
-            <Input
-              placeholder="Enter payee name (e.g., Microsoft, John Smith, prosalutem)"
-              value={payeeName}
-              onChange={(e) => setPayeeName(e.target.value)}
-              onKeyPress={handleKeyPress}
-              className="flex-1"
-              disabled={classifyMutation.isPending}
-            />
-            <Button 
-              type="submit" 
-              disabled={!payeeName.trim() || classifyMutation.isPending}
-              className="min-w-[100px]"
-            >
-              {classifyMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Analyzing
-                </>
-              ) : (
-                <>
-                  <Search className="h-4 w-4 mr-2" />
-                  Classify
-                </>
-              )}
-            </Button>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="flex gap-3">
+              <Input
+                placeholder="Enter payee name (e.g., Microsoft, John Smith, prosalutem)"
+                value={payeeName}
+                onChange={(e) => setPayeeName(e.target.value)}
+                onKeyPress={handleKeyPress}
+                className="flex-1"
+                disabled={classifyMutation.isPending}
+              />
+              <Button 
+                type="submit" 
+                disabled={!payeeName.trim() || classifyMutation.isPending}
+                className="min-w-[100px]"
+              >
+                {classifyMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Analyzing
+                  </>
+                ) : (
+                  <>
+                    <Search className="h-4 w-4 mr-2" />
+                    Classify
+                  </>
+                )}
+              </Button>
+            </div>
+            
+            <div className="flex items-center gap-6 text-sm">
+              <div className="flex items-center gap-2">
+                <Database className="h-4 w-4 text-purple-600" />
+                <Label htmlFor="bigquery-toggle" className="text-sm font-normal cursor-pointer">
+                  Finexio Network Search
+                </Label>
+                <Switch
+                  id="bigquery-toggle"
+                  checked={enableBigQuery}
+                  onCheckedChange={setEnableBigQuery}
+                />
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4 text-blue-600" />
+                <Label htmlFor="mastercard-toggle" className="text-sm font-normal cursor-pointer">
+                  Mastercard Enrichment
+                </Label>
+                <Switch
+                  id="mastercard-toggle"
+                  checked={enableMastercard}
+                  onCheckedChange={setEnableMastercard}
+                />
+              </div>
+            </div>
           </form>
         </CardContent>
       </Card>
@@ -180,6 +230,35 @@ export function SingleClassification() {
                 {result.reasoning}
               </p>
             </div>
+
+            {result.bigQueryMatch?.matched && result.bigQueryMatch.finexioSupplier && (
+              <div className="p-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-purple-800 dark:text-purple-200">
+                    ✓ Finexio Network Match
+                  </p>
+                  <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-100">
+                    {Math.round(result.bigQueryMatch.finexioSupplier.finexioMatchScore * 100)}% Match
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <label className="text-xs font-medium text-purple-700 dark:text-purple-300">Supplier Name</label>
+                    <p className="text-purple-900 dark:text-purple-100">{result.bigQueryMatch.finexioSupplier.name}</p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-purple-700 dark:text-purple-300">Payment Type</label>
+                    <p className="text-purple-900 dark:text-purple-100">{result.bigQueryMatch.finexioSupplier.paymentType}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs font-medium text-purple-700 dark:text-purple-300">Match Reasoning</label>
+                    <p className="text-purple-900 dark:text-purple-100 text-xs bg-purple-100/50 dark:bg-purple-800/50 p-2 rounded mt-1">
+                      {result.bigQueryMatch.finexioSupplier.matchReasoning}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {result.isExcluded && (
               <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">

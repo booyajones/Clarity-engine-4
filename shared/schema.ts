@@ -115,7 +115,10 @@ export const payeeMatches = pgTable("payee_matches", {
   bigQueryPayeeId: text("bigquery_payee_id").notNull(),
   bigQueryPayeeName: text("bigquery_payee_name").notNull(),
   matchConfidence: real("match_confidence").notNull(),
+  finexioMatchScore: real("finexio_match_score"), // New field for Finexio-specific match score
+  paymentType: text("payment_type"), // payment_type_c from BigQuery
   matchType: text("match_type").notNull(), // deterministic, ai_enhanced, ai_unavailable
+  matchReasoning: text("match_reasoning"), // Explanation of how the match was made
   matchDetails: jsonb("match_details"), // Detailed scores from each algorithm
   isConfirmed: boolean("is_confirmed").default(false),
   confirmedBy: integer("confirmed_by"),

@@ -79,6 +79,10 @@ interface ClassificationData {
   mastercardLastTransactionDate?: string;
   mastercardDataQualityLevel?: string;
   mastercardEnrichmentDate?: string;
+  // BigQuery/Finexio enrichment fields
+  finexioMatchScore?: number;
+  paymentType?: string;
+  matchReasoning?: string;
   createdAt: string;
 }
 
@@ -1050,6 +1054,36 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                           }`}>
                                             {selectedClassification.mastercardDataQualityLevel}
                                           </Badge>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* BigQuery/Finexio Enrichment Data */}
+                                {selectedClassification.finexioMatchScore && (
+                                  <div className="bg-purple-50 p-4 rounded-lg space-y-3">
+                                    <div className="flex items-center gap-2">
+                                      <label className="text-sm font-medium text-purple-900">Finexio Network Match</label>
+                                      <Badge className="bg-purple-100 text-purple-800 text-xs">
+                                        {Math.round(selectedClassification.finexioMatchScore * 100)}% Match
+                                      </Badge>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-2 gap-3 text-sm">
+                                      {selectedClassification.paymentType && (
+                                        <div>
+                                          <label className="text-xs font-medium text-purple-700">Payment Type</label>
+                                          <p className="text-purple-900">{selectedClassification.paymentType}</p>
+                                        </div>
+                                      )}
+                                      
+                                      {selectedClassification.matchReasoning && (
+                                        <div className="col-span-2">
+                                          <label className="text-xs font-medium text-purple-700">Match Reasoning</label>
+                                          <div className="bg-purple-100/50 p-2 rounded text-xs">
+                                            <p className="text-purple-900">{selectedClassification.matchReasoning}</p>
+                                          </div>
                                         </div>
                                       )}
                                     </div>

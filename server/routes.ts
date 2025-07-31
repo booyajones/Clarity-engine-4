@@ -532,6 +532,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           clarity_mastercard_acceptance_network: c.mastercardAcceptanceNetwork ? c.mastercardAcceptanceNetwork.join(", ") : "",
           clarity_mastercard_last_transaction_date: c.mastercardLastTransactionDate || "",
           clarity_mastercard_data_quality_level: c.mastercardDataQualityLevel || "",
+          // BigQuery/Finexio enrichment fields
+          clarity_finexio_match_score: c.finexioMatchScore ? Math.round(c.finexioMatchScore * 100) + "%" : "",
+          clarity_payment_type: c.paymentType || "",
+          clarity_match_reasoning: c.matchReasoning || "",
         };
       });
 
@@ -681,7 +685,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Single payee classification endpoint
   app.post("/api/classify-single", async (req, res) => {
     try {
-      const { payeeName } = req.body;
+      const { payeeName, matchingOptions } = req.body;
       
       if (!payeeName || typeof payeeName !== 'string') {
         return res.status(400).json({ error: "payeeName is required and must be a string" });
@@ -703,7 +707,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Classify the single payee
       const result = await classificationService.classifyPayee(payeeData);
       
-      res.json(result);
+      // Perform BigQuery matching if enabled
+      let bigQueryMatch = null;
+      if (matchingOptions?.enableBigQuery !== false) { // Default to enabled
+        const { payeeMatchingService } = await import("./services/payeeMatchingService");
+        
+        // Create a temporary classification object for matching
+        const tempClassification = {
+          id: -1, // Temporary ID for quick classify
+          cleanedName: result.cleanedName || payeeName.trim(),
+          ...payeeData
+        };
+        
+        const matchResult = await payeeMatchingService.matchPayeeWithBigQuery(
+          tempClassification as any, 
+          matchingOptions || {}
+        );
+        
+        if (matchResult.matched && matchResult.matchedPayee) {
+          bigQueryMatch = {
+            matched: true,
+            finexioSupplier: {
+              id: matchResult.matchedPayee.payeeId,
+              name: matchResult.matchedPayee.payeeName,
+              finexioMatchScore: matchResult.matchedPayee.finexioMatchScore,
+              paymentType: matchResult.matchedPayee.paymentType,
+              matchReasoning: matchResult.matchedPayee.matchReasoning,
+              matchType: matchResult.matchedPayee.matchType,
+              confidence: matchResult.matchedPayee.confidence
+            }
+          };
+        }
+      }
+      
+      res.json({
+        ...result,
+        bigQueryMatch
+      });
     } catch (error) {
       console.error("Single classification error:", error);
       res.status(500).json({ 

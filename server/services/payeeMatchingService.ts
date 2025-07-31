@@ -1,26 +1,58 @@
-import { bigQueryService } from './bigQueryService';
+import { bigQueryService, type BigQueryPayeeResult } from './bigQueryService';
 import { fuzzyMatcher } from './fuzzyMatcher';
 import { storage } from '../storage';
 import type { PayeeClassification } from '@shared/schema';
+import OpenAI from 'openai';
+
+// Configuration interface for matching options
+export interface MatchingOptions {
+  enableBigQuery?: boolean;
+  enableMastercard?: boolean;
+  enableAI?: boolean;
+  confidenceThreshold?: number;
+  aiConfidenceThreshold?: number;
+}
 
 // Service to handle payee matching workflow
 export class PayeeMatchingService {
+  private openai: OpenAI | null = null;
+  
+  constructor() {
+    if (process.env.OPENAI_API_KEY) {
+      this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    }
+  }
+
   async matchPayeeWithBigQuery(
-    classification: PayeeClassification
+    classification: PayeeClassification,
+    options: MatchingOptions = {}
   ): Promise<{
     matched: boolean;
     matchedPayee?: {
       payeeId: string;
       payeeName: string;
       confidence: number;
+      finexioMatchScore: number;
+      paymentType?: string;
       matchType: string;
+      matchReasoning: string;
       matchDetails: any;
     };
   }> {
     try {
-      // Skip if BigQuery is not configured
-      if (!bigQueryService.isServiceConfigured()) {
-        console.log('BigQuery not configured - skipping payee matching');
+      // Apply default options
+      const opts = {
+        enableBigQuery: true,
+        enableMastercard: false, // Disabled until P12 password is provided
+        enableAI: true,
+        confidenceThreshold: 0.7,
+        aiConfidenceThreshold: 0.5,
+        ...options
+      };
+
+      // Skip if BigQuery is disabled or not configured
+      if (!opts.enableBigQuery || !bigQueryService.isServiceConfigured()) {
+        console.log('BigQuery disabled or not configured - skipping payee matching');
         return { matched: false };
       }
       
@@ -31,35 +63,58 @@ export class PayeeMatchingService {
         return { matched: false };
       }
       
-      // Run fuzzy matching on each candidate
-      const matchResults = await Promise.all(
-        candidates.map(async (candidate) => {
-          const matchResult = await fuzzyMatcher.matchPayee(
-            classification.cleanedName,
-            candidate.payeeName
-          );
-          
-          return {
-            ...candidate,
-            ...matchResult,
-          };
-        })
-      );
+      // Find the best match from BigQuery results
+      let bestMatch = candidates[0]; // Already sorted by confidence from BigQuery
       
-      // Find the best match
-      const bestMatch = matchResults
-        .filter(m => m.isMatch)
-        .sort((a, b) => b.confidence - a.confidence)[0];
+      // Use the confidence score from BigQuery
+      let finalConfidence = bestMatch.confidence || 0.5;
+      let matchReasoning = bestMatch.matchReasoning || 'BigQuery match';
+      let matchType = 'deterministic';
       
-      if (bestMatch) {
+      // If confidence is below threshold and AI is enabled, enhance with AI
+      if (finalConfidence < opts.confidenceThreshold && 
+          finalConfidence >= opts.aiConfidenceThreshold && 
+          opts.enableAI && 
+          this.openai) {
+        
+        const aiResult = await this.enhanceWithAI(
+          classification.cleanedName,
+          bestMatch.payeeName,
+          finalConfidence,
+          matchReasoning
+        );
+        
+        if (aiResult.shouldMatch) {
+          finalConfidence = aiResult.confidence;
+          matchReasoning = aiResult.reasoning;
+          matchType = 'ai_enhanced';
+        } else {
+          // AI determined it's not a match
+          return { matched: false };
+        }
+      }
+      
+      // Calculate Finexio-specific match score (0-100)
+      const finexioMatchScore = Math.round(finalConfidence * 100);
+      
+      // Only accept matches above threshold
+      if (finalConfidence >= opts.confidenceThreshold) {
         // Store the match in database
         await storage.createPayeeMatch({
           classificationId: classification.id,
           bigQueryPayeeId: bestMatch.payeeId,
           bigQueryPayeeName: bestMatch.payeeName,
-          matchConfidence: bestMatch.confidence,
-          matchType: bestMatch.matchType,
-          matchDetails: bestMatch.details,
+          matchConfidence: finalConfidence,
+          finexioMatchScore: finexioMatchScore,
+          paymentType: bestMatch.paymentType,
+          matchType: matchType,
+          matchReasoning: matchReasoning,
+          matchDetails: {
+            originalConfidence: bestMatch.confidence,
+            city: bestMatch.city,
+            state: bestMatch.state,
+            mastercardBusinessName: bestMatch.normalizedName
+          },
         });
         
         // Update classification with matched payee info if available
@@ -75,9 +130,17 @@ export class PayeeMatchingService {
           matchedPayee: {
             payeeId: bestMatch.payeeId,
             payeeName: bestMatch.payeeName,
-            confidence: bestMatch.confidence,
-            matchType: bestMatch.matchType,
-            matchDetails: bestMatch.details,
+            confidence: finalConfidence,
+            finexioMatchScore: finexioMatchScore,
+            paymentType: bestMatch.paymentType,
+            matchType: matchType,
+            matchReasoning: matchReasoning,
+            matchDetails: {
+              originalConfidence: bestMatch.confidence,
+              city: bestMatch.city,
+              state: bestMatch.state,
+              mastercardBusinessName: bestMatch.normalizedName
+            },
           },
         };
       }
@@ -88,9 +151,77 @@ export class PayeeMatchingService {
       return { matched: false };
     }
   }
+
+  // AI enhancement for low-confidence matches
+  private async enhanceWithAI(
+    inputName: string,
+    candidateName: string,
+    currentConfidence: number,
+    currentReasoning: string
+  ): Promise<{
+    shouldMatch: boolean;
+    confidence: number;
+    reasoning: string;
+  }> {
+    if (!this.openai) {
+      return {
+        shouldMatch: false,
+        confidence: currentConfidence,
+        reasoning: currentReasoning
+      };
+    }
+
+    try {
+      const prompt = `You are analyzing if these two payee names refer to the same Finexio network supplier:
+
+Input Payee: "${inputName}"
+Finexio Supplier: "${candidateName}"
+Current Match Confidence: ${(currentConfidence * 100).toFixed(0)}%
+Current Reasoning: ${currentReasoning}
+
+Consider:
+1. Common business name variations (Inc, LLC, Corp, Ltd)
+2. DBA (Doing Business As) relationships
+3. Parent/subsidiary relationships
+4. Common abbreviations
+5. Spelling variations or typos
+
+Respond with JSON:
+{
+  "shouldMatch": boolean,
+  "confidence": 0.0-1.0,
+  "reasoning": "Clear explanation of why this is or isn't a match to the Finexio supplier"
+}`;
+
+      const response = await this.openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.1,
+      });
+
+      const result = JSON.parse(response.choices[0].message.content || '{}');
+      
+      return {
+        shouldMatch: result.shouldMatch || false,
+        confidence: Math.max(currentConfidence, result.confidence || currentConfidence),
+        reasoning: result.reasoning || currentReasoning
+      };
+    } catch (error) {
+      console.error('AI enhancement error:', error);
+      return {
+        shouldMatch: false,
+        confidence: currentConfidence,
+        reasoning: currentReasoning
+      };
+    }
+  }
   
   // Batch match payees for a given upload batch
-  async matchBatchPayees(batchId: number): Promise<{
+  async matchBatchPayees(
+    batchId: number,
+    options: MatchingOptions = {}
+  ): Promise<{
     totalProcessed: number;
     totalMatched: number;
     errors: number;
@@ -106,7 +237,7 @@ export class PayeeMatchingService {
       const batch = classifications.slice(i, i + batchSize);
       
       const results = await Promise.allSettled(
-        batch.map(classification => this.matchPayeeWithBigQuery(classification))
+        batch.map(classification => this.matchPayeeWithBigQuery(classification, options))
       );
       
       results.forEach(result => {
