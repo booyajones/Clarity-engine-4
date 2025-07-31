@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import fs from 'fs';
 import { z } from 'zod';
 
 // Mastercard Track Search API service
@@ -11,11 +12,17 @@ const MASTERCARD_CONFIG = {
     baseUrl: 'https://sandbox.api.mastercard.com/track/search/bulk-searches',
     consumerKey: process.env.MASTERCARD_CONSUMER_KEY,
     privateKey: process.env.MASTERCARD_PRIVATE_KEY,
+    p12Path: process.env.MASTERCARD_P12_PATH || './mastercard-certificate.p12',
+    keystorePassword: process.env.MASTERCARD_KEYSTORE_PASSWORD,
+    keystoreAlias: process.env.MASTERCARD_KEYSTORE_ALIAS,
   },
   production: {
     baseUrl: 'https://api.mastercard.com/track/search/bulk-searches',
     consumerKey: process.env.MASTERCARD_CONSUMER_KEY,
     privateKey: process.env.MASTERCARD_PRIVATE_KEY,
+    p12Path: process.env.MASTERCARD_P12_PATH || './mastercard-certificate.p12',
+    keystorePassword: process.env.MASTERCARD_KEYSTORE_PASSWORD,
+    keystoreAlias: process.env.MASTERCARD_KEYSTORE_ALIAS,
   }
 };
 
