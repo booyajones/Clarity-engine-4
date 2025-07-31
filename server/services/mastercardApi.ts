@@ -84,6 +84,24 @@ type SearchResult = z.infer<typeof SearchResultSchema>;
 
 export class MastercardApiService {
   private activeSearches = new Map<string, SearchResponse>();
+  private isConfigured: boolean;
+
+  constructor() {
+    // Check if we have the necessary credentials
+    this.isConfigured = !!(config.consumerKey && config.privateKey);
+    if (!this.isConfigured) {
+      console.log('🔔 Mastercard API credentials not configured. Enrichment will be skipped.');
+      console.log('   To enable Mastercard enrichment, you need:');
+      console.log('   1. Consumer Key from Mastercard Developers portal');
+      console.log('   2. Private Key in PEM format (starts with "-----BEGIN RSA PRIVATE KEY-----")');
+      console.log('   3. Or a P12 certificate with keystore alias and password');
+    }
+  }
+
+  // Check if service is properly configured
+  isServiceConfigured(): boolean {
+    return this.isConfigured;
+  }
 
   // OAuth 1.0a signature generation
   private generateOAuthSignature(
@@ -134,6 +152,10 @@ export class MastercardApiService {
 
   // Submit a bulk search request
   async submitBulkSearch(request: SearchRequest): Promise<SearchResponse> {
+    if (!this.isConfigured) {
+      throw new Error('Mastercard API is not configured. Missing consumer key or private key.');
+    }
+    
     try {
       const url = config.baseUrl;
       const authHeader = this.generateOAuthSignature('POST', url, {});

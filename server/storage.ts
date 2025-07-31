@@ -428,6 +428,24 @@ export class DatabaseStorage implements IStorage {
       ))
       .limit(limit);
   }
+
+  async updatePayeeClassificationEnrichmentStatus(
+    id: number,
+    data: {
+      enrichmentStatus?: string;
+      enrichmentStartedAt?: Date;
+      enrichmentCompletedAt?: Date;
+      enrichmentError?: string;
+    }
+  ): Promise<void> {
+    await db
+      .update(payeeClassifications)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(payeeClassifications.id, id));
+  }
 }
 
 export const storage = new DatabaseStorage();

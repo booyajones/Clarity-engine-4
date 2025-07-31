@@ -23,6 +23,13 @@ export const uploadBatches = pgTable("upload_batches", {
   progressMessage: text("progress_message"),
   accuracy: real("accuracy").default(0),
   userId: integer("user_id").notNull(),
+  // Mastercard enrichment tracking
+  mastercardEnrichmentStatus: text("mastercard_enrichment_status").default("pending"), // pending, in_progress, completed, failed, skipped
+  mastercardEnrichmentStartedAt: timestamp("mastercard_enrichment_started_at"),
+  mastercardEnrichmentCompletedAt: timestamp("mastercard_enrichment_completed_at"),
+  mastercardEnrichmentProgress: integer("mastercard_enrichment_progress").default(0), // Percentage
+  mastercardEnrichmentTotal: integer("mastercard_enrichment_total").default(0),
+  mastercardEnrichmentProcessed: integer("mastercard_enrichment_processed").default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   completedAt: timestamp("completed_at"),
 });
@@ -55,6 +62,11 @@ export const payeeClassifications = pgTable("payee_classifications", {
   mastercardLastTransactionDate: text("mastercard_last_transaction_date"),
   mastercardDataQualityLevel: text("mastercard_data_quality_level"), // HIGH, MEDIUM, LOW
   mastercardEnrichmentDate: timestamp("mastercard_enrichment_date"),
+  // Enrichment status tracking
+  enrichmentStatus: text("enrichment_status").default("pending"), // pending, in_progress, completed, failed
+  enrichmentStartedAt: timestamp("enrichment_started_at"),
+  enrichmentCompletedAt: timestamp("enrichment_completed_at"),
+  enrichmentError: text("enrichment_error"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

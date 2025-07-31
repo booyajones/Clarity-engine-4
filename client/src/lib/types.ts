@@ -17,6 +17,13 @@ export interface UploadBatch {
   progressMessage: string | null;
   accuracy: number | null;
   userId: number;
+  // Mastercard enrichment tracking
+  mastercardEnrichmentStatus?: string;
+  mastercardEnrichmentStartedAt?: string;
+  mastercardEnrichmentCompletedAt?: string;
+  mastercardEnrichmentProgress?: number;
+  mastercardEnrichmentTotal?: number;
+  mastercardEnrichmentProcessed?: number;
   createdAt: string;
   completedAt: string | null;
 }

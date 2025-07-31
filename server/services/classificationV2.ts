@@ -276,29 +276,23 @@ export class OptimizedClassificationService {
       const totalConfidence = classifications.reduce((sum, c) => sum + c.confidence, 0);
       const accuracy = classifications.length > 0 ? totalConfidence / classifications.length : 0;
       
-      // Enrich business classifications with Mastercard data
-      try {
-        await storage.updateUploadBatch(batchId, {
-          currentStep: "Enriching with Mastercard data",
-          progressMessage: `Enriching business classifications with Mastercard data...`
-        });
-        await this.enrichBusinessClassifications(batchId);
-      } catch (enrichError) {
-        console.error('Error enriching with Mastercard data:', enrichError);
-        // Continue without enrichment - don't fail the entire batch
-      }
-      
+      // Mark classification as complete before enrichment
       await storage.updateUploadBatch(batchId, {
         status: "completed",
         processedRecords: totalProcessed,
         totalRecords,
         accuracy,
-        currentStep: "Completed",
-        progressMessage: `Completed! Processed ${totalProcessed} records in ${elapsedSeconds.toFixed(1)}s (${recordsPerSecond.toFixed(1)} records/sec)`,
+        currentStep: "Classification complete",
+        progressMessage: `Classification completed! Processed ${totalProcessed} records in ${elapsedSeconds.toFixed(1)}s`,
         completedAt: new Date()
       });
       
-      console.log(`Batch ${batchId} completed: ${totalProcessed} records in ${elapsedSeconds}s (${recordsPerSecond.toFixed(1)} rec/s)`);
+      // Start Mastercard enrichment as a separate process
+      this.startEnrichmentProcess(batchId).catch(error => {
+        console.error('Error starting enrichment process:', error);
+      });
+      
+      console.log(`Batch ${batchId} classification completed: ${totalProcessed} records in ${elapsedSeconds}s (${recordsPerSecond.toFixed(1)} rec/s)`);
     }
   }
   
@@ -915,12 +909,16 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
     }
   }
 
-  // Enrich business classifications with Mastercard data
-  private async enrichBusinessClassifications(batchId: number): Promise<void> {
+  // Start asynchronous enrichment process
+  private async startEnrichmentProcess(batchId: number): Promise<void> {
     try {
       // Only proceed if Mastercard API is configured
       if (!process.env.MASTERCARD_CONSUMER_KEY || !process.env.MASTERCARD_PRIVATE_KEY) {
         console.log('Mastercard API not configured, skipping enrichment');
+        await storage.updateUploadBatch(batchId, {
+          mastercardEnrichmentStatus: "skipped",
+          mastercardEnrichmentCompletedAt: new Date()
+        });
         return;
       }
 
@@ -929,46 +927,125 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       
       if (businessClassifications.length === 0) {
         console.log('No business classifications to enrich');
+        await storage.updateUploadBatch(batchId, {
+          mastercardEnrichmentStatus: "completed",
+          mastercardEnrichmentCompletedAt: new Date(),
+          mastercardEnrichmentProgress: 100
+        });
         return;
       }
 
-      console.log(`Enriching ${businessClassifications.length} business classifications with Mastercard data`);
+      // Update status to in_progress
+      await storage.updateUploadBatch(batchId, {
+        mastercardEnrichmentStatus: "in_progress",
+        mastercardEnrichmentStartedAt: new Date(),
+        mastercardEnrichmentTotal: businessClassifications.length,
+        mastercardEnrichmentProcessed: 0,
+        mastercardEnrichmentProgress: 0
+      });
 
-      // Prepare payees for Mastercard search
-      const payeesForEnrichment = businessClassifications.map(c => ({
-        id: c.id.toString(),
-        name: c.cleanedName,
-        address: c.address,
-        city: c.city,
-        state: c.state,
-        zipCode: c.zipCode,
-      }));
+      console.log(`Starting enrichment for ${businessClassifications.length} business classifications`);
 
-      // Call Mastercard API to enrich
-      const enrichmentResults = await mastercardApi.enrichPayees(payeesForEnrichment);
+      // Process in batches of 100 to show progress
+      const batchSize = 100;
+      let processedCount = 0;
 
-      // Update classifications with Mastercard data
-      let enrichedCount = 0;
-      for (const [payeeId, mastercardData] of enrichmentResults) {
-        const classificationId = parseInt(payeeId);
+      for (let i = 0; i < businessClassifications.length; i += batchSize) {
+        const batch = businessClassifications.slice(i, i + batchSize);
         
-        await storage.updatePayeeClassificationWithMastercard(classificationId, {
-          mastercardMatchStatus: mastercardData.matchStatus,
-          mastercardMatchConfidence: mastercardData.matchConfidence,
-          mastercardMerchantCategoryCode: mastercardData.merchantCategoryCode,
-          mastercardMerchantCategoryDescription: mastercardData.merchantCategoryDescription,
-          mastercardAcceptanceNetwork: mastercardData.acceptanceNetwork,
-          mastercardLastTransactionDate: mastercardData.lastTransactionDate,
-          mastercardDataQualityLevel: mastercardData.dataQuality?.level,
+        // Update enrichment status for each classification
+        for (const classification of batch) {
+          await storage.updatePayeeClassificationEnrichmentStatus(classification.id, {
+            enrichmentStatus: "in_progress",
+            enrichmentStartedAt: new Date()
+          });
+        }
+        
+        // Prepare payees for Mastercard search
+        const payeesForEnrichment = batch.map(c => ({
+          id: c.id.toString(),
+          name: c.cleanedName,
+          address: c.address || undefined,
+          city: c.city || undefined,
+          state: c.state || undefined,
+          zipCode: c.zipCode || undefined,
+        }));
+
+        try {
+          // Check if Mastercard API is configured before attempting enrichment
+          if (!mastercardApi.isServiceConfigured()) {
+            console.log('Mastercard API not configured - skipping enrichment batch');
+            // Mark all classifications as skipped
+            for (const classification of batch) {
+              await storage.updatePayeeClassificationEnrichmentStatus(classification.id, {
+                enrichmentStatus: "skipped",
+                enrichmentCompletedAt: new Date()
+              });
+            }
+            continue;
+          }
+          
+          // Call Mastercard API to enrich
+          const enrichmentResults = await mastercardApi.enrichPayees(payeesForEnrichment);
+
+          // Update classifications with Mastercard data
+          for (const [payeeId, mastercardData] of enrichmentResults) {
+            const classificationId = parseInt(payeeId);
+            
+            await storage.updatePayeeClassificationWithMastercard(classificationId, {
+              mastercardMatchStatus: mastercardData.matchStatus,
+              mastercardMatchConfidence: mastercardData.matchConfidence,
+              mastercardMerchantCategoryCode: mastercardData.merchantCategoryCode,
+              mastercardMerchantCategoryDescription: mastercardData.merchantCategoryDescription,
+              mastercardAcceptanceNetwork: mastercardData.acceptanceNetwork,
+              mastercardLastTransactionDate: mastercardData.lastTransactionDate,
+              mastercardDataQualityLevel: mastercardData.dataQuality?.level,
+            });
+            
+            // Update individual classification status
+            await storage.updatePayeeClassificationEnrichmentStatus(classificationId, {
+              enrichmentStatus: "completed",
+              enrichmentCompletedAt: new Date()
+            });
+          }
+        } catch (batchError) {
+          console.error('Error enriching batch:', batchError);
+          // Mark failed classifications
+          for (const classification of batch) {
+            await storage.updatePayeeClassificationEnrichmentStatus(classification.id, {
+              enrichmentStatus: "failed",
+              enrichmentError: String(batchError),
+              enrichmentCompletedAt: new Date()
+            });
+          }
+        }
+
+        // Update progress
+        processedCount += batch.length;
+        const progress = Math.round((processedCount / businessClassifications.length) * 100);
+        
+        await storage.updateUploadBatch(batchId, {
+          mastercardEnrichmentProcessed: processedCount,
+          mastercardEnrichmentProgress: progress
         });
         
-        enrichedCount++;
+        console.log(`Enrichment progress: ${processedCount}/${businessClassifications.length} (${progress}%)`);
       }
 
-      console.log(`Successfully enriched ${enrichedCount} business classifications with Mastercard data`);
+      // Mark enrichment as complete
+      await storage.updateUploadBatch(batchId, {
+        mastercardEnrichmentStatus: "completed",
+        mastercardEnrichmentCompletedAt: new Date(),
+        mastercardEnrichmentProgress: 100
+      });
+
+      console.log(`Enrichment completed for batch ${batchId}`);
     } catch (error) {
-      console.error('Error in enrichBusinessClassifications:', error);
-      throw error;
+      console.error('Error in enrichment process:', error);
+      await storage.updateUploadBatch(batchId, {
+        mastercardEnrichmentStatus: "failed",
+        mastercardEnrichmentCompletedAt: new Date()
+      });
     }
   }
 }

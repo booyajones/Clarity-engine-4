@@ -41,6 +41,13 @@ interface UploadBatch {
   completedAt?: string;
   currentStep?: string;
   progressMessage?: string;
+  // Mastercard enrichment tracking
+  mastercardEnrichmentStatus?: string;
+  mastercardEnrichmentStartedAt?: string;
+  mastercardEnrichmentCompletedAt?: string;
+  mastercardEnrichmentProgress?: number;
+  mastercardEnrichmentTotal?: number;
+  mastercardEnrichmentProcessed?: number;
 }
 
 export default function Home() {
@@ -608,6 +615,7 @@ export default function Home() {
                   <TableHead>Status</TableHead>
                   <TableHead>Records</TableHead>
                   <TableHead>Accuracy</TableHead>
+                  <TableHead>Enrichment</TableHead>
                   <TableHead>Duration</TableHead>
                   <TableHead>Started</TableHead>
                   <TableHead>Actions</TableHead>
@@ -626,6 +634,49 @@ export default function Home() {
                         ? `${Math.round(batch.accuracy * 100)}%`
                         : "-"
                       }
+                    </TableCell>
+                    <TableCell>
+                      {batch.status === "completed" && batch.mastercardEnrichmentStatus && (
+                        <div className="flex items-center gap-2">
+                          {batch.mastercardEnrichmentStatus === "pending" && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
+                              <Clock className="h-3 w-3 mr-1" />
+                              Pending
+                            </span>
+                          )}
+                          {batch.mastercardEnrichmentStatus === "in_progress" && (
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 bg-gray-200 rounded-full h-2 w-20">
+                                <div 
+                                  className="bg-blue-500 h-2 rounded-full transition-all"
+                                  style={{ width: `${batch.mastercardEnrichmentProgress || 0}%` }}
+                                />
+                              </div>
+                              <span className="text-xs text-gray-600">
+                                {batch.mastercardEnrichmentProgress || 0}%
+                              </span>
+                            </div>
+                          )}
+                          {batch.mastercardEnrichmentStatus === "completed" && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Enriched
+                            </span>
+                          )}
+                          {batch.mastercardEnrichmentStatus === "failed" && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Failed
+                            </span>
+                          )}
+                          {batch.mastercardEnrichmentStatus === "skipped" && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500">
+                              Skipped
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {(!batch.mastercardEnrichmentStatus || batch.status !== "completed") && "-"}
                     </TableCell>
                     <TableCell>
                       {batch.status === "completed" || batch.status === "failed" || batch.status === "cancelled"
