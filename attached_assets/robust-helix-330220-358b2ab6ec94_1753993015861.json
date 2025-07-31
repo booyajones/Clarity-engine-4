@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "robust-helix-330220",
+  "private_key_id": "358b2ab6ec94612cba343c3663ce3a38e1b6fa31",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCepenFO5pO5CtT\nr28Vp0BmxwB0u81YwfO59s8Pq2xJWJMuA7AmqhuV724wPL/LZ9gq+0Rz7TMDpt6P\n5V58h8/5YVS23MckSYqEbt1/30ZsXeyl09sZ0psp1ePnqjtI7/masOANJmMuoU+/\nFQUfuNH9yw1Bn+yoAixP4NnUPQBWVPMt7g2VtNQH73yMOLC+OAWRPrV1g//MNzRI\nQTJxh8jM9w29l9K4wBZE94k+N6ov29KR6C2mXGxA8r07QsPRMNOVWq/wtmGZOMHe\nyr+uSC700+K/ELbKQjc/YJi0Xr3liY5zi4VCkj3uDD8OMK2xItzNI1js/ph6ax9M\nYLQvP8qPAgMBAAECggEAKyC/ZDbHxBqTDLTsZd6Jy2bd4N4M/Mv9DdjigUgAsA+8\nMw4dnOUxipkEQ2jAWvNn+IdGHJ2m+J8sccHQ5dml2A11kiCCooK7fTUGUfTImD0Q\nUCQ/s81lEQJsalYEt9dE66CZx/lfjRWdMDzun6kGrQ++EtD+7M1qbmyZyvCqXs1b\nQHqJ6g4ZKuM7P0ph5bDoPsj9d89fgrvSKz8M11CYqeoe8Wlg4R5i9v+G+vDCaOS+\nA4kaH8AK0aZcRzVYB2wcfCOlT77IVgLmk/NgcY72wNS9YJ13DBzZV7tShd9R0MPf\netu8dsBsdhfmU70uGfuqxv6D6XUskebIpa9NRk16gQKBgQDafTtQIx5nMQv2ew1p\nCYzmaNfg1TDdHv1k2mEHxdg8IADFiRrD6FCc973hU5WVWYlICysZ6mT+VI5q8AYW\nE3s6AoPGcA2iR1CKlXVYFdYjMZyb1eb+J0r6dynZtKVV0yvtBzn5ImOJhnWN2Onb\n/HMaRCtOao+pvNsfYcMa2ssldwKBgQC54p6WweemiBU1yzJj3j23XBza0n1VOcPp\nxE18T4fGsNSWqsU3IHQDZcoQ1UFxsgJvR0wcsDXP1sOIPeESfHi703Dtl5dF+c6D\n+fzxWmEktdTJw+CdtwbK6baKkDGJaCdeie4fdaMbFC9mqpfVoFCCsq2f8tdz++8H\ncGvlk/wpqQKBgQC5ws+zCqjGw4SQQ37bVytcmrcwiRHKbpayMJleqm92bx8406DV\n/6bKTjg6Y35CRKXbguNaXVcQhYOwl/IUwut6Hrk69fohhtCLgxcJlUdDFOM5+1sx\nquasnLQQTO5lUe1+0S4RC5PlUVSRDWOHjdOu+VZ4jVEn11HWFKB1LKCbcQKBgQC2\n14LHJ9SEqjaywzy9n011ntWDKKi/vCJJPx44uMIFXsq9qRx0LSfwb59jD2FgRIjA\njJEBZxKHbejHipZpaKYZmtHp4sKZwi6xAqUbgpsrUPANxu6aM/4qedlkUpFnZ1vS\nUjo4F65oZGJ7yjGvoBGRfc/rFSN4osdrudln6TiQgQKBgANq1pIDj+W6wO8E/746\nV4DQsDHPU4pGQRj6yVxvORV1Vzt/4FURoNoPCIPUrTaqrd5bvD9Uq2NhFBRYTkrj\nkIO2Xx3pQ5Vtov/bz/z/EdOU+nGdq8PERtDKxDnPs7mgDyIzxoqQc4z/eIjd0tM1\ne6Hj1X0Vz5CNNlcvBLjUmm34\n-----END PRIVATE KEY-----\n",
+  "client_email": "clarity-engine-bigquery@robust-helix-330220.iam.gserviceaccount.com",
+  "client_id": "113667427313903811095",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/clarity-engine-bigquery%40robust-helix-330220.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
