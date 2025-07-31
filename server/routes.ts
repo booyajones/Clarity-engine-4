@@ -104,7 +104,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.getClassificationStats();
       res.json({ status: "ok", database: "connected" });
     } catch (error) {
-      res.status(503).json({ status: "unhealthy", database: "disconnected", error: error.message });
+      res.status(503).json({ status: "unhealthy", database: "disconnected", error: (error as Error).message });
     }
   });
 
@@ -533,9 +533,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           clarity_mastercard_last_transaction_date: c.mastercardLastTransactionDate || "",
           clarity_mastercard_data_quality_level: c.mastercardDataQualityLevel || "",
           // BigQuery/Finexio enrichment fields
-          clarity_finexio_match_score: c.finexioMatchScore ? Math.round(c.finexioMatchScore * 100) + "%" : "",
-          clarity_payment_type: c.paymentType || "",
-          clarity_match_reasoning: c.matchReasoning || "",
+          clarity_finexio_match_score: (c as any).finexioMatchScore ? Math.round((c as any).finexioMatchScore * 100) + "%" : "",
+          clarity_payment_type: (c as any).paymentType || "",
+          clarity_match_reasoning: (c as any).matchReasoning || "",
         };
       });
 
@@ -752,7 +752,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Create a temporary classification object for matching
         const tempClassification = {
           id: -1, // Temporary ID for quick classify
-          cleanedName: result.cleanedName || payeeName.trim(),
+          cleanedName: (result as any).cleanedName || payeeName.trim(),
           ...payeeData
         };
         
@@ -785,7 +785,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Single classification error:", error);
       res.status(500).json({ 
         error: "Classification failed", 
-        details: error.message 
+        details: (error as Error).message 
       });
     }
   });

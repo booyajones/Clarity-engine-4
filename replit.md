@@ -31,7 +31,7 @@ Preferred communication style: Simple, everyday language.
 - **Connection**: @neondatabase/serverless with connection pooling
 - **Schema**: Includes tables for users, upload batches, payee classifications, SIC codes, classification rules, and cached suppliers table
 - **Performance**: Indexes on frequently queried columns (name, category, payment_type, city, state)
-- **Cache**: Local table with 50,000 Finexio suppliers for ultra-fast matching
+- **Cache**: Local table with 387,283 distinct Finexio suppliers for ultra-fast matching (100% coverage)
 
 ### AI/ML Classification Service
 - **Core Technology**: OpenAI GPT-4o for advanced payee classification (95%+ accuracy requirement).
@@ -40,7 +40,7 @@ Preferred communication style: Simple, everyday language.
 - **SIC Code Assignment**: Automatic industry classification.
 - **Duplicate Detection**: Advanced normalization and intelligent duplicate flagging within batches.
 - **Speed Optimizations**: 
-  - Local cache of 50,000 suppliers eliminates BigQuery API calls
+  - Local cache of 387,283 distinct suppliers eliminates BigQuery API calls
   - Response times improved from 30-45s to 1-2s (20-30x faster)
   - Smart AI thresholds: skip AI for low confidence (<70%) and single-word surnames
   - Database indexes on key columns for rapid lookups
