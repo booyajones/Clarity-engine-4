@@ -1,0 +1,106 @@
+You are a senior Python engineer specializing in data science and building robust, efficient data-processing tools. Your mission is to create a Python function named match_names that implements a highly accurate, two-tiered fuzzy name matching system.
+
+This system must be both fast and intelligent. It will first use a lightweight, algorithmic model to handle clear-cut cases. For ambiguous cases, it will failover to a powerful (but slower) external LLM API for a more nuanced decision.
+
+Core Architecture & Logic
+The function will operate in two tiers:
+
+Tier 1: High-Speed Algorithmic Check ⚡
+
+Clean & Normalize: Pre-process the input names by converting them to lowercase and removing common titles (like 'mr', 'ms', 'dr') and suffixes ('jr', 'md').
+
+Generate Features: Calculate a suite of similarity scores between the two cleaned names:
+
+Jaro-Winkler Similarity: Excellent for short strings and typos.
+
+Token Sort Ratio: Handles cases where names are reordered (e.g., "Smith, John" vs. "John Smith").
+
+Phonetic Match: Use Double Metaphone to check if the names sound the same. This returns a boolean (True/False).
+
+Calculate Confidence Score: Combine these features into a single confidence_score between 0 and 1 using a weighted average. Use these weights as a starting point:
+
+Jaro-Winkler: 50%
+
+Token Sort Ratio: 30%
+
+Phonetic Match: 20% (if True, add 0.2 to the score)
+
+Make a Decision:
+
+If confidence_score is high (e.g., > 0.92), return a MATCH.
+
+If confidence_score is low (e.g., < 0.75), return a NO_MATCH.
+
+Tier 2: LLM Failover for Ambiguity 🧠
+
+If the confidence_score from Tier 1 falls into the "ambiguity zone" (between the low and high thresholds), the system must "failover".
+
+In this case, it should call a (placeholder) function call_expert_llm_api(name1, name2) which simulates making an API call to an expert LLM for the final verdict.
+
+Technical Specifications
+Language: Python 3
+
+Required Libraries:
+
+thefuzz (for Token Sort Ratio)
+
+jellyfish (for Jaro-Winkler)
+
+Metaphone (for Double Metaphone)
+
+os and requests (for the LLM API call)
+
+Function Definition: The main function should have the following signature:
+
+Python
+
+def match_names(
+    name1: str,
+    name2: str,
+    low_threshold: float = 0.75,
+    high_threshold: float = 0.92
+) -> dict:
+    """
+    Determines if two names match using a two-tiered system.
+    """
+    # Your code will go here
+LLM Placeholder Function: Create a placeholder for the external API call. For this simulation, it should handle one known nickname case ("Robert" vs "Bob") and return a default for others. Make sure to include comments explaining how to replace this with a real API call using os.getenv("OPENAI_API_KEY") and the requests library.
+
+Return Format: The function must always return a dictionary with the following structure:
+
+JSON
+
+{
+  "match": boolean,
+  "confidence_score": float,
+  "method_used": "Algorithmic" | "LLM_Failover",
+  "reason": "A clear, human-readable explanation of the decision."
+}
+Example Usage
+Please ensure the code works for these cases:
+
+Python
+
+# 1. High-Confidence Match
+print(match_names("Dr. Jonathan Smith", "Smith, Jonathan"))
+# Expected: { "match": True, "confidence_score": >0.92, "method_used": "Algorithmic", ... }
+
+# 2. Clear Mismatch
+print(match_names("Susan Andersen", "Michael Johnson"))
+# Expected: { "match": False, "confidence_score": <0.75, "method_used": "Algorithmic", ... }
+
+# 3. Ambiguous Case -> LLM Failover (Nickname)
+print(match_names("Robert Williams", "Bob Williams"))
+# Expected: { "match": True, "confidence_score": (between 0.75-0.92), "method_used": "LLM_Failover", "reason": "LLM determined 'Bob' is a common nickname for 'Robert'."}
+
+# 4. Ambiguous Case -> LLM Failover (Phonetic & Typo)
+print(match_names("Catherine Smythe", "Katerine Smith"))
+# Expected: { "match": True, "confidence_score": (between 0.75-0.92), "method_used": "LLM_Failover", "reason": "LLM determined a match based on phonetic similarity and context."}
+Now, generate the complete, production-quality Python code for this system. Include docstrings, type hints, and comments to explain your logic. Let's build something awesome.
+
+
+
+
+
+
+
