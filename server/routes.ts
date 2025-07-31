@@ -524,6 +524,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           clarity_zip_code: c.zipCode || "",
           clarity_excluded: c.isExcluded ? "Yes" : "No",
           clarity_exclusion_keyword: c.exclusionKeyword || "",
+          // Mastercard enrichment fields
+          clarity_mastercard_match_status: c.mastercardMatchStatus || "",
+          clarity_mastercard_match_confidence: c.mastercardMatchConfidence ? Math.round(c.mastercardMatchConfidence * 100) + "%" : "",
+          clarity_mastercard_merchant_category_code: c.mastercardMerchantCategoryCode || "",
+          clarity_mastercard_merchant_category_description: c.mastercardMerchantCategoryDescription || "",
+          clarity_mastercard_acceptance_network: c.mastercardAcceptanceNetwork ? c.mastercardAcceptanceNetwork.join(", ") : "",
+          clarity_mastercard_last_transaction_date: c.mastercardLastTransactionDate || "",
+          clarity_mastercard_data_quality_level: c.mastercardDataQualityLevel || "",
         };
       });
 
@@ -702,6 +710,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
         error: "Classification failed", 
         details: error.message 
       });
+    }
+  });
+
+  // Mastercard webhook endpoint
+  app.post("/api/webhooks/mastercard", async (req, res) => {
+    try {
+      const { searchId, status } = req.body;
+      
+      console.log(`Received Mastercard webhook: searchId=${searchId}, status=${status}`);
+      
+      // Handle the webhook notification
+      if (status === 'COMPLETED') {
+        // Get and process the search results
+        const { mastercardApi } = await import('./services/mastercardApi');
+        
+        try {
+          const results = await mastercardApi.getSearchResults(searchId);
+          console.log(`Received ${results.results.length} results from Mastercard search ${searchId}`);
+          
+          // Process the results and update the database
+          for (const result of results.results) {
+            const classificationId = parseInt(result.clientReferenceId);
+            
+            await storage.updatePayeeClassificationWithMastercard(classificationId, {
+              mastercardMatchStatus: result.matchStatus,
+              mastercardMatchConfidence: result.matchConfidence,
+              mastercardMerchantCategoryCode: result.merchantDetails?.merchantCategoryCode,
+              mastercardMerchantCategoryDescription: result.merchantDetails?.merchantCategoryDescription,
+              mastercardAcceptanceNetwork: result.merchantDetails?.acceptanceNetwork,
+              mastercardLastTransactionDate: result.merchantDetails?.lastTransactionDate,
+              mastercardDataQualityLevel: result.merchantDetails?.dataQuality?.level,
+            });
+          }
+          
+          res.json({ success: true, message: `Processed ${results.results.length} enrichment results` });
+        } catch (error) {
+          console.error('Error processing Mastercard results:', error);
+          res.status(500).json({ error: 'Error processing results' });
+        }
+      } else {
+        res.json({ success: true, message: `Webhook received for status: ${status}` });
+      }
+    } catch (error) {
+      console.error('Mastercard webhook error:', error);
+      res.status(500).json({ error: 'Webhook processing failed' });
     }
   });
 

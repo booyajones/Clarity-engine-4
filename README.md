@@ -1,5 +1,5 @@
 
-# Clarity Engine - AI-Powered Payee Intelligence Platform
+# Clarity Engine 3 - AI-Powered Payee Intelligence Platform
 
 [![Run on Replit](https://replit.com/badge/github/your-username/clarity-engine)](https://replit.com/new/github/your-username/clarity-engine)
 

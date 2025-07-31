@@ -37,6 +37,15 @@ export interface PayeeClassification {
   status: "auto-classified" | "user-confirmed" | "user-corrected" | "pending-review";
   reviewedBy: number | null;
   originalData: any;
+  // Mastercard enrichment fields
+  mastercardMatchStatus?: string;
+  mastercardMatchConfidence?: number;
+  mastercardMerchantCategoryCode?: string;
+  mastercardMerchantCategoryDescription?: string;
+  mastercardAcceptanceNetwork?: string[];
+  mastercardLastTransactionDate?: string;
+  mastercardDataQualityLevel?: string;
+  mastercardEnrichmentDate?: string;
   createdAt: string;
   updatedAt: string;
 }

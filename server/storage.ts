@@ -44,6 +44,8 @@ export interface IStorage {
   getBatchClassifications(batchId: number, limit?: number, offset?: number): Promise<PayeeClassification[]>;
   getBatchClassificationCount(batchId: number): Promise<number>;
   getPendingReviewClassifications(limit?: number): Promise<PayeeClassification[]>;
+  updatePayeeClassificationWithMastercard(id: number, mastercardData: Partial<PayeeClassification>): Promise<PayeeClassification>;
+  getBusinessClassificationsForEnrichment(batchId: number, limit?: number): Promise<PayeeClassification[]>;
   getClassificationStats(): Promise<{
     totalPayees: number;
     accuracy: number;
@@ -400,6 +402,31 @@ export class DatabaseStorage implements IStorage {
 
   async deleteBatchClassifications(batchId: number): Promise<void> {
     await db.delete(payeeClassifications).where(eq(payeeClassifications.batchId, batchId));
+  }
+
+  async updatePayeeClassificationWithMastercard(id: number, mastercardData: Partial<PayeeClassification>): Promise<PayeeClassification> {
+    const [updated] = await db
+      .update(payeeClassifications)
+      .set({
+        ...mastercardData,
+        mastercardEnrichmentDate: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(payeeClassifications.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getBusinessClassificationsForEnrichment(batchId: number, limit = 1000): Promise<PayeeClassification[]> {
+    return await db
+      .select()
+      .from(payeeClassifications)
+      .where(and(
+        eq(payeeClassifications.batchId, batchId),
+        eq(payeeClassifications.payeeType, 'Business'),
+        sql`${payeeClassifications.mastercardMatchStatus} IS NULL`
+      ))
+      .limit(limit);
   }
 }
 

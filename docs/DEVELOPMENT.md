@@ -1,5 +1,5 @@
 
-# Development Guide
+# Clarity Engine 3 - Development Guide
 
 ## Getting Started
 

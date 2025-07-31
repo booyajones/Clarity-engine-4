@@ -69,6 +69,15 @@ interface ClassificationData {
   originalData: Record<string, any>;
   isExcluded?: boolean;
   exclusionKeyword?: string;
+  // Mastercard enrichment fields
+  mastercardMatchStatus?: string;
+  mastercardMatchConfidence?: number;
+  mastercardMerchantCategoryCode?: string;
+  mastercardMerchantCategoryDescription?: string;
+  mastercardAcceptanceNetwork?: string[];
+  mastercardLastTransactionDate?: string;
+  mastercardDataQualityLevel?: string;
+  mastercardEnrichmentDate?: string;
   createdAt: string;
 }
 
@@ -653,7 +662,13 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
               </Select>
               
               <div className="text-sm text-gray-500 flex items-center">
-                Click column headers to sort
+                Click column headers to sort • 
+                <span className="inline-flex items-center ml-2">
+                  <Badge variant="outline" className="text-xs border-blue-500 text-blue-600">
+                    MC
+                  </Badge>
+                  <span className="ml-1">= Mastercard Enriched</span>
+                </span>
               </div>
             </div>
 
@@ -738,6 +753,25 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                           {classification.duplicateId && (
                             <Badge variant="secondary" className="text-xs mt-1 w-fit">
                               {classification.duplicateId}
+                            </Badge>
+                          )}
+                          {classification.mastercardMatchStatus && (
+                            <Badge 
+                              variant="outline" 
+                              className={`text-xs mt-1 w-fit ${
+                                classification.mastercardMatchStatus === 'MATCH' 
+                                  ? 'border-blue-500 text-blue-600' 
+                                  : 'border-gray-400 text-gray-600'
+                              }`}
+                            >
+                              <svg 
+                                viewBox="0 0 24 24" 
+                                className="h-3 w-3 mr-1" 
+                                fill="currentColor"
+                              >
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
+                              </svg>
+                              MC Enriched
                             </Badge>
                           )}
                         </div>
@@ -882,6 +916,82 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                     {selectedClassification.reasoning}
                                   </div>
                                 </div>
+                                
+                                {/* Mastercard Enrichment Data */}
+                                {selectedClassification.mastercardMatchStatus && (
+                                  <div className="bg-blue-50 p-4 rounded-lg space-y-3">
+                                    <div className="flex items-center gap-2">
+                                      <label className="text-sm font-medium text-blue-900">Mastercard Enrichment</label>
+                                      <Badge className={`text-xs ${
+                                        selectedClassification.mastercardMatchStatus === 'MATCH' 
+                                          ? 'bg-green-100 text-green-800' 
+                                          : selectedClassification.mastercardMatchStatus === 'NO_MATCH'
+                                          ? 'bg-gray-100 text-gray-800'
+                                          : 'bg-amber-100 text-amber-800'
+                                      }`}>
+                                        {selectedClassification.mastercardMatchStatus}
+                                      </Badge>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-2 gap-3 text-sm">
+                                      {selectedClassification.mastercardMatchConfidence && (
+                                        <div>
+                                          <label className="text-xs font-medium text-blue-700">Match Confidence</label>
+                                          <p className="text-blue-900">{Math.round(selectedClassification.mastercardMatchConfidence * 100)}%</p>
+                                        </div>
+                                      )}
+                                      
+                                      {selectedClassification.mastercardMerchantCategoryCode && (
+                                        <div>
+                                          <label className="text-xs font-medium text-blue-700">MCC</label>
+                                          <p className="text-blue-900">{selectedClassification.mastercardMerchantCategoryCode}</p>
+                                        </div>
+                                      )}
+                                      
+                                      {selectedClassification.mastercardMerchantCategoryDescription && (
+                                        <div className="col-span-2">
+                                          <label className="text-xs font-medium text-blue-700">Merchant Category</label>
+                                          <p className="text-blue-900">{selectedClassification.mastercardMerchantCategoryDescription}</p>
+                                        </div>
+                                      )}
+                                      
+                                      {selectedClassification.mastercardAcceptanceNetwork && selectedClassification.mastercardAcceptanceNetwork.length > 0 && (
+                                        <div className="col-span-2">
+                                          <label className="text-xs font-medium text-blue-700">Acceptance Networks</label>
+                                          <div className="flex flex-wrap gap-1 mt-1">
+                                            {selectedClassification.mastercardAcceptanceNetwork.map((network, idx) => (
+                                              <Badge key={idx} variant="secondary" className="text-xs">
+                                                {network}
+                                              </Badge>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                      
+                                      {selectedClassification.mastercardLastTransactionDate && (
+                                        <div>
+                                          <label className="text-xs font-medium text-blue-700">Last Transaction</label>
+                                          <p className="text-blue-900">{new Date(selectedClassification.mastercardLastTransactionDate).toLocaleDateString()}</p>
+                                        </div>
+                                      )}
+                                      
+                                      {selectedClassification.mastercardDataQualityLevel && (
+                                        <div>
+                                          <label className="text-xs font-medium text-blue-700">Data Quality</label>
+                                          <Badge className={`text-xs ${
+                                            selectedClassification.mastercardDataQualityLevel === 'HIGH' 
+                                              ? 'bg-green-100 text-green-800' 
+                                              : selectedClassification.mastercardDataQualityLevel === 'MEDIUM'
+                                              ? 'bg-yellow-100 text-yellow-800'
+                                              : 'bg-red-100 text-red-800'
+                                          }`}>
+                                            {selectedClassification.mastercardDataQualityLevel}
+                                          </Badge>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
                                 
                                 {Object.keys(selectedClassification.originalData).length > 0 && (
                                   <div>

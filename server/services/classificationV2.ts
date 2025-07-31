@@ -9,6 +9,7 @@ import path from 'path';
 import XLSX from 'xlsx';
 import { keywordExclusionService } from './keywordExclusion';
 import { openaiRateLimiter } from './rateLimiter';
+import { mastercardApi } from './mastercardApi';
 
 // Validate OpenAI API key
 if (!process.env.OPENAI_API_KEY) {
@@ -274,6 +275,18 @@ export class OptimizedClassificationService {
       const classifications = await storage.getBatchClassifications(batchId);
       const totalConfidence = classifications.reduce((sum, c) => sum + c.confidence, 0);
       const accuracy = classifications.length > 0 ? totalConfidence / classifications.length : 0;
+      
+      // Enrich business classifications with Mastercard data
+      try {
+        await storage.updateUploadBatch(batchId, {
+          currentStep: "Enriching with Mastercard data",
+          progressMessage: `Enriching business classifications with Mastercard data...`
+        });
+        await this.enrichBusinessClassifications(batchId);
+      } catch (enrichError) {
+        console.error('Error enriching with Mastercard data:', enrichError);
+        // Continue without enrichment - don't fail the entire batch
+      }
       
       await storage.updateUploadBatch(batchId, {
         status: "completed",
@@ -899,6 +912,63 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       controller.abort();
       this.activeJobs.delete(batchId);
       console.log(`Job ${batchId} cancelled`);
+    }
+  }
+
+  // Enrich business classifications with Mastercard data
+  private async enrichBusinessClassifications(batchId: number): Promise<void> {
+    try {
+      // Only proceed if Mastercard API is configured
+      if (!process.env.MASTERCARD_CONSUMER_KEY || !process.env.MASTERCARD_PRIVATE_KEY) {
+        console.log('Mastercard API not configured, skipping enrichment');
+        return;
+      }
+
+      // Get business classifications that haven't been enriched yet
+      const businessClassifications = await storage.getBusinessClassificationsForEnrichment(batchId);
+      
+      if (businessClassifications.length === 0) {
+        console.log('No business classifications to enrich');
+        return;
+      }
+
+      console.log(`Enriching ${businessClassifications.length} business classifications with Mastercard data`);
+
+      // Prepare payees for Mastercard search
+      const payeesForEnrichment = businessClassifications.map(c => ({
+        id: c.id.toString(),
+        name: c.cleanedName,
+        address: c.address,
+        city: c.city,
+        state: c.state,
+        zipCode: c.zipCode,
+      }));
+
+      // Call Mastercard API to enrich
+      const enrichmentResults = await mastercardApi.enrichPayees(payeesForEnrichment);
+
+      // Update classifications with Mastercard data
+      let enrichedCount = 0;
+      for (const [payeeId, mastercardData] of enrichmentResults) {
+        const classificationId = parseInt(payeeId);
+        
+        await storage.updatePayeeClassificationWithMastercard(classificationId, {
+          mastercardMatchStatus: mastercardData.matchStatus,
+          mastercardMatchConfidence: mastercardData.matchConfidence,
+          mastercardMerchantCategoryCode: mastercardData.merchantCategoryCode,
+          mastercardMerchantCategoryDescription: mastercardData.merchantCategoryDescription,
+          mastercardAcceptanceNetwork: mastercardData.acceptanceNetwork,
+          mastercardLastTransactionDate: mastercardData.lastTransactionDate,
+          mastercardDataQualityLevel: mastercardData.dataQuality?.level,
+        });
+        
+        enrichedCount++;
+      }
+
+      console.log(`Successfully enriched ${enrichedCount} business classifications with Mastercard data`);
+    } catch (error) {
+      console.error('Error in enrichBusinessClassifications:', error);
+      throw error;
     }
   }
 }

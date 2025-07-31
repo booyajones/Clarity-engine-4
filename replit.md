@@ -1,8 +1,8 @@
-# Clarity Engine - Payee Intelligence Platform
+# Clarity Engine 3 - Payee Intelligence Platform
 
 ## Overview
 
-Clarity Engine is a sophisticated AI-powered web application designed for finance and accounting professionals to transform messy payee data into structured, actionable insights. The platform features intelligent classification of payees into categories (Individual, Business, Government) with SIC code assignment and confidence scoring.
+Clarity Engine 3 is a sophisticated AI-powered web application designed for finance and accounting professionals to transform messy payee data into structured, actionable insights. The platform features intelligent classification of payees into categories (Individual, Business, Government) with SIC code assignment and confidence scoring, now enhanced with Mastercard Track Search API integration for comprehensive business enrichment data.
 
 ## User Preferences
 
@@ -29,6 +29,7 @@ Preferred communication style: Simple, everyday language.
 - **Primary Database**: PostgreSQL via Neon serverless
 - **ORM**: Drizzle ORM with migrations support
 - **Connection**: Connection pooling with @neondatabase/serverless
+- **Enhanced Schema**: Added Mastercard enrichment fields for storing merchant data
 
 ## Key Components
 
@@ -168,6 +169,22 @@ To enable deployment, edit the `.replit` file and make these changes:
 - Comprehensive error handling and recovery
 
 ## Recent Changes
+
+### July 31, 2025 - Mastercard Track Search API Integration
+- **Project Rename**: Updated to "Clarity Engine 3" 
+- **New Integration**: Adding Mastercard Track Search API as enrichment source
+- **Purpose**: Enhance payee classification with Mastercard's merchant acceptance and Business Payment Service databases
+- **Key Features**:
+  - B2B search API for finding businesses in Mastercard databases
+  - Provides Merchant Category Codes (MCC) and transaction insights
+  - Asynchronous bulk search supporting up to 3000 records per request
+  - OAuth 1.0a authentication
+  - Sandbox and production environments available
+- **Architecture Plan**:
+  - New service for Mastercard API integration
+  - Database schema updates for storing enrichment data
+  - Webhook support for asynchronous result notifications
+  - Enhanced classification workflow with multi-source enrichment
 
 ### July 18, 2025 - Deployment Configuration Fix
 - **Build Process**: Fixed duplicate `classifyPayee` method causing build warnings

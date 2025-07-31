@@ -46,6 +46,15 @@ export const payeeClassifications = pgTable("payee_classifications", {
   originalData: jsonb("original_data"), // Store original CSV row data
   isExcluded: boolean("is_excluded").default(false),
   exclusionKeyword: text("exclusion_keyword"),
+  // Mastercard enrichment fields
+  mastercardMatchStatus: text("mastercard_match_status"), // MATCH, NO_MATCH, MULTIPLE_MATCHES
+  mastercardMatchConfidence: real("mastercard_match_confidence"),
+  mastercardMerchantCategoryCode: text("mastercard_merchant_category_code"),
+  mastercardMerchantCategoryDescription: text("mastercard_merchant_category_description"),
+  mastercardAcceptanceNetwork: text("mastercard_acceptance_network").array(),
+  mastercardLastTransactionDate: text("mastercard_last_transaction_date"),
+  mastercardDataQualityLevel: text("mastercard_data_quality_level"), // HIGH, MEDIUM, LOW
+  mastercardEnrichmentDate: timestamp("mastercard_enrichment_date"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
