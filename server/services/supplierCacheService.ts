@@ -74,7 +74,7 @@ export class SupplierCacheService {
   }
 
   // Sync suppliers from BigQuery to local cache
-  async syncSuppliers(limit = 10000): Promise<number> {
+  async syncSuppliers(limit?: number): Promise<number> {
     try {
       console.log('Starting supplier cache sync...');
       
@@ -122,38 +122,37 @@ export class SupplierCacheService {
         LIMIT ${limit}
       `;
       
-      // For now, we'll use the search method with a wildcard
-      // In production, you'd want to expose a proper method in bigQueryService
-      const rows: any[] = [];
+      // Get all suppliers from BigQuery with proper distinct handling
+      const suppliers = await bigQueryService.getAllSuppliers(limit);
       
-      console.log(`Fetched ${rows.length} suppliers from BigQuery`);
+      console.log(`Fetched ${suppliers.length} distinct suppliers from BigQuery`);
       
       // Process in batches
       const batchSize = 100;
       let processed = 0;
       
-      for (let i = 0; i < rows.length; i += batchSize) {
-        const batch = rows.slice(i, i + batchSize);
+      for (let i = 0; i < suppliers.length; i += batchSize) {
+        const batch = suppliers.slice(i, i + batchSize);
         
-        const suppliers: InsertCachedSupplier[] = batch.map(row => ({
-          payeeId: row.payeeId,
-          payeeName: row.payeeName || '',
-          normalizedName: row.mastercardBusinessName,
-          category: row.category,
-          mcc: row.mcc,
-          industry: row.industry,
-          paymentType: row.paymentType,
-          mastercardBusinessName: row.mastercardBusinessName,
-          city: row.city,
-          state: row.state,
-          confidence: 1.0, // Base confidence from BigQuery
-          nameLength: (row.payeeName || '').length,
-          hasBusinessIndicator: this.hasBusinessIndicator(row.payeeName || ''),
-          commonNameScore: this.calculateCommonNameScore(row.payeeName || ''),
+        const cacheEntries: InsertCachedSupplier[] = batch.map(supplier => ({
+          payeeId: supplier.payeeId,
+          payeeName: supplier.payeeName || '',
+          normalizedName: supplier.normalizedName,
+          category: supplier.category,
+          mcc: supplier.sicCode,
+          industry: supplier.industry,
+          paymentType: supplier.paymentType,
+          mastercardBusinessName: supplier.normalizedName,
+          city: supplier.city,
+          state: supplier.state,
+          confidence: supplier.confidence || 1.0,
+          nameLength: (supplier.payeeName || '').length,
+          hasBusinessIndicator: this.hasBusinessIndicator(supplier.payeeName || ''),
+          commonNameScore: this.calculateCommonNameScore(supplier.payeeName || ''),
         }));
         
         // Upsert suppliers
-        for (const supplier of suppliers) {
+        for (const supplier of cacheEntries) {
           await db.insert(cachedSuppliers)
             .values(supplier)
             .onConflictDoUpdate({
@@ -168,7 +167,7 @@ export class SupplierCacheService {
         processed += batch.length;
         
         if (processed % 1000 === 0) {
-          console.log(`Processed ${processed}/${rows.length} suppliers`);
+          console.log(`Processed ${processed}/${suppliers.length} suppliers`);
         }
       }
       
@@ -260,8 +259,8 @@ export class SupplierCacheService {
       console.log('🧹 Clearing existing cache...');
       await db.delete(cachedSuppliers);
       
-      // Sync suppliers from BigQuery (50,000 limit)
-      const totalSuppliers = await this.syncSuppliers(50000);
+      // Sync ALL suppliers from BigQuery (no limit)
+      const totalSuppliers = await this.syncSuppliers();
       
       const duration = Math.round((Date.now() - startTime) / 1000);
       console.log(`✅ Cache refresh completed in ${duration}s with ${totalSuppliers} suppliers`);

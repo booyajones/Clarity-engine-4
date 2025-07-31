@@ -53,8 +53,25 @@ async function syncSuppliers() {
     const dataset = process.env.BIGQUERY_DATASET || 'SE_Enrichment';
     const table = process.env.BIGQUERY_TABLE || 'supplier';
     
-    // Query to get suppliers
+    // Query to get DISTINCT suppliers
     const query = `
+      WITH distinct_suppliers AS (
+        SELECT DISTINCT
+          id,
+          name,
+          category_c,
+          mcc_c,
+          industry_c,
+          payment_type_c,
+          mastercard_business_name_c,
+          primary_address_city_c,
+          primary_address_state_c,
+          ROW_NUMBER() OVER (PARTITION BY LOWER(name) ORDER BY id) as rn
+        FROM \`${process.env.BIGQUERY_PROJECT_ID}.${dataset}.${table}\`
+        WHERE COALESCE(is_deleted, false) = false
+          AND name IS NOT NULL
+          AND LENGTH(TRIM(name)) > 0
+      )
       SELECT 
         id as payeeId,
         name as payeeName,
@@ -65,14 +82,14 @@ async function syncSuppliers() {
         mastercard_business_name_c as mastercardBusinessName,
         primary_address_city_c as city,
         primary_address_state_c as state
-      FROM \`${process.env.BIGQUERY_PROJECT_ID}.${dataset}.${table}\`
-      WHERE COALESCE(is_deleted, false) = false
-      LIMIT 50000
+      FROM distinct_suppliers
+      WHERE rn = 1
+      ORDER BY name ASC
     `;
     
-    console.log('📊 Querying BigQuery for suppliers...');
+    console.log('📊 Querying BigQuery for ALL distinct suppliers...');
     const [rows] = await bigquery.query({ query });
-    console.log(`✅ Found ${rows.length} suppliers in BigQuery\n`);
+    console.log(`✅ Found ${rows.length} distinct suppliers in BigQuery\n`);
     
     // Clear existing cache
     console.log('🧹 Clearing existing cache...');

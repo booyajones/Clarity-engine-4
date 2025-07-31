@@ -9,6 +9,7 @@ export interface BigQueryPayeeResult {
   aliases?: string[];
   category?: string;
   sicCode?: string;
+  industry?: string;
   paymentType?: string;
   confidence?: number;
   matchReasoning?: string;
@@ -186,6 +187,75 @@ export class BigQueryService {
     // This method is disabled since we only have read access to the existing supplier table
     console.log('updatePayee disabled - read-only access to existing BigQuery table');
     return;
+  }
+  
+  // Get all suppliers from BigQuery with proper DISTINCT handling
+  async getAllSuppliers(limit?: number): Promise<BigQueryPayeeResult[]> {
+    if (!this.isConfigured || !this.bigquery) {
+      throw new Error('BigQuery service not configured');
+    }
+    
+    const dataset = process.env.BIGQUERY_DATASET || 'SE_Enrichment';
+    const table = process.env.BIGQUERY_TABLE || 'supplier';
+    
+    // Query to get DISTINCT suppliers with proper handling of duplicates
+    const query = `
+      WITH distinct_suppliers AS (
+        SELECT DISTINCT
+          id,
+          name,
+          category_c,
+          mcc_c,
+          industry_c,
+          payment_type_c,
+          mastercard_business_name_c,
+          primary_address_city_c,
+          primary_address_state_c,
+          ROW_NUMBER() OVER (PARTITION BY LOWER(name) ORDER BY id) as rn
+        FROM \`${process.env.BIGQUERY_PROJECT_ID}.${dataset}.${table}\`
+        WHERE COALESCE(is_deleted, false) = false
+          AND name IS NOT NULL
+          AND LENGTH(TRIM(name)) > 0
+      )
+      SELECT 
+        id as payeeId,
+        name as payeeName,
+        category_c as category,
+        mcc_c as sicCode,
+        industry_c as industry,
+        payment_type_c as paymentType,
+        mastercard_business_name_c as normalizedName,
+        primary_address_city_c as city,
+        primary_address_state_c as state
+      FROM distinct_suppliers
+      WHERE rn = 1
+      ORDER BY name ASC
+      ${limit ? `LIMIT ${limit}` : ''}
+    `;
+    
+    try {
+      console.log(`Fetching ${limit ? `up to ${limit}` : 'ALL'} distinct suppliers from BigQuery...`);
+      const [rows] = await this.bigquery.query({ query });
+      
+      console.log(`Retrieved ${rows.length} distinct suppliers from BigQuery`);
+      
+      return rows.map(row => ({
+        payeeId: row.payeeId,
+        payeeName: row.payeeName,
+        normalizedName: row.normalizedName || undefined,
+        aliases: undefined,
+        category: row.category || row.industry || undefined,
+        sicCode: row.sicCode || undefined,
+        industry: row.industry || undefined,
+        paymentType: row.paymentType || undefined,
+        confidence: 1.0, // Base confidence for known suppliers
+        city: row.city || undefined,
+        state: row.state || undefined,
+      }));
+    } catch (error) {
+      console.error('Error fetching all suppliers from BigQuery:', error);
+      throw error;
+    }
   }
 }
 
