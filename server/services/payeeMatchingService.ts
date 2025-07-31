@@ -2,6 +2,7 @@ import { bigQueryService, type BigQueryPayeeResult } from './bigQueryService';
 import { fuzzyMatcher } from './fuzzyMatcher';
 import { storage } from '../storage';
 import type { PayeeClassification } from '@shared/schema';
+import { supplierCacheService } from './supplierCacheService';
 import OpenAI from 'openai';
 
 // Configuration interface for matching options
@@ -50,14 +51,42 @@ export class PayeeMatchingService {
         ...options
       };
 
-      // Skip if BigQuery is disabled or not configured
-      if (!opts.enableBigQuery || !bigQueryService.isServiceConfigured()) {
-        console.log('BigQuery disabled or not configured - skipping payee matching');
+      // Skip if BigQuery is disabled
+      if (!opts.enableBigQuery) {
+        console.log('BigQuery disabled - skipping payee matching');
         return { matched: false };
       }
       
-      // Search for potential matches in BigQuery
-      const candidates = await bigQueryService.searchKnownPayees(classification.cleanedName);
+      // Search for potential matches in cached suppliers (much faster!)
+      const cachedCandidates = await supplierCacheService.searchCachedSuppliers(classification.cleanedName);
+      
+      // If cache is empty or needs refresh, fall back to BigQuery
+      let candidates: BigQueryPayeeResult[];
+      
+      if (cachedCandidates.length > 0) {
+        // Convert cached suppliers to BigQuery format for compatibility
+        candidates = cachedCandidates.map(supplier => ({
+          payeeId: supplier.payeeId,
+          payeeName: supplier.payeeName,
+          normalizedName: supplier.normalizedName || supplier.mastercardBusinessName || undefined,
+          category: supplier.category || undefined,
+          sicCode: supplier.mcc || undefined,
+          industry: supplier.industry || undefined,
+          paymentType: supplier.paymentType || undefined,
+          city: supplier.city || undefined,
+          state: supplier.state || undefined,
+          confidence: supplier.confidence || 1.0,
+          matchReasoning: 'Cached supplier match'
+        }));
+        console.log(`Found ${candidates.length} cached candidates for "${classification.cleanedName}"`);
+      } else if (bigQueryService.isServiceConfigured()) {
+        // Fall back to BigQuery if cache miss
+        console.log('Cache miss - falling back to BigQuery');
+        candidates = await bigQueryService.searchKnownPayees(classification.cleanedName);
+      } else {
+        console.log('No cached data and BigQuery not configured');
+        return { matched: false };
+      }
       
       if (candidates.length === 0) {
         return { matched: false };

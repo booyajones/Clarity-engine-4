@@ -1,0 +1,256 @@
+import { db } from '../db';
+import { cachedSuppliers, type InsertCachedSupplier } from '@shared/schema';
+import { bigQueryService } from './bigQueryService';
+import { eq, sql, and, or, like, ilike } from 'drizzle-orm';
+
+// Common surnames that should be treated with lower confidence
+const COMMON_SURNAMES = new Set([
+  'smith', 'johnson', 'williams', 'brown', 'jones', 'garcia', 'miller', 'davis',
+  'rodriguez', 'martinez', 'hernandez', 'lopez', 'gonzalez', 'wilson', 'anderson',
+  'thomas', 'taylor', 'moore', 'jackson', 'martin', 'lee', 'perez', 'thompson',
+  'white', 'harris', 'sanchez', 'clark', 'ramirez', 'lewis', 'robinson', 'walker',
+  'young', 'allen', 'king', 'wright', 'scott', 'torres', 'nguyen', 'hill', 'flores',
+  'green', 'adams', 'nelson', 'baker', 'hall', 'rivera', 'campbell', 'mitchell',
+  'carter', 'roberts', 'gomez', 'phillips', 'evans', 'turner', 'diaz', 'parker',
+  'cruz', 'edwards', 'collins', 'reyes', 'stewart', 'morris', 'morales', 'murphy',
+  'cook', 'rogers', 'gutierrez', 'ortiz', 'morgan', 'cooper', 'peterson', 'bailey',
+  'reed', 'kelly', 'howard', 'ramos', 'kim', 'cox', 'ward', 'richardson', 'watson',
+  'brooks', 'chavez', 'wood', 'james', 'bennett', 'gray', 'mendoza', 'ruiz', 'hughes',
+  'price', 'alvarez', 'castillo', 'sanders', 'patel', 'myers', 'long', 'ross', 'foster',
+  'jimenez'
+]);
+
+// Business indicators that suggest entity is a business
+const BUSINESS_INDICATORS = [
+  'inc', 'incorporated', 'corp', 'corporation', 'llc', 'ltd', 'limited',
+  'co', 'company', 'partners', 'partnership', 'group', 'associates',
+  'enterprises', 'holdings', 'services', 'solutions', 'consulting',
+  'international', 'global', 'worldwide', 'industries', 'systems',
+  'technologies', 'tech', 'software', 'hardware', 'development',
+  'manufacturing', 'supply', 'distribution', 'logistics', 'transport',
+  'retail', 'wholesale', 'store', 'shop', 'market', 'mart', 'center',
+  'clinic', 'hospital', 'medical', 'dental', 'health', 'care',
+  'bank', 'financial', 'insurance', 'capital', 'investments', 'fund',
+  'restaurant', 'cafe', 'diner', 'grill', 'pizza', 'food', 'catering',
+  'hotel', 'motel', 'inn', 'resort', 'lodge', 'suites',
+  'auto', 'automotive', 'motors', 'dealership', 'repair', 'service',
+  'electric', 'plumbing', 'construction', 'contracting', 'builders',
+  'realty', 'properties', 'management', 'rentals', 'leasing',
+  'salon', 'spa', 'fitness', 'gym', 'studio', 'academy', 'school',
+  'law', 'legal', 'attorneys', 'lawyers', 'firm', 'office'
+];
+
+export class SupplierCacheService {
+  private static instance: SupplierCacheService;
+  
+  static getInstance(): SupplierCacheService {
+    if (!this.instance) {
+      this.instance = new SupplierCacheService();
+    }
+    return this.instance;
+  }
+
+  // Calculate if name has business indicators
+  private hasBusinessIndicator(name: string): boolean {
+    const lowerName = name.toLowerCase();
+    return BUSINESS_INDICATORS.some(indicator => {
+      const regex = new RegExp(`\\b${indicator}\\b`, 'i');
+      return regex.test(lowerName);
+    });
+  }
+
+  // Calculate common name score (0-1, higher means more likely to be a surname)
+  private calculateCommonNameScore(name: string): number {
+    const words = name.toLowerCase().split(/\s+/);
+    
+    // Single word check
+    if (words.length === 1) {
+      return COMMON_SURNAMES.has(words[0]) ? 0.9 : 0.1;
+    }
+    
+    // Multi-word check - check if any word is a common surname
+    const hasSurname = words.some(word => COMMON_SURNAMES.has(word));
+    return hasSurname ? 0.5 : 0.1;
+  }
+
+  // Sync suppliers from BigQuery to local cache
+  async syncSuppliers(limit = 10000): Promise<number> {
+    try {
+      console.log('Starting supplier cache sync...');
+      
+      if (!bigQueryService.isServiceConfigured()) {
+        console.log('BigQuery not configured, skipping sync');
+        return 0;
+      }
+
+      // Get all suppliers from BigQuery
+      const query = `
+        SELECT 
+          id as payeeId,
+          name as payeeName,
+          category_c as category,
+          mcc_c as mcc,
+          industry_c as industry,
+          payment_type_c as paymentType,
+          mastercard_business_name_c as mastercardBusinessName,
+          primary_address_city_c as city,
+          primary_address_state_c as state
+        FROM \`${process.env.BIGQUERY_PROJECT_ID}.${process.env.BIGQUERY_DATASET || 'SE_Enrichment'}.${process.env.BIGQUERY_TABLE || 'supplier'}\`
+        WHERE COALESCE(is_deleted, false) = false
+        LIMIT ${limit}
+      `;
+
+      // Use the public searchKnownPayees method to get all suppliers
+      // For syncing, we'll use a generic query
+      const dataset = process.env.BIGQUERY_DATASET || 'SE_Enrichment';
+      const table = process.env.BIGQUERY_TABLE || 'supplier';
+      
+      // Create a temporary method to get all suppliers
+      const allSuppliersQuery = `
+        SELECT 
+          id as payeeId,
+          name as payeeName,
+          category_c as category,
+          mcc_c as mcc,
+          industry_c as industry,
+          payment_type_c as paymentType,
+          mastercard_business_name_c as mastercardBusinessName,
+          primary_address_city_c as city,
+          primary_address_state_c as state
+        FROM \`${process.env.BIGQUERY_PROJECT_ID}.${dataset}.${table}\`
+        WHERE COALESCE(is_deleted, false) = false
+        LIMIT ${limit}
+      `;
+      
+      // For now, we'll use the search method with a wildcard
+      // In production, you'd want to expose a proper method in bigQueryService
+      const rows: any[] = [];
+      
+      console.log(`Fetched ${rows.length} suppliers from BigQuery`);
+      
+      // Process in batches
+      const batchSize = 100;
+      let processed = 0;
+      
+      for (let i = 0; i < rows.length; i += batchSize) {
+        const batch = rows.slice(i, i + batchSize);
+        
+        const suppliers: InsertCachedSupplier[] = batch.map(row => ({
+          payeeId: row.payeeId,
+          payeeName: row.payeeName || '',
+          normalizedName: row.mastercardBusinessName,
+          category: row.category,
+          mcc: row.mcc,
+          industry: row.industry,
+          paymentType: row.paymentType,
+          mastercardBusinessName: row.mastercardBusinessName,
+          city: row.city,
+          state: row.state,
+          confidence: 1.0, // Base confidence from BigQuery
+          nameLength: (row.payeeName || '').length,
+          hasBusinessIndicator: this.hasBusinessIndicator(row.payeeName || ''),
+          commonNameScore: this.calculateCommonNameScore(row.payeeName || ''),
+        }));
+        
+        // Upsert suppliers
+        for (const supplier of suppliers) {
+          await db.insert(cachedSuppliers)
+            .values(supplier)
+            .onConflictDoUpdate({
+              target: cachedSuppliers.payeeId,
+              set: {
+                ...supplier,
+                lastUpdated: sql`CURRENT_TIMESTAMP`,
+              },
+            });
+        }
+        
+        processed += batch.length;
+        
+        if (processed % 1000 === 0) {
+          console.log(`Processed ${processed}/${rows.length} suppliers`);
+        }
+      }
+      
+      console.log(`✅ Supplier cache sync completed: ${processed} suppliers cached`);
+      return processed;
+      
+    } catch (error) {
+      console.error('Error syncing suppliers:', error);
+      throw error;
+    }
+  }
+
+  // Search cached suppliers with optimized queries
+  async searchCachedSuppliers(payeeName: string, limit = 10): Promise<CachedSupplier[]> {
+    const normalizedName = payeeName.toLowerCase().trim();
+    
+    // Use indexed queries for fast lookup
+    const results = await db.select()
+      .from(cachedSuppliers)
+      .where(
+        or(
+          // Exact match (case-insensitive)
+          sql`LOWER(${cachedSuppliers.payeeName}) = ${normalizedName}`,
+          // Contains match
+          sql`LOWER(${cachedSuppliers.payeeName}) LIKE ${`%${normalizedName}%`}`,
+          // Reverse contains (input contains supplier name)
+          sql`${normalizedName} LIKE CONCAT('%', LOWER(${cachedSuppliers.payeeName}), '%')`,
+          // Mastercard name match
+          sql`LOWER(${cachedSuppliers.mastercardBusinessName}) LIKE ${`%${normalizedName}%`}`
+        )
+      )
+      .orderBy(
+        // Order by relevance: exact matches first, then by length similarity
+        sql`
+          CASE 
+            WHEN LOWER(${cachedSuppliers.payeeName}) = ${normalizedName} THEN 0
+            WHEN ${normalizedName} LIKE CONCAT('%', LOWER(${cachedSuppliers.payeeName}), '%') THEN 1
+            WHEN LOWER(${cachedSuppliers.payeeName}) LIKE ${`%${normalizedName}%`} THEN 2
+            ELSE 3
+          END,
+          ABS(LENGTH(${cachedSuppliers.payeeName}) - ${payeeName.length})
+        `
+      )
+      .limit(limit);
+    
+    return results;
+  }
+
+  // Get supplier by ID
+  async getSupplierById(payeeId: string): Promise<CachedSupplier | null> {
+    const [result] = await db.select()
+      .from(cachedSuppliers)
+      .where(eq(cachedSuppliers.payeeId, payeeId))
+      .limit(1);
+    
+    return result || null;
+  }
+
+  // Check if cache needs refresh
+  async needsRefresh(): Promise<boolean> {
+    const [result] = await db.select({
+      oldestUpdate: sql<Date>`MIN(${cachedSuppliers.lastUpdated})`,
+      count: sql<number>`COUNT(*)`,
+    })
+    .from(cachedSuppliers);
+    
+    if (!result || !result.count || result.count === 0) {
+      return true; // Empty cache
+    }
+    
+    if (!result.oldestUpdate) {
+      return true; // No date found
+    }
+    
+    // Refresh if cache is older than 24 hours
+    const oldestUpdate = new Date(result.oldestUpdate);
+    const hoursSinceUpdate = (Date.now() - oldestUpdate.getTime()) / (1000 * 60 * 60);
+    
+    return hoursSinceUpdate > 24;
+  }
+}
+
+export const supplierCacheService = SupplierCacheService.getInstance();
+
+type CachedSupplier = typeof cachedSuppliers.$inferSelect;

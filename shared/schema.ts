@@ -127,6 +127,27 @@ export const payeeMatches = pgTable("payee_matches", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Cached BigQuery suppliers for faster matching
+export const cachedSuppliers = pgTable("cached_suppliers", {
+  id: serial("id").primaryKey(),
+  payeeId: text("payee_id").notNull().unique(),
+  payeeName: text("payee_name").notNull(),
+  normalizedName: text("normalized_name"),
+  category: text("category"),
+  mcc: text("mcc"),
+  industry: text("industry"),
+  paymentType: text("payment_type"),
+  mastercardBusinessName: text("mastercard_business_name"),
+  city: text("city"),
+  state: text("state"),
+  confidence: real("confidence"),
+  nameLength: integer("name_length"), // For quick filtering
+  hasBusinessIndicator: boolean("has_business_indicator"), // Has Co., Inc., LLC, etc.
+  commonNameScore: real("common_name_score"), // 0-1, higher means more common as surname
+  lastUpdated: timestamp("last_updated").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
@@ -174,6 +195,12 @@ export const insertPayeeMatchSchema = createInsertSchema(payeeMatches).omit({
   updatedAt: true,
 });
 
+export const insertCachedSupplierSchema = createInsertSchema(cachedSuppliers).omit({
+  id: true,
+  createdAt: true,
+  lastUpdated: true,
+});
+
 // Select types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -191,3 +218,5 @@ export type ExclusionLog = typeof exclusionLogs.$inferSelect;
 export type InsertExclusionLog = z.infer<typeof insertExclusionLogSchema>;
 export type PayeeMatch = typeof payeeMatches.$inferSelect;
 export type InsertPayeeMatch = z.infer<typeof insertPayeeMatchSchema>;
+export type CachedSupplier = typeof cachedSuppliers.$inferSelect;
+export type InsertCachedSupplier = z.infer<typeof insertCachedSupplierSchema>;

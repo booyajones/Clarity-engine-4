@@ -15,6 +15,48 @@ export class FuzzyMatcher {
     }
   }
   
+  // Check if a name could be a person's name
+  private isPossiblePersonName(name: string): boolean {
+    const words = name.trim().split(/\s+/);
+    
+    // Single word - could be surname
+    if (words.length === 1) {
+      return true;
+    }
+    
+    // Check for common name patterns (First Last, First Middle Last)
+    if (words.length === 2 || words.length === 3) {
+      // No business indicators
+      const hasBusinessIndicator = /\b(inc|corp|llc|ltd|co|company|partners|services|group)\b/i.test(name);
+      return !hasBusinessIndicator;
+    }
+    
+    return false;
+  }
+
+  // Calculate penalty for ambiguous matches
+  private calculateAmbiguityPenalty(inputName: string, candidateName: string): number {
+    const inputWords = inputName.trim().split(/\s+/);
+    const candidateWords = candidateName.trim().split(/\s+/);
+    
+    // Single word matching (like "Johnson" vs "Johnson Co.")
+    if (inputWords.length === 1 || candidateWords.length === 1) {
+      // Check if single word could be a surname
+      const singleWord = inputWords.length === 1 ? inputWords[0] : candidateWords[0];
+      const commonSurnames = ['smith', 'johnson', 'williams', 'brown', 'jones', 'garcia', 'miller', 'davis'];
+      
+      if (commonSurnames.includes(singleWord.toLowerCase())) {
+        return 0.3; // 30% penalty for common surname matches
+      }
+      
+      // General penalty for single word matches
+      return 0.2; // 20% penalty
+    }
+    
+    // No penalty for multi-word matches
+    return 0;
+  }
+
   // Main matching function that combines multiple algorithms
   async matchPayee(inputName: string, candidateName: string): Promise<{
     isMatch: boolean;
@@ -59,9 +101,13 @@ export class FuzzyMatcher {
       totalWeight += weight;
     });
     
-    const averageConfidence = weightedSum / totalWeight;
+    let averageConfidence = weightedSum / totalWeight;
     
-    console.log(`Fuzzy match: "${inputName}" vs "${candidateName}" - Confidence: ${(averageConfidence * 100).toFixed(2)}%`);
+    // Apply ambiguity penalty for single-word matches
+    const ambiguityPenalty = this.calculateAmbiguityPenalty(inputName, candidateName);
+    averageConfidence = averageConfidence * (1 - ambiguityPenalty);
+    
+    console.log(`Fuzzy match: "${inputName}" vs "${candidateName}" - Confidence: ${(averageConfidence * 100).toFixed(2)}% (penalty: ${(ambiguityPenalty * 100).toFixed(0)}%)`);
     
     // If confidence is below 90%, use AI for final determination
     if (averageConfidence >= 0.9) {
