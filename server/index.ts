@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { schedulerService } from "./services/schedulerService";
 
 const app = express();
 // Security and optimization middleware
@@ -77,6 +78,13 @@ app.use((req, res, next) => {
       reusePort: true,
     }, () => {
       log(`serving on port ${port}`);
+      
+      // Initialize scheduled jobs after server starts
+      try {
+        schedulerService.initialize();
+      } catch (error) {
+        console.error('Failed to initialize scheduler:', error);
+      }
     });
   } catch (error) {
     console.error('Failed to start server:', error);

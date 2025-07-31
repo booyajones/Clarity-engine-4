@@ -682,6 +682,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Scheduler API Routes
+  
+  // Get scheduler status
+  app.get("/api/scheduler/status", async (req, res) => {
+    try {
+      const { schedulerService } = await import("./services/schedulerService");
+      const status = schedulerService.getJobStatus();
+      
+      res.json({
+        success: true,
+        jobs: status
+      });
+    } catch (error) {
+      console.error("Error getting scheduler status:", error);
+      res.status(500).json({ error: "Failed to get scheduler status" });
+    }
+  });
+  
+  // Manually trigger cache refresh
+  app.post("/api/scheduler/refresh-cache", async (req, res) => {
+    try {
+      const { schedulerService } = await import("./services/schedulerService");
+      console.log("🔄 Manual cache refresh triggered via API");
+      
+      const result = await schedulerService.triggerSupplierRefresh();
+      
+      res.json({
+        success: true,
+        message: "Cache refresh triggered successfully",
+        result
+      });
+    } catch (error) {
+      console.error("Error triggering cache refresh:", error);
+      res.status(500).json({ error: "Failed to trigger cache refresh" });
+    }
+  });
+
   // Single payee classification endpoint
   app.post("/api/classify-single", async (req, res) => {
     try {

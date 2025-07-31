@@ -249,6 +249,32 @@ export class SupplierCacheService {
     
     return hoursSinceUpdate > 24;
   }
+  
+  // Refresh cache - wrapper for syncSuppliers with logging
+  async refreshCache(): Promise<{ totalSuppliers: number; lastUpdated: Date }> {
+    console.log('🔄 Starting supplier cache refresh...');
+    const startTime = Date.now();
+    
+    try {
+      // Clear existing cache before refresh
+      console.log('🧹 Clearing existing cache...');
+      await db.delete(cachedSuppliers);
+      
+      // Sync suppliers from BigQuery (50,000 limit)
+      const totalSuppliers = await this.syncSuppliers(50000);
+      
+      const duration = Math.round((Date.now() - startTime) / 1000);
+      console.log(`✅ Cache refresh completed in ${duration}s with ${totalSuppliers} suppliers`);
+      
+      return {
+        totalSuppliers,
+        lastUpdated: new Date()
+      };
+    } catch (error) {
+      console.error('❌ Cache refresh failed:', error);
+      throw error;
+    }
+  }
 }
 
 export const supplierCacheService = SupplierCacheService.getInstance();

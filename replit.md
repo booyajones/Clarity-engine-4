@@ -23,6 +23,7 @@ Preferred communication style: Simple, everyday language.
 - **File Processing**: Multer for CSV/Excel uploads
 - **Session Management**: Connect-pg-simple for PostgreSQL
 - **Performance**: Optimized with local caching and database indexes
+- **Scheduler Service**: Automatic nightly cache refresh at 2 AM EST using node-cron
 
 ### Database
 - **Primary Database**: PostgreSQL via Neon serverless
