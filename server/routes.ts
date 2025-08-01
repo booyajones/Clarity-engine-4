@@ -805,9 +805,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       }
       
+      // Perform Mastercard enrichment if enabled  
+      let mastercardEnrichment = null;
+      if (matchingOptions?.enableMastercard) {
+        // Check if Mastercard API credentials are configured
+        if (!process.env.MASTERCARD_CONSUMER_KEY || !process.env.MASTERCARD_P12_PATH) {
+          mastercardEnrichment = {
+            enriched: false,
+            status: "not_configured",
+            message: "Mastercard API credentials not configured. Please add MASTERCARD_CONSUMER_KEY and certificate.",
+            data: null
+          };
+        } else {
+          // TODO: Implement actual Mastercard enrichment here
+          mastercardEnrichment = {
+            enriched: false,
+            status: "pending",
+            message: "Mastercard enrichment is being processed",
+            data: null
+          };
+        }
+      } else {
+        mastercardEnrichment = {
+          enriched: false,
+          status: "disabled",
+          message: "Mastercard enrichment disabled",
+          data: null
+        };
+      }
+      
       res.json({
         ...result,
-        bigQueryMatch
+        bigQueryMatch,
+        mastercardEnrichment
       });
     } catch (error) {
       console.error("Single classification error:", error);

@@ -30,6 +30,18 @@ interface ClassificationResult {
       confidence: number;
     };
   };
+  mastercardEnrichment?: {
+    enriched: boolean;
+    status: string;
+    message: string;
+    data?: {
+      merchantCategoryCode?: string;
+      merchantCategoryDescription?: string;
+      acceptanceNetwork?: string;
+      lastTransactionDate?: string;
+      dataQualityLevel?: string;
+    } | null;
+  };
 }
 
 const getTypeIcon = (type: string) => {
@@ -273,6 +285,73 @@ export function SingleClassification() {
                 ) : (
                   <div className="text-sm text-gray-600 dark:text-gray-400">
                     {result.bigQueryMatch.finexioSupplier.matchReasoning}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {result.mastercardEnrichment && (
+              <div className={`p-4 rounded-lg space-y-3 border ${
+                result.mastercardEnrichment.enriched 
+                  ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800' 
+                  : 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <p className={`text-sm font-medium flex items-center gap-2 ${
+                    result.mastercardEnrichment.enriched 
+                      ? 'text-amber-800 dark:text-amber-200' 
+                      : 'text-gray-600 dark:text-gray-400'
+                  }`}>
+                    <Globe className="h-4 w-4" />
+                    Mastercard Track™ Enrichment
+                  </p>
+                  {result.mastercardEnrichment.status === "not_configured" && (
+                    <Badge className="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100">
+                      Credentials Required
+                    </Badge>
+                  )}
+                  {result.mastercardEnrichment.status === "disabled" && (
+                    <Badge className="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100">
+                      Disabled
+                    </Badge>
+                  )}
+                  {result.mastercardEnrichment.status === "pending" && (
+                    <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100">
+                      Processing
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  {result.mastercardEnrichment.message}
+                </div>
+                {result.mastercardEnrichment.enriched && result.mastercardEnrichment.data && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm mt-3">
+                    {result.mastercardEnrichment.data.merchantCategoryCode && (
+                      <div>
+                        <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Merchant Category</label>
+                        <p className="text-amber-900 dark:text-amber-100">
+                          {result.mastercardEnrichment.data.merchantCategoryCode} - {result.mastercardEnrichment.data.merchantCategoryDescription}
+                        </p>
+                      </div>
+                    )}
+                    {result.mastercardEnrichment.data.acceptanceNetwork && (
+                      <div>
+                        <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Acceptance Network</label>
+                        <p className="text-amber-900 dark:text-amber-100">{result.mastercardEnrichment.data.acceptanceNetwork}</p>
+                      </div>
+                    )}
+                    {result.mastercardEnrichment.data.lastTransactionDate && (
+                      <div>
+                        <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Last Transaction</label>
+                        <p className="text-amber-900 dark:text-amber-100">{result.mastercardEnrichment.data.lastTransactionDate}</p>
+                      </div>
+                    )}
+                    {result.mastercardEnrichment.data.dataQualityLevel && (
+                      <div>
+                        <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Data Quality</label>
+                        <p className="text-amber-900 dark:text-amber-100">{result.mastercardEnrichment.data.dataQualityLevel}</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
