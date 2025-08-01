@@ -744,6 +744,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Classify the single payee
       const result = await classificationService.classifyPayee(payeeData);
       
+      // Extract the corrected name from the result
+      let cleanedName = payeeName.trim();
+      
+      // Check if the AI reasoning mentions a likely correct spelling
+      if (result.reasoning) {
+        // Look for patterns like "misspelling of 'Microsoft'" or "likely meant 'Microsoft'"
+        const correctionMatch = result.reasoning.match(/(?:misspelling of|likely meant|should be|corrected to|is actually)\s*['"]?([^'"]+)['"]?/i);
+        if (correctionMatch && correctionMatch[1]) {
+          // Extract just the company name from the match
+          const correctedName = correctionMatch[1].replace(/[,.].*$/, '').trim();
+          if (correctedName.length > 0) {
+            cleanedName = correctedName;
+            console.log(`Detected spelling correction: "${payeeName}" → "${cleanedName}"`);
+          }
+        }
+      }
+      
+      // For known businesses, also try to extract the actual business name from the reasoning
+      if (result.payeeType === 'Business' && result.reasoning.includes('well-known')) {
+        const businessMatch = result.reasoning.match(/(?:The payee\s+['"]?[^'"]+['"]?\s+is\s+a\s+(?:likely\s+)?(?:misspelling\s+of\s+)?['"]?([^'",]+)['"]?,?\s+a\s+well-known)/i);
+        if (businessMatch && businessMatch[1]) {
+          cleanedName = businessMatch[1].trim();
+          console.log(`Extracted business name from reasoning: "${cleanedName}"`);
+        }
+      }
+      
       // Perform BigQuery matching if enabled
       let bigQueryMatch = null;
       if (matchingOptions?.enableBigQuery !== false) { // Default to enabled
@@ -751,9 +777,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Create a temporary classification object for matching
         const tempClassification = {
+          ...payeeData,
           id: -1, // Temporary ID for quick classify
-          cleanedName: (result as any).cleanedName || payeeName.trim(),
-          ...payeeData
+          cleanedName: cleanedName, // Use the corrected/cleaned name
+          originalName: payeeName.trim()
         };
         
         const matchResult = await payeeMatchingService.matchPayeeWithBigQuery(
