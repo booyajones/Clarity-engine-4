@@ -1082,8 +1082,8 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       
       console.log(`Starting BigQuery payee matching for batch ${batchId}`);
       
-      // Run payee matching
-      const result = await payeeMatchingService.matchBatchPayees(batchId);
+      // Run payee matching with options
+      const result = await payeeMatchingService.matchBatchPayees(batchId, this.matchingOptions);
       
       console.log(`BigQuery matching completed for batch ${batchId}: ${result.totalMatched}/${result.totalProcessed} matches found`);
       

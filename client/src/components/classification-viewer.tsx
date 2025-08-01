@@ -91,6 +91,16 @@ interface ClassificationData {
   paymentType?: string;
   matchReasoning?: string;
   createdAt: string;
+  // Include payee matches from backend
+  payeeMatches?: Array<{
+    id: number;
+    bigQueryPayeeId: string;
+    bigQueryPayeeName: string;
+    finexioMatchScore: number;
+    matchType: string;
+    matchReasoning: string;
+    paymentType?: string;
+  }>;
 }
 
 interface PayeeMatch {

@@ -43,7 +43,7 @@ export class PayeeMatchingService {
     try {
       // Apply default options
       const opts = {
-        enableBigQuery: true,
+        enableFinexio: true,
         enableMastercard: false, // Disabled until P12 password is provided
         enableAI: true,
         confidenceThreshold: 0.7,
@@ -51,9 +51,9 @@ export class PayeeMatchingService {
         ...options
       };
 
-      // Skip if BigQuery is disabled
-      if (!opts.enableBigQuery) {
-        console.log('BigQuery disabled - skipping payee matching');
+      // Skip if Finexio/BigQuery is disabled
+      if (opts.enableFinexio === false) {
+        console.log('Finexio matching disabled - skipping payee matching');
         return { matched: false };
       }
       

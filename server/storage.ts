@@ -25,7 +25,7 @@ import {
   type InsertPayeeMatch
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, lt, count, sql } from "drizzle-orm";
+import { eq, desc, and, lt, count, sql, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // User operations
@@ -492,6 +492,16 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(payeeMatches)
       .where(eq(payeeMatches.classificationId, classificationId))
+      .orderBy(desc(payeeMatches.matchConfidence));
+  }
+  
+  async getMatchesForClassifications(classificationIds: number[]): Promise<PayeeMatch[]> {
+    if (classificationIds.length === 0) return [];
+    
+    return await db
+      .select()
+      .from(payeeMatches)
+      .where(inArray(payeeMatches.classificationId, classificationIds))
       .orderBy(desc(payeeMatches.matchConfidence));
   }
   

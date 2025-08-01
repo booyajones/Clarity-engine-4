@@ -424,6 +424,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const classifications = await storage.getBatchClassifications(batchId, limit, offset);
       const totalCount = await storage.getBatchClassificationCount(batchId);
 
+      // Get payee matches for all classifications
+      const classificationIds = classifications.map(c => c.id);
+      const allMatches = await storage.getMatchesForClassifications(classificationIds);
+      
+      // Group matches by classification ID
+      const matchesByClassification = allMatches.reduce((acc, match) => {
+        if (!acc[match.classificationId]) {
+          acc[match.classificationId] = [];
+        }
+        acc[match.classificationId].push(match);
+        return acc;
+      }, {} as Record<number, typeof allMatches>);
+      
       // Return structured data for viewing
       const viewData = classifications.map(c => {
         const originalData = (c.originalData as Record<string, any>) || {};
@@ -431,6 +444,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Extract duplicate ID from reasoning if present
         const duplicateMatch = c.reasoning && c.reasoning.match(/\[(duplicate_id\d+)\]/);
         const duplicateId = duplicateMatch ? duplicateMatch[1] : "";
+        
+        // Get payee matches for this classification
+        const payeeMatches = matchesByClassification[c.id] || [];
         
         return {
           id: c.id,
@@ -451,6 +467,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           isExcluded: c.isExcluded,
           exclusionKeyword: c.exclusionKeyword,
           createdAt: c.createdAt,
+          // Include payee matches
+          payeeMatches: payeeMatches.map(m => ({
+            id: m.id,
+            bigQueryPayeeId: m.bigQueryPayeeId,
+            bigQueryPayeeName: m.bigQueryPayeeName,
+            finexioMatchScore: m.finexioMatchScore,
+            matchType: m.matchType,
+            matchReasoning: m.matchReasoning,
+            paymentType: (m.matchDetails as any)?.paymentType || undefined
+          }))
         };
       });
 
@@ -498,6 +524,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Batch not found" });
       }
 
+      // Get payee matches for all classifications
+      const classificationIds = classifications.map(c => c.id);
+      const allMatches = await storage.getMatchesForClassifications(classificationIds);
+      
+      // Group matches by classification ID
+      const matchesByClassification = allMatches.reduce((acc, match) => {
+        if (!acc[match.classificationId]) {
+          acc[match.classificationId] = [];
+        }
+        acc[match.classificationId].push(match);
+        return acc;
+      }, {} as Record<number, typeof allMatches>);
+
       // Prepare CSV data - start with original data, then append classification results
       const csvData = classifications.map(c => {
         const originalData = (c.originalData as Record<string, any>) || {};
@@ -505,6 +544,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Extract duplicate ID from reasoning if present
         const duplicateMatch = c.reasoning && c.reasoning.match(/\[(duplicate_id\d+)\]/);
         const duplicateId = duplicateMatch ? duplicateMatch[1] : "";
+        
+        // Get payee matches for this classification
+        const payeeMatches = matchesByClassification[c.id] || [];
+        const firstMatch = payeeMatches[0]; // Use the first (best) match if available
         
         return {
           ...originalData, // Original columns come first
@@ -533,9 +576,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           clarity_mastercard_last_transaction_date: c.mastercardLastTransactionDate || "",
           clarity_mastercard_data_quality_level: c.mastercardDataQualityLevel || "",
           // BigQuery/Finexio enrichment fields
-          clarity_finexio_match_score: (c as any).finexioMatchScore ? Math.round((c as any).finexioMatchScore * 100) + "%" : "",
-          clarity_payment_type: (c as any).paymentType || "",
-          clarity_match_reasoning: (c as any).matchReasoning || "",
+          clarity_finexio_match_score: firstMatch?.finexioMatchScore ? Math.round(firstMatch.finexioMatchScore) + "%" : "",
+          clarity_finexio_match_name: firstMatch?.bigQueryPayeeName || "",
+          clarity_finexio_match_type: firstMatch?.matchType || "",
+          clarity_payment_type: firstMatch ? (firstMatch.matchDetails as any)?.paymentType || "" : "",
+          clarity_match_reasoning: firstMatch?.matchReasoning || "",
         };
       });
 
