@@ -184,8 +184,8 @@ export class SupplierCacheService {
   async searchCachedSuppliers(payeeName: string, limit = 10): Promise<CachedSupplier[]> {
     const normalizedName = payeeName.toLowerCase().trim();
     
-    // Use indexed queries for fast lookup
-    const results = await db.select()
+    // First try exact and substring matches
+    const exactResults = await db.select()
       .from(cachedSuppliers)
       .where(
         or(
@@ -213,7 +213,49 @@ export class SupplierCacheService {
       )
       .limit(limit);
     
-    return results;
+    // If we found good matches, return them
+    if (exactResults.length >= 3) {
+      return exactResults;
+    }
+    
+    // For short results, also try trigram similarity for fuzzy matching
+    // This will find similar names even with misspellings
+    try {
+      const fuzzyResults = await db.execute(sql`
+        SELECT *
+        FROM ${cachedSuppliers}
+        WHERE LENGTH(${payeeName}) >= 4
+        AND (
+          similarity(LOWER(${cachedSuppliers.payeeName}), ${normalizedName}) > 0.25
+          OR similarity(LOWER(${cachedSuppliers.mastercardBusinessName}), ${normalizedName}) > 0.25
+        )
+        ORDER BY 
+          GREATEST(
+            similarity(LOWER(${cachedSuppliers.payeeName}), ${normalizedName}),
+            similarity(LOWER(${cachedSuppliers.mastercardBusinessName}), ${normalizedName})
+          ) DESC
+        LIMIT ${limit - exactResults.length}
+      `);
+      
+      // Combine results, avoiding duplicates and filtering out null names
+      const existingIds = new Set(exactResults.map(r => r.payeeId));
+      const combinedResults = [...exactResults];
+      
+      for (const row of fuzzyResults.rows) {
+        const supplier = row as CachedSupplier;
+        if (!existingIds.has(supplier.payeeId) && 
+            supplier.payeeName && 
+            combinedResults.length < limit) {
+          combinedResults.push(supplier);
+        }
+      }
+      
+      return combinedResults;
+    } catch (error) {
+      // If trigram extension is not available, just return exact results
+      console.log('Trigram search failed, falling back to exact matches:', error);
+      return exactResults;
+    }
   }
 
   // Get supplier by ID

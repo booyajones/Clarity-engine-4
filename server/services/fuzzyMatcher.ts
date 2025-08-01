@@ -147,7 +147,9 @@ export class FuzzyMatcher {
   }
   
   // Normalize strings for comparison
-  private normalize(name: string): string {
+  private normalize(name: string | null | undefined): string {
+    if (!name) return '';
+    
     return name
       .toLowerCase()
       .trim()

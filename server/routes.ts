@@ -747,16 +747,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Extract the corrected name from the result
       let cleanedName = payeeName.trim();
       
-      // Check if the AI reasoning mentions a likely correct spelling
+      // Check if the AI reasoning mentions a likely correct spelling or similar company
       if (result.reasoning) {
-        // Look for patterns like "misspelling of 'Microsoft'" or "likely meant 'Microsoft'"
-        const correctionMatch = result.reasoning.match(/(?:misspelling of|likely meant|should be|corrected to|is actually)\s*['"]?([^'"]+)['"]?/i);
-        if (correctionMatch && correctionMatch[1]) {
-          // Extract just the company name from the match
-          const correctedName = correctionMatch[1].replace(/[,.].*$/, '').trim();
-          if (correctedName.length > 0) {
-            cleanedName = correctedName;
-            console.log(`Detected spelling correction: "${payeeName}" → "${cleanedName}"`);
+        // Look for various patterns where AI might mention the correct company name
+        const patterns = [
+          // Original patterns
+          /(?:misspelling of|likely meant|should be|corrected to|is actually)\s*['"]?([^'"]+)['"]?/i,
+          // New patterns for similarity mentions
+          /similar to (?:known )?(?:software )?compan(?:y|ies) like\s+([^,.\s]+)/i,
+          /similar to\s+([A-Z][a-zA-Z]+)(?:\s|,|\.)/,
+          /(?:such as|like)\s+([A-Z][a-zA-Z]+)(?:\s|,|\.)/
+        ];
+        
+        for (const pattern of patterns) {
+          const match = result.reasoning.match(pattern);
+          if (match && match[1]) {
+            const extractedName = match[1].replace(/[,.].*$/, '').trim();
+            if (extractedName.length > 0 && extractedName !== payeeName) {
+              cleanedName = extractedName;
+              console.log(`Detected name correction/similarity: "${payeeName}" → "${cleanedName}"`);
+              break;
+            }
           }
         }
       }
@@ -765,8 +776,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (result.payeeType === 'Business' && result.reasoning.includes('well-known')) {
         const businessMatch = result.reasoning.match(/(?:The payee\s+['"]?[^'"]+['"]?\s+is\s+a\s+(?:likely\s+)?(?:misspelling\s+of\s+)?['"]?([^'",]+)['"]?,?\s+a\s+well-known)/i);
         if (businessMatch && businessMatch[1]) {
-          cleanedName = businessMatch[1].trim();
-          console.log(`Extracted business name from reasoning: "${cleanedName}"`);
+          const extractedName = businessMatch[1].trim();
+          if (extractedName !== payeeName) {
+            cleanedName = extractedName;
+            console.log(`Extracted well-known business name: "${cleanedName}"`);
+          }
         }
       }
       
@@ -775,18 +789,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (matchingOptions?.enableBigQuery !== false) { // Default to enabled
         const { payeeMatchingService } = await import("./services/payeeMatchingService");
         
-        // Create a temporary classification object for matching
-        const tempClassification = {
-          ...payeeData,
-          id: -1, // Temporary ID for quick classify
-          cleanedName: cleanedName, // Use the corrected/cleaned name
-          originalName: payeeName.trim()
-        };
+        // If no correction was found from AI but it's a business with high confidence,
+        // try both the original name and potential fuzzy matches
+        let namesToTry = [cleanedName];
         
-        const matchResult = await payeeMatchingService.matchPayeeWithBigQuery(
-          tempClassification as any, 
-          matchingOptions || {}
-        );
+        if (cleanedName === payeeName.trim() && result.payeeType === 'Business' && result.confidence >= 0.90) {
+          // No correction found, but high confidence business - try fuzzy search
+          console.log(`No AI correction found for business "${payeeName}", will try fuzzy matching`);
+          
+          // Also try the original name in case fuzzy matching finds something
+          if (!namesToTry.includes(payeeName.trim())) {
+            namesToTry.push(payeeName.trim());
+          }
+        }
+        
+        let bestMatch = null;
+        let bestScore = 0;
+        
+        // Try each name variant
+        for (const nameToTry of namesToTry) {
+          const tempClassification = {
+            ...payeeData,
+            id: -1, // Temporary ID for quick classify
+            cleanedName: nameToTry,
+            originalName: payeeName.trim()
+          };
+          
+          const matchResult = await payeeMatchingService.matchPayeeWithBigQuery(
+            tempClassification as any, 
+            matchingOptions || {}
+          );
+          
+          if (matchResult.matched && matchResult.matchedPayee) {
+            const score = matchResult.matchedPayee.finexioMatchScore || 0;
+            if (score > bestScore) {
+              bestScore = score;
+              bestMatch = matchResult;
+            }
+          }
+        }
+        
+        const matchResult = bestMatch || { matched: false, matchedPayee: null };
         
         if (matchResult.matched && matchResult.matchedPayee) {
           bigQueryMatch = {
