@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload as UploadIcon, Download, Loader2, X, FileSpreadsheet, CheckCircle2, XCircle, Clock, AlertCircle, Activity, ArrowRight, ClipboardList, Sparkles, Eye } from "lucide-react";
+import { Upload as UploadIcon, Download, Loader2, X, FileSpreadsheet, CheckCircle2, XCircle, Clock, AlertCircle, Activity, ArrowRight, ClipboardList, Sparkles, Eye, Settings } from "lucide-react";
 import { useState, useRef } from "react";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -25,6 +25,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface UploadBatch {
   id: number;
@@ -63,6 +70,10 @@ export default function Home() {
   const [selectedColumn, setSelectedColumn] = useState<string>("");
   const [viewingBatchId, setViewingBatchId] = useState<number | null>(null);
   const [currentView, setCurrentView] = useState<"upload" | "keywords" | "single">("upload");
+  const [matchingOptions, setMatchingOptions] = useState({
+    enableFinexio: true,
+    enableMastercard: true,
+  });
 
   const { data: batches, isLoading } = useQuery<UploadBatch[]>({
     queryKey: ["/api/upload/batches"],
@@ -110,10 +121,11 @@ export default function Home() {
   });
 
   const processMutation = useMutation({
-    mutationFn: async ({ tempFileName, originalFilename, payeeColumn }: {
+    mutationFn: async ({ tempFileName, originalFilename, payeeColumn, matchingOptions }: {
       tempFileName: string;
       originalFilename: string;
       payeeColumn: string;
+      matchingOptions?: any;
     }) => {
       const res = await fetch("/api/upload/process", {
         method: "POST",
@@ -124,6 +136,7 @@ export default function Home() {
           tempFileName,
           originalFilename,
           payeeColumn,
+          matchingOptions,
         }),
         credentials: "include",
       });
@@ -239,6 +252,7 @@ export default function Home() {
       tempFileName: previewData.tempFileName,
       originalFilename: previewData.filename,
       payeeColumn: selectedColumn,
+      matchingOptions,
     });
   };
 
@@ -528,6 +542,57 @@ export default function Home() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                
+                {/* Matching Options */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-medium">Matching Options</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm">
+                          <Settings className="h-4 w-4 mr-2" />
+                          Configure
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80">
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <h4 className="font-medium leading-none">Matching Tools</h4>
+                            <p className="text-sm text-muted-foreground">
+                              Enable or disable matching tools for classification
+                            </p>
+                          </div>
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <Label htmlFor="finexio-toggle" className="text-sm">
+                                Finexio Matching
+                              </Label>
+                              <Switch
+                                id="finexio-toggle"
+                                checked={matchingOptions.enableFinexio}
+                                onCheckedChange={(checked) =>
+                                  setMatchingOptions((prev) => ({ ...prev, enableFinexio: checked }))
+                                }
+                              />
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <Label htmlFor="mastercard-toggle" className="text-sm">
+                                Mastercard Enrichment
+                              </Label>
+                              <Switch
+                                id="mastercard-toggle"
+                                checked={matchingOptions.enableMastercard}
+                                onCheckedChange={(checked) =>
+                                  setMatchingOptions((prev) => ({ ...prev, enableMastercard: checked }))
+                                }
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
                 </div>
                 
                 <div className="flex gap-2">
