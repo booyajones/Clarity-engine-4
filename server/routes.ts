@@ -203,7 +203,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Process file with selected column
   app.post("/api/upload/process", async (req, res) => {
     try {
-      const { tempFileName, originalFilename, payeeColumn } = req.body;
+      const { tempFileName, originalFilename, payeeColumn, matchingOptions } = req.body;
       
       if (!tempFileName || !payeeColumn) {
         return res.status(400).json({ error: "Missing required parameters" });
@@ -227,7 +227,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         originalname: originalFilename, 
         path: tempFilePath,
         extension: originalExt 
-      }, batch.id, payeeColumn);
+      }, batch.id, payeeColumn, matchingOptions);
 
       res.json({ 
         batchId: batch.id, 
@@ -784,9 +784,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Perform BigQuery matching if enabled
+      // Perform BigQuery/Finexio matching if enabled
       let bigQueryMatch = null;
-      if (matchingOptions?.enableBigQuery !== false) { // Default to enabled
+      if (matchingOptions?.enableFinexio !== false) { // Default to enabled
         const { payeeMatchingService } = await import("./services/payeeMatchingService");
         
         // If no correction was found from AI but it's a business with high confidence,
@@ -971,16 +971,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   return httpServer;
 }
 
-async function processFileAsync(file: any, batchId: number, payeeColumn?: string) {
+async function processFileAsync(file: any, batchId: number, payeeColumn?: string, matchingOptions?: any) {
   try {
     console.log(`Starting optimized file processing for batch ${batchId}, file: ${file.originalname}`);
     console.log(`File extension: ${file.extension}, file path: ${file.path}`);
+    console.log(`Matching options:`, matchingOptions);
     
     // Use the new optimized classification service
     const { optimizedClassificationService } = await import('./services/classificationV2');
     
-    // Process file with streaming to avoid memory issues, pass extension info
-    await optimizedClassificationService.processFileStream(batchId, file.path, payeeColumn, file.extension);
+    // Process file with streaming to avoid memory issues, pass extension info and matching options
+    await optimizedClassificationService.processFileStream(batchId, file.path, payeeColumn, file.extension, matchingOptions);
     
     console.log(`File processing completed for batch ${batchId}`);
   } catch (error) {

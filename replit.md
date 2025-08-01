@@ -58,6 +58,7 @@ Preferred communication style: Simple, everyday language.
 - **Data Management**: Bulk data processing, export capabilities with original and classified columns, comprehensive error handling.
 - **Job Reliability**: Automatic job failure detection for stalled jobs, sub-job processing for large datasets, adaptive batch sizing.
 - **Results Viewing**: Detailed interface for examining classification results, including summary cards, search, filtering, and column sorting.
+- **Tool Toggle Controls**: User-configurable settings to enable/disable Finexio matching and Mastercard enrichment for both single and batch classification operations.
 
 ## External Dependencies
 

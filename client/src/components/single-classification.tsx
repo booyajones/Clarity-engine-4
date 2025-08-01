@@ -73,16 +73,16 @@ const getTypeColor = (type: string) => {
 export function SingleClassification() {
   const [payeeName, setPayeeName] = useState("");
   const [result, setResult] = useState<ClassificationResult | null>(null);
-  const [enableBigQuery, setEnableBigQuery] = useState(true);
-  const [enableMastercard, setEnableMastercard] = useState(false);
+  const [enableFinexioMatching, setEnableFinexioMatching] = useState(true);
+  const [enableMastercardMatching, setEnableMastercardMatching] = useState(true);
 
   const classifyMutation = useMutation({
     mutationFn: async (name: string) => {
       const response = await apiRequest("POST", "/api/classify-single", { 
         payeeName: name,
         matchingOptions: {
-          enableBigQuery,
-          enableMastercard
+          enableFinexio: enableFinexioMatching,
+          enableMastercard: enableMastercardMatching
         }
       });
       return response.json();
@@ -153,13 +153,13 @@ export function SingleClassification() {
             <div className="flex items-center gap-6 text-sm">
               <div className="flex items-center gap-2">
                 <Database className="h-4 w-4 text-purple-600" />
-                <Label htmlFor="bigquery-toggle" className="text-sm font-normal cursor-pointer">
+                <Label htmlFor="finexio-toggle" className="text-sm font-normal cursor-pointer">
                   Finexio Network Search
                 </Label>
                 <Switch
-                  id="bigquery-toggle"
-                  checked={enableBigQuery}
-                  onCheckedChange={setEnableBigQuery}
+                  id="finexio-toggle"
+                  checked={enableFinexioMatching}
+                  onCheckedChange={setEnableFinexioMatching}
                 />
               </div>
               
@@ -170,8 +170,8 @@ export function SingleClassification() {
                 </Label>
                 <Switch
                   id="mastercard-toggle"
-                  checked={enableMastercard}
-                  onCheckedChange={setEnableMastercard}
+                  checked={enableMastercardMatching}
+                  onCheckedChange={setEnableMastercardMatching}
                 />
               </div>
             </div>

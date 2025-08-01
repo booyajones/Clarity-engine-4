@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -28,6 +29,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   ArrowLeft,
   ArrowRight,
   Download,
@@ -48,6 +54,7 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronsUpDown,
+  Settings,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -173,6 +180,8 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
   const [selectedClassification, setSelectedClassification] = useState<ClassificationData | null>(null);
   const [payeeMatches, setPayeeMatches] = useState<PayeeMatch[]>([]);
   const [loadingMatches, setLoadingMatches] = useState(false);
+  const [enableFinexioMatching, setEnableFinexioMatching] = useState(true);
+  const [enableMastercardMatching, setEnableMastercardMatching] = useState(true);
 
   const { data, isLoading, error } = useQuery<ClassificationResponse>({
     queryKey: ["/api/classifications", batchId, currentPage, pageSize],
@@ -219,7 +228,8 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
 
     const headers = [
       "Original Name", "Cleaned Name", "Type", "Confidence", "Excluded", "Exclusion Keyword", 
-      "SIC Code", "SIC Description", "Address", "City", "State", "ZIP", "Reasoning"
+      "SIC Code", "SIC Description", "Finexio Match Score", "Finexio Match Name", "Finexio Match Type",
+      "Address", "City", "State", "ZIP", "Reasoning"
     ];
 
     const csvContent = [
@@ -233,6 +243,9 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
         `"${classification.exclusionKeyword || ""}"`,
         `"${classification.sicCode || ""}"`,
         `"${classification.sicDescription || ""}"`,
+        `"${classification.payeeMatches?.[0]?.finexioMatchScore || 0}%"`,
+        `"${classification.payeeMatches?.[0]?.bigQueryPayeeName || ""}"`,
+        `"${classification.payeeMatches?.[0]?.matchType || ""}"`,
         `"${classification.address || ""}"`,
         `"${classification.city || ""}"`,
         `"${classification.state || ""}"`,
@@ -725,6 +738,49 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                 </SelectContent>
               </Select>
               
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="icon">
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80">
+                  <div className="space-y-4">
+                    <h3 className="font-medium text-sm">Matching Settings</h3>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label htmlFor="finexio-toggle" className="text-sm font-medium">
+                          Finexio Network Matching
+                        </label>
+                        <Switch
+                          id="finexio-toggle"
+                          checked={enableFinexioMatching}
+                          onCheckedChange={setEnableFinexioMatching}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Match payees against Finexio's supplier network database
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label htmlFor="mastercard-toggle" className="text-sm font-medium">
+                          Mastercard Track™ Enrichment
+                        </label>
+                        <Switch
+                          id="mastercard-toggle"
+                          checked={enableMastercardMatching}
+                          onCheckedChange={setEnableMastercardMatching}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Enrich business data using Mastercard Track™ Search API
+                      </p>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+              
               <div className="text-sm text-gray-500 flex items-center">
                 Click column headers to sort • 
                 <span className="inline-flex items-center ml-2">
@@ -789,6 +845,15 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                       <div className="flex items-center gap-2">
                         Industry
                         {getSortIcon("sicDescription")}
+                      </div>
+                    </TableHead>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-gray-50 select-none"
+                      onClick={() => handleSort("finexioMatchScore")}
+                    >
+                      <div className="flex items-center gap-2">
+                        Finexio Match
+                        {getSortIcon("finexioMatchScore")}
                       </div>
                     </TableHead>
                     <TableHead 
@@ -872,6 +937,26 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                             <span className="text-xs text-gray-500 max-w-xs truncate">
                               {classification.sicDescription}
                             </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col items-start">
+                          {classification.payeeMatches?.[0] ? (
+                            <>
+                              <span className={`text-sm font-medium ${
+                                classification.payeeMatches[0].finexioMatchScore >= 90 ? 'text-green-600' :
+                                classification.payeeMatches[0].finexioMatchScore >= 70 ? 'text-yellow-600' :
+                                'text-red-600'
+                              }`}>
+                                {classification.payeeMatches[0].finexioMatchScore}%
+                              </span>
+                              <span className="text-xs text-gray-500 truncate max-w-[150px]" title={classification.payeeMatches[0].bigQueryPayeeName}>
+                                {classification.payeeMatches[0].bigQueryPayeeName}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-sm text-gray-400">No match</span>
                           )}
                         </div>
                       </TableCell>
@@ -1101,42 +1186,72 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                   </div>
                                 )}
                                 
-                                {/* BigQuery Payee Matches */}
-                                <div className="bg-purple-50 p-4 rounded-lg space-y-3">
+                                {/* Enhanced Finexio/BigQuery Payee Matches */}
+                                <div className="bg-gradient-to-r from-purple-50 to-indigo-50 p-4 rounded-lg space-y-3 border border-purple-200">
                                   <div className="flex items-center justify-between">
-                                    <label className="text-sm font-medium text-purple-900">BigQuery Payee Matches</label>
+                                    <div className="flex items-center gap-2">
+                                      <svg className="h-5 w-5 text-purple-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                      </svg>
+                                      <label className="text-sm font-semibold text-purple-900">Finexio Network Matches</label>
+                                    </div>
                                     {loadingMatches && (
-                                      <div className="text-xs text-purple-600">Loading matches...</div>
+                                      <div className="text-xs text-purple-600 flex items-center gap-1">
+                                        <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Loading matches...
+                                      </div>
                                     )}
                                   </div>
                                   
                                   {!loadingMatches && payeeMatches.length === 0 && (
-                                    <p className="text-sm text-purple-700">No matches found in BigQuery database</p>
+                                    <div className="bg-white/60 p-3 rounded-md">
+                                      <p className="text-sm text-purple-700 flex items-center gap-2">
+                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                                        </svg>
+                                        No matches found in Finexio database
+                                      </p>
+                                    </div>
                                   )}
                                   
                                   {!loadingMatches && payeeMatches.length > 0 && (
                                     <div className="space-y-2">
-                                      {payeeMatches.map((match) => (
-                                        <div key={match.id} className="bg-white p-3 rounded border border-purple-200">
+                                      {payeeMatches.map((match, index) => (
+                                        <div key={match.id} className="bg-white/80 p-3 rounded-lg border border-purple-100 hover:shadow-md transition-shadow">
                                           <div className="flex items-start justify-between">
                                             <div className="flex-1">
                                               <div className="flex items-center gap-2">
                                                 <span className="font-medium text-purple-900">{match.bigQueryPayeeName}</span>
-                                                <Badge className="text-xs" variant={match.isConfirmed ? "default" : "outline"}>
+                                                <Badge className={`text-xs ${
+                                                  match.matchConfidence >= 90 ? 'bg-green-100 text-green-800' :
+                                                  match.matchConfidence >= 70 ? 'bg-yellow-100 text-yellow-800' :
+                                                  'bg-red-100 text-red-800'
+                                                }`}>
                                                   {match.matchConfidence}% match
                                                 </Badge>
+                                                {index === 0 && (
+                                                  <Badge className="text-xs bg-purple-100 text-purple-800">
+                                                    Best Match
+                                                  </Badge>
+                                                )}
                                               </div>
-                                              <div className="text-xs text-gray-600 mt-1">
-                                                <span className="font-medium">Type:</span> {match.matchType}
+                                              <div className="text-xs text-gray-600 mt-1 space-x-3">
+                                                <span>
+                                                  <span className="font-medium text-gray-700">Type:</span> {match.matchType}
+                                                </span>
                                                 {match.bigQueryPayeeId && (
-                                                  <span className="ml-2">
-                                                    <span className="font-medium">ID:</span> {match.bigQueryPayeeId}
+                                                  <span>
+                                                    <span className="font-medium text-gray-700">ID:</span> {match.bigQueryPayeeId}
                                                   </span>
                                                 )}
                                               </div>
                                               {match.isConfirmed && match.confirmedAt && (
-                                                <div className="text-xs text-green-600 mt-1">
-                                                  ✓ Confirmed on {new Date(match.confirmedAt).toLocaleDateString()}
+                                                <div className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                                                  <CheckCircle2 className="h-3 w-3" />
+                                                  Confirmed on {new Date(match.confirmedAt).toLocaleDateString()}
                                                 </div>
                                               )}
                                             </div>
@@ -1145,16 +1260,18 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                                 <Button
                                                   size="sm"
                                                   variant="ghost"
-                                                  className="text-green-600 hover:text-green-700"
+                                                  className="text-green-600 hover:text-green-700 hover:bg-green-50"
                                                   onClick={() => handleMatchConfirmation(match.id, true)}
+                                                  title="Confirm match"
                                                 >
                                                   <CheckCircle2 className="h-4 w-4" />
                                                 </Button>
                                                 <Button
                                                   size="sm"
                                                   variant="ghost"
-                                                  className="text-red-600 hover:text-red-700"
+                                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
                                                   onClick={() => handleMatchConfirmation(match.id, false)}
+                                                  title="Reject match"
                                                 >
                                                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

@@ -49,14 +49,20 @@ interface PayeeData {
 
 export class OptimizedClassificationService {
   private activeJobs = new Map<number, AbortController>();
+  private matchingOptions: any = {};
   
   async processFileStream(
     batchId: number,
     filePath: string,
     payeeColumn?: string,
-    fileExtension?: string
+    fileExtension?: string,
+    matchingOptions?: any
   ): Promise<void> {
     console.log(`Starting processFileStream for batch ${batchId}, file: ${filePath}`);
+    console.log(`Matching options:`, matchingOptions);
+    
+    // Store matching options for this batch
+    this.matchingOptions = matchingOptions || {};
     
     // Check if file exists
     if (!fs.existsSync(filePath)) {
@@ -918,6 +924,16 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
   // Start asynchronous enrichment process
   private async startEnrichmentProcess(batchId: number): Promise<void> {
     try {
+      // Check if Mastercard enrichment is disabled
+      if (this.matchingOptions.enableMastercard === false) {
+        console.log(`Mastercard enrichment disabled for batch ${batchId}`);
+        await storage.updateUploadBatch(batchId, {
+          mastercardEnrichmentStatus: "skipped",
+          mastercardEnrichmentCompletedAt: new Date()
+        });
+        return;
+      }
+      
       // Only proceed if Mastercard API is configured
       if (!process.env.MASTERCARD_CONSUMER_KEY || !process.env.MASTERCARD_PRIVATE_KEY) {
         console.log('Mastercard API not configured, skipping enrichment');
@@ -1058,6 +1074,12 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
   // Start BigQuery payee matching process
   private async startBigQueryMatching(batchId: number): Promise<void> {
     try {
+      // Check if Finexio matching is disabled
+      if (this.matchingOptions.enableFinexio === false) {
+        console.log(`Finexio/BigQuery matching disabled for batch ${batchId}`);
+        return;
+      }
+      
       console.log(`Starting BigQuery payee matching for batch ${batchId}`);
       
       // Run payee matching
