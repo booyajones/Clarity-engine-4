@@ -117,7 +117,7 @@ export class FuzzyMatcher {
         matchType: 'deterministic',
         details: matchDetails,
       };
-    } else if (averageConfidence >= 0.7 && averageConfidence < 0.9 && this.openai) {
+    } else if (averageConfidence >= 0.6 && averageConfidence < 0.9 && this.openai) {
       // Skip AI for single-word matches with heavy penalties (likely just surnames)
       const isLikelySurname = inputName.split(/\s+/).length === 1 && ambiguityPenalty >= 0.3;
       if (isLikelySurname) {
@@ -136,7 +136,7 @@ export class FuzzyMatcher {
       console.log(`AI result: isMatch=${aiResult.isMatch}, confidence=${(aiResult.confidence * 100).toFixed(2)}%, type=${aiResult.matchType}`);
       return aiResult;
     } else {
-      // Low confidence (<70%) - no match
+      // Low confidence (<60%) - no match
       return {
         isMatch: false,
         confidence: averageConfidence,

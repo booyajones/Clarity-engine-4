@@ -128,7 +128,7 @@ export class PayeeMatchingService {
       const finexioMatchScore = Math.round(finalConfidence * 100);
       
       // Only accept matches that the fuzzy matcher determined as valid
-      // (fuzzy matcher already handles thresholds: >=0.85 direct, 0.6-0.85 AI-enhanced, <0.6 no match)
+      // (fuzzy matcher already handles thresholds: >=0.9 direct, 0.6-0.9 AI-enhanced, <0.6 no match)
       if (bestMatchResult.isMatch) {
         // Store the match in database
         await storage.createPayeeMatch({
