@@ -44,6 +44,7 @@ Preferred communication style: Simple, everyday language.
   - Response times improved from 30-45s to 1-2s (20-30x faster)
   - Smart AI thresholds: skip AI for low confidence (<70%) and single-word surnames
   - Database indexes on key columns for rapid lookups
+- **Processing Order**: Address validation/cleaning happens BEFORE Mastercard enrichment for better enrichment scores (implemented 8/1/2025)
 
 ### File Processing Pipeline
 - **Handling**: Asynchronous processing with status tracking.

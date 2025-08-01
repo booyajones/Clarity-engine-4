@@ -67,6 +67,23 @@ export const payeeClassifications = pgTable("payee_classifications", {
   enrichmentStartedAt: timestamp("enrichment_started_at"),
   enrichmentCompletedAt: timestamp("enrichment_completed_at"),
   enrichmentError: text("enrichment_error"),
+  // Google Address Validation fields
+  googleAddressValidationStatus: text("google_address_validation_status"), // 'pending', 'validated', 'failed', 'skipped'
+  googleFormattedAddress: text("google_formatted_address"),
+  googleAddressComponents: jsonb("google_address_components"), // Structured address parts
+  googleAddressConfidence: real("google_address_confidence"), // Overall confidence score
+  googleAddressMetadata: jsonb("google_address_metadata"), // Additional metadata from Google
+  googleValidatedAt: timestamp("google_validated_at"),
+  googleStreetAddress: text("google_street_address"),
+  googleCity: text("google_city"),
+  googleState: text("google_state"),
+  googlePostalCode: text("google_postal_code"),
+  googleCountry: text("google_country"),
+  googlePlaceId: text("google_place_id"),
+  googlePlusCode: text("google_plus_code"),
+  googleLatitude: real("google_latitude"),
+  googleLongitude: real("google_longitude"),
+  addressNormalizationApplied: boolean("address_normalization_applied").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

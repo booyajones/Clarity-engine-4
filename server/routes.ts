@@ -203,7 +203,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Process file with selected column
   app.post("/api/upload/process", async (req, res) => {
     try {
-      const { tempFileName, originalFilename, payeeColumn, matchingOptions } = req.body;
+      const { tempFileName, originalFilename, payeeColumn, matchingOptions, addressColumns } = req.body;
       
       if (!tempFileName || !payeeColumn) {
         return res.status(400).json({ error: "Missing required parameters" });
@@ -227,7 +227,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         originalname: originalFilename, 
         path: tempFilePath,
         extension: originalExt 
-      }, batch.id, payeeColumn, matchingOptions);
+      }, batch.id, payeeColumn, matchingOptions, addressColumns);
 
       res.json({ 
         batchId: batch.id, 
@@ -767,7 +767,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Single payee classification endpoint
   app.post("/api/classify-single", async (req, res) => {
     try {
-      const { payeeName, matchingOptions } = req.body;
+      const { payeeName, address, city, state, zipCode, matchingOptions } = req.body;
       
       if (!payeeName || typeof payeeName !== 'string') {
         return res.status(400).json({ error: "payeeName is required and must be a string" });
@@ -776,13 +776,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { OptimizedClassificationService } = await import("./services/classificationV2");
       const classificationService = new OptimizedClassificationService();
       
-      // Create a minimal payee data object
+      // Create a payee data object with address fields
       const payeeData = {
         originalName: payeeName.trim(),
-        address: "",
-        city: "",
-        state: "",
-        zipCode: "",
+        address: address || "",
+        city: city || "",
+        state: state || "",
+        zipCode: zipCode || "",
         originalData: {}
       };
 
@@ -920,7 +920,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       }
       
-      // Perform Mastercard enrichment if enabled  
+      // IMPORTANT: Perform address validation BEFORE Mastercard enrichment for better enrichment scores
+      let addressValidation = null;
+      let cleanedAddressData = {
+        address: address || '',
+        city: city || '',
+        state: state || '',
+        zipCode: zipCode || ''
+      };
+      
+      console.log('Address validation check:', {
+        enabled: matchingOptions?.enableGoogleAddressValidation,
+        hasAddress: !!(address || city || state || zipCode),
+        address, city, state, zipCode
+      });
+      
+      if (matchingOptions?.enableGoogleAddressValidation && (address || city || state || zipCode)) {
+        console.log('Performing address validation...');
+        const { addressValidationService } = await import("./services/addressValidationService");
+        
+        const validationResult = await addressValidationService.validateAddress(
+          address || '',
+          city || null,
+          state || null,
+          zipCode || null,
+          { enableGoogleValidation: true }
+        );
+        
+        if (validationResult.success && validationResult.data) {
+          const googleData = validationResult.data.result;
+          
+          // Extract standardized components
+          const extractComponent = (type: string): string | null => {
+            const component = googleData.address.addressComponents.find(
+              c => c.componentType === type
+            );
+            return component?.componentName.text || null;
+          };
+          
+          // Calculate confidence
+          let confidence = 0;
+          if (googleData.verdict.addressComplete) confidence += 0.4;
+          if (!googleData.verdict.hasUnconfirmedComponents) confidence += 0.3;
+          if (!googleData.verdict.hasInferredComponents) confidence += 0.2;
+          if (googleData.geocode?.location) confidence += 0.1;
+          
+          addressValidation = {
+            status: 'validated',
+            formattedAddress: googleData.address.formattedAddress,
+            confidence: confidence,
+            components: {
+              streetAddress: extractComponent('route') || extractComponent('street_address'),
+              city: extractComponent('locality'),
+              state: extractComponent('administrative_area_level_1'),
+              postalCode: extractComponent('postal_code'),
+              country: extractComponent('country')
+            },
+            verdict: googleData.verdict,
+            metadata: googleData.metadata,
+            uspsData: googleData.uspsData,
+            geocode: googleData.geocode
+          };
+          
+          // Update cleaned address data with validated components for better Mastercard enrichment
+          if (addressValidation.components) {
+            cleanedAddressData = {
+              address: addressValidation.components.streetAddress || cleanedAddressData.address,
+              city: addressValidation.components.city || cleanedAddressData.city,
+              state: addressValidation.components.state || cleanedAddressData.state,
+              zipCode: addressValidation.components.postalCode || cleanedAddressData.zipCode
+            };
+            console.log('Updated address data with validated components:', cleanedAddressData);
+          }
+        } else {
+          addressValidation = {
+            status: 'failed',
+            error: validationResult.error || 'Address validation failed'
+          };
+        }
+      }
+      
+      // NOW perform Mastercard enrichment with cleaned/validated address data
       let mastercardEnrichment = null;
       if (matchingOptions?.enableMastercard) {
         // Check if Mastercard API credentials are configured
@@ -932,12 +1012,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             data: null
           };
         } else {
-          // TODO: Implement actual Mastercard enrichment here
+          // TODO: Implement actual Mastercard enrichment here with cleanedAddressData
           mastercardEnrichment = {
             enriched: false,
             status: "pending",
-            message: "Mastercard enrichment is being processed",
-            data: null
+            message: "Mastercard enrichment is being processed with validated address data",
+            data: null,
+            addressUsed: cleanedAddressData // Include the cleaned address used for enrichment
           };
         }
       } else {
@@ -952,7 +1033,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         ...result,
         bigQueryMatch,
-        mastercardEnrichment
+        mastercardEnrichment,
+        addressValidation
       });
     } catch (error) {
       console.error("Single classification error:", error);
@@ -1016,17 +1098,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   return httpServer;
 }
 
-async function processFileAsync(file: any, batchId: number, payeeColumn?: string, matchingOptions?: any) {
+async function processFileAsync(file: any, batchId: number, payeeColumn?: string, matchingOptions?: any, addressColumns?: any) {
   try {
     console.log(`Starting optimized file processing for batch ${batchId}, file: ${file.originalname}`);
     console.log(`File extension: ${file.extension}, file path: ${file.path}`);
     console.log(`Matching options:`, matchingOptions);
+    console.log(`Address columns:`, addressColumns);
     
     // Use the new optimized classification service
     const { optimizedClassificationService } = await import('./services/classificationV2');
     
     // Process file with streaming to avoid memory issues, pass extension info and matching options
-    await optimizedClassificationService.processFileStream(batchId, file.path, payeeColumn, file.extension, matchingOptions);
+    await optimizedClassificationService.processFileStream(batchId, file.path, payeeColumn, file.extension, matchingOptions, addressColumns);
     
     console.log(`File processing completed for batch ${batchId}`);
   } catch (error) {

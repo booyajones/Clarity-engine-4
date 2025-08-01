@@ -73,6 +73,14 @@ export default function Home() {
   const [matchingOptions, setMatchingOptions] = useState({
     enableFinexio: true,
     enableMastercard: true,
+    enableGoogleAddressValidation: false,
+    enableAddressNormalization: true,
+  });
+  const [addressColumns, setAddressColumns] = useState({
+    address: "",
+    city: "",
+    state: "",
+    zip: "",
   });
 
   const { data: batches, isLoading } = useQuery<UploadBatch[]>({
@@ -253,6 +261,7 @@ export default function Home() {
       originalFilename: previewData.filename,
       payeeColumn: selectedColumn,
       matchingOptions,
+      addressColumns: matchingOptions.enableGoogleAddressValidation ? addressColumns : undefined,
     });
   };
 
@@ -588,12 +597,123 @@ export default function Home() {
                                 }
                               />
                             </div>
+                            <div className="flex items-center justify-between">
+                              <Label htmlFor="google-address-toggle" className="text-sm">
+                                Google Address Validation
+                              </Label>
+                              <Switch
+                                id="google-address-toggle"
+                                checked={matchingOptions.enableGoogleAddressValidation}
+                                onCheckedChange={(checked) =>
+                                  setMatchingOptions((prev) => ({ ...prev, enableGoogleAddressValidation: checked }))
+                                }
+                              />
+                            </div>
+                            {matchingOptions.enableGoogleAddressValidation && (
+                              <div className="flex items-center justify-between pl-4">
+                                <Label htmlFor="address-norm-toggle" className="text-sm text-muted-foreground">
+                                  Enable Address Normalization
+                                </Label>
+                                <Switch
+                                  id="address-norm-toggle"
+                                  checked={matchingOptions.enableAddressNormalization}
+                                  onCheckedChange={(checked) =>
+                                    setMatchingOptions((prev) => ({ ...prev, enableAddressNormalization: checked }))
+                                  }
+                                />
+                              </div>
+                            )}
                           </div>
                         </div>
                       </PopoverContent>
                     </Popover>
                   </div>
                 </div>
+                
+                {/* Address Column Mapping */}
+                {matchingOptions.enableGoogleAddressValidation && previewData && (
+                  <div className="space-y-2 border-t pt-4">
+                    <label className="text-sm font-medium">Map address columns (optional):</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-muted-foreground">Address</label>
+                        <Select 
+                          value={addressColumns.address} 
+                          onValueChange={(value) => setAddressColumns(prev => ({ ...prev, address: value }))}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select address column" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">None</SelectItem>
+                            {previewData.headers.map((header) => (
+                              <SelectItem key={header} value={header}>
+                                {header}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">City</label>
+                        <Select 
+                          value={addressColumns.city} 
+                          onValueChange={(value) => setAddressColumns(prev => ({ ...prev, city: value }))}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select city column" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">None</SelectItem>
+                            {previewData.headers.map((header) => (
+                              <SelectItem key={header} value={header}>
+                                {header}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">State</label>
+                        <Select 
+                          value={addressColumns.state} 
+                          onValueChange={(value) => setAddressColumns(prev => ({ ...prev, state: value }))}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select state column" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">None</SelectItem>
+                            {previewData.headers.map((header) => (
+                              <SelectItem key={header} value={header}>
+                                {header}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">Zip Code</label>
+                        <Select 
+                          value={addressColumns.zip} 
+                          onValueChange={(value) => setAddressColumns(prev => ({ ...prev, zip: value }))}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select zip column" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">None</SelectItem>
+                            {previewData.headers.map((header) => (
+                              <SelectItem key={header} value={header}>
+                                {header}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 
                 <div className="flex gap-2">
                   <Button

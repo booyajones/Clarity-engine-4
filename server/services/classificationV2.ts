@@ -50,19 +50,23 @@ interface PayeeData {
 export class OptimizedClassificationService {
   private activeJobs = new Map<number, AbortController>();
   private matchingOptions: any = {};
+  private addressColumns: any = {};
   
   async processFileStream(
     batchId: number,
     filePath: string,
     payeeColumn?: string,
     fileExtension?: string,
-    matchingOptions?: any
+    matchingOptions?: any,
+    addressColumns?: any
   ): Promise<void> {
     console.log(`Starting processFileStream for batch ${batchId}, file: ${filePath}`);
     console.log(`Matching options:`, matchingOptions);
+    console.log(`Address columns:`, addressColumns);
     
-    // Store matching options for this batch
+    // Store matching options and address columns for this batch
     this.matchingOptions = matchingOptions || {};
+    this.addressColumns = addressColumns || {};
     
     // Check if file exists
     if (!fs.existsSync(filePath)) {
@@ -294,15 +298,49 @@ export class OptimizedClassificationService {
         completedAt: new Date()
       });
       
-      // Start enrichment processes in parallel
-      Promise.all([
-        this.startEnrichmentProcess(batchId).catch(error => {
-          console.error('Error starting Mastercard enrichment:', error);
-        }),
+      // Start enrichment processes with proper sequencing
+      // IMPORTANT: Address validation MUST happen BEFORE Mastercard enrichment for better enrichment scores
+      
+      // Start BigQuery matching and address validation in parallel since they're independent
+      const enrichmentPromises = [
         this.startBigQueryMatching(batchId).catch(error => {
           console.error('Error starting BigQuery matching:', error);
         })
-      ]);
+      ];
+      
+      // Check if address validation is enabled
+      const batch = await storage.getUploadBatch(batchId);
+      const addressColumns = batch?.addressColumns as any;
+      const hasAddressData = addressColumns && (addressColumns.address || addressColumns.city || addressColumns.state || addressColumns.zipCode);
+      
+      if (hasAddressData) {
+        const addressValidationPromise = this.startAddressValidation(batchId)
+          .then(() => {
+            // After address validation completes, start Mastercard enrichment
+            console.log(`Address validation completed for batch ${batchId}, starting Mastercard enrichment`);
+            return this.startEnrichmentProcess(batchId).catch(error => {
+              console.error('Error starting Mastercard enrichment:', error);
+            });
+          })
+          .catch(error => {
+            console.error('Error starting address validation:', error);
+            // Even if address validation fails, try Mastercard enrichment
+            return this.startEnrichmentProcess(batchId).catch(error => {
+              console.error('Error starting Mastercard enrichment:', error);
+            });
+          });
+        
+        enrichmentPromises.push(addressValidationPromise);
+      } else {
+        // No address data, so run Mastercard enrichment directly
+        enrichmentPromises.push(
+          this.startEnrichmentProcess(batchId).catch(error => {
+            console.error('Error starting Mastercard enrichment:', error);
+          })
+        );
+      }
+      
+      Promise.all(enrichmentPromises);
       
       console.log(`Batch ${batchId} classification completed: ${totalProcessed} records in ${elapsedSeconds}s (${recordsPerSecond.toFixed(1)} rec/s)`);
     }
@@ -1092,6 +1130,44 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       }
     } catch (error) {
       console.error('BigQuery matching process failed:', error);
+    }
+  }
+
+  // Start Google Address Validation process
+  private async startAddressValidation(batchId: number): Promise<void> {
+    try {
+      // Check if Google Address Validation is disabled
+      if (this.matchingOptions.enableGoogleAddressValidation !== true) {
+        console.log(`Google Address Validation disabled for batch ${batchId}`);
+        return;
+      }
+
+      // Check if address columns are mapped
+      if (!this.addressColumns || Object.keys(this.addressColumns).length === 0) {
+        console.log(`No address columns mapped for batch ${batchId}, skipping address validation`);
+        return;
+      }
+
+      console.log(`Starting Google Address Validation for batch ${batchId}`);
+      console.log(`Address columns mapping:`, this.addressColumns);
+
+      // Import address validation service
+      const { addressValidationService } = await import('./addressValidationService');
+
+      // Get all classifications for the batch
+      const classifications = await storage.getBatchClassifications(batchId);
+      console.log(`Found ${classifications.length} classifications for address validation`);
+
+      // Process address validation
+      const result = await addressValidationService.validateBatchAddresses(batchId, classifications, this.addressColumns);
+      
+      console.log(`Address validation completed for batch ${batchId}: ${result.validatedCount}/${result.totalProcessed} addresses validated`);
+      
+      if (result.errors > 0) {
+        console.warn(`Address validation encountered ${result.errors} errors`);
+      }
+    } catch (error) {
+      console.error('Address validation process failed:', error);
     }
   }
 }
