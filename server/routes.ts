@@ -774,7 +774,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
               confidence: matchResult.matchedPayee.confidence
             }
           };
+        } else {
+          // Always return match info, even when no match found
+          bigQueryMatch = {
+            matched: false,
+            finexioSupplier: {
+              id: null,
+              name: null,
+              finexioMatchScore: 0,
+              paymentType: null,
+              matchReasoning: "No matching supplier found in Finexio network",
+              matchType: "no_match",
+              confidence: 0
+            }
+          };
         }
+      } else {
+        // BigQuery disabled, still return match info
+        bigQueryMatch = {
+          matched: false,
+          finexioSupplier: {
+            id: null,
+            name: null,
+            finexioMatchScore: 0,
+            paymentType: null,
+            matchReasoning: "Finexio network search disabled",
+            matchType: "disabled",
+            confidence: 0
+          }
+        };
       }
       
       res.json({
