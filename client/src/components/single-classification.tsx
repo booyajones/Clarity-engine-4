@@ -231,32 +231,50 @@ export function SingleClassification() {
               </p>
             </div>
 
-            {result.bigQueryMatch?.matched && result.bigQueryMatch.finexioSupplier && (
-              <div className="p-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg space-y-3">
+            {result.bigQueryMatch && result.bigQueryMatch.finexioSupplier && (
+              <div className={`p-4 rounded-lg space-y-3 border ${
+                result.bigQueryMatch.matched 
+                  ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800' 
+                  : 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800'
+              }`}>
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium text-purple-800 dark:text-purple-200">
-                    ✓ Finexio Network Match
+                  <p className={`text-sm font-medium ${
+                    result.bigQueryMatch.matched 
+                      ? 'text-purple-800 dark:text-purple-200' 
+                      : 'text-gray-600 dark:text-gray-400'
+                  }`}>
+                    {result.bigQueryMatch.matched ? '✓ Finexio Network Match' : 'Finexio Network Search'}
                   </p>
-                  <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-100">
+                  <Badge className={
+                    result.bigQueryMatch.matched 
+                      ? 'bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-100' 
+                      : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100'
+                  }>
                     {Math.round(result.bigQueryMatch.finexioSupplier.finexioMatchScore)}% Match
                   </Badge>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <label className="text-xs font-medium text-purple-700 dark:text-purple-300">Supplier Name</label>
-                    <p className="text-purple-900 dark:text-purple-100">{result.bigQueryMatch.finexioSupplier.name}</p>
+                {result.bigQueryMatch.matched ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <label className="text-xs font-medium text-purple-700 dark:text-purple-300">Supplier Name</label>
+                      <p className="text-purple-900 dark:text-purple-100">{result.bigQueryMatch.finexioSupplier.name}</p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-purple-700 dark:text-purple-300">Payment Type</label>
+                      <p className="text-purple-900 dark:text-purple-100">{result.bigQueryMatch.finexioSupplier.paymentType}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="text-xs font-medium text-purple-700 dark:text-purple-300">Match Reasoning</label>
+                      <p className="text-purple-900 dark:text-purple-100 text-xs bg-purple-100/50 dark:bg-purple-800/50 p-2 rounded mt-1">
+                        {result.bigQueryMatch.finexioSupplier.matchReasoning}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-xs font-medium text-purple-700 dark:text-purple-300">Payment Type</label>
-                    <p className="text-purple-900 dark:text-purple-100">{result.bigQueryMatch.finexioSupplier.paymentType}</p>
+                ) : (
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    {result.bigQueryMatch.finexioSupplier.matchReasoning}
                   </div>
-                  <div className="col-span-2">
-                    <label className="text-xs font-medium text-purple-700 dark:text-purple-300">Match Reasoning</label>
-                    <p className="text-purple-900 dark:text-purple-100 text-xs bg-purple-100/50 dark:bg-purple-800/50 p-2 rounded mt-1">
-                      {result.bigQueryMatch.finexioSupplier.matchReasoning}
-                    </p>
-                  </div>
-                </div>
+                )}
               </div>
             )}
 
