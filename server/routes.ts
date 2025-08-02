@@ -12,6 +12,7 @@ import helmet from "helmet";
 import compression from "compression";
 import morgan from "morgan";
 import healthRoutes from "./routes/health";
+import akkioRoutes from "./routes/akkio";
 import { AppError, errorHandler, notFoundHandler, asyncHandler } from "./middleware/errorHandler";
 import { generalLimiter, uploadLimiter, classificationLimiter, expensiveLimiter } from "./middleware/rateLimiter";
 
@@ -142,6 +143,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Health check routes (no rate limiting)
   app.use('/api/health', healthRoutes);
+  
+  // Akkio predictive analytics routes
+  app.use('/api/akkio', akkioRoutes);
   
   // Test database connection on startup
   try {

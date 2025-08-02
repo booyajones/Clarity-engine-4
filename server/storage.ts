@@ -97,6 +97,9 @@ export interface IStorage {
   getClassificationMatches(classificationId: number): Promise<PayeeMatch[]>;
   getBatchMatches(batchId: number): Promise<PayeeMatch[]>;
   getPayeeClassificationsByBatch(batchId: number): Promise<PayeeClassification[]>;
+
+  // Akkio prediction operations
+  getClassificationsForAkkioPrediction(batchId: number): Promise<PayeeClassification[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -524,6 +527,20 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(payeeClassifications)
       .where(eq(payeeClassifications.batchId, batchId));
+  }
+
+  // Get classifications ready for Akkio prediction (enriched but not yet predicted)
+  async getClassificationsForAkkioPrediction(batchId: number): Promise<PayeeClassification[]> {
+    return await db
+      .select()
+      .from(payeeClassifications)
+      .where(
+        and(
+          eq(payeeClassifications.batchId, batchId),
+          sql`${payeeClassifications.akkioPredictionStatus} IS NULL OR ${payeeClassifications.akkioPredictionStatus} = 'pending'`
+        )
+      )
+      .orderBy(payeeClassifications.id);
   }
 }
 

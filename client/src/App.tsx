@@ -5,12 +5,14 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Home from "@/pages/home";
 import NotFound from "@/pages/not-found";
+import { AkkioModels } from "@/pages/akkio-models";
 
 function Router() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Switch>
         <Route path="/" component={Home} />
+        <Route path="/akkio-models" component={AkkioModels} />
         <Route component={NotFound} />
       </Switch>
     </div>

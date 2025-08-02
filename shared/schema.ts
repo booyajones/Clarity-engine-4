@@ -84,6 +84,17 @@ export const payeeClassifications = pgTable("payee_classifications", {
   googleLatitude: real("google_latitude"),
   googleLongitude: real("google_longitude"),
   addressNormalizationApplied: boolean("address_normalization_applied").default(false),
+  // Akkio predictive analytics fields
+  akkioPredictionStatus: text("akkio_prediction_status").default("pending"), // pending, predicted, failed, skipped
+  akkioPredictedPaymentSuccess: boolean("akkio_predicted_payment_success"),
+  akkioConfidenceScore: real("akkio_confidence_score"),
+  akkioRiskFactors: text("akkio_risk_factors").array(),
+  akkioRecommendedPaymentMethod: text("akkio_recommended_payment_method"),
+  akkioProcessingTimeEstimate: integer("akkio_processing_time_estimate"), // in days
+  akkioFraudRiskScore: real("akkio_fraud_risk_score"),
+  akkioPredictionDate: timestamp("akkio_prediction_date"),
+  akkioModelId: text("akkio_model_id"),
+  akkioModelVersion: text("akkio_model_version"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -162,6 +173,51 @@ export const cachedSuppliers = pgTable("cached_suppliers", {
   hasBusinessIndicator: boolean("has_business_indicator"), // Has Co., Inc., LLC, etc.
   commonNameScore: real("common_name_score"), // 0-1, higher means more common as surname
   lastUpdated: timestamp("last_updated").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Akkio datasets management
+export const akkioDatasets = pgTable("akkio_datasets", {
+  id: serial("id").primaryKey(),
+  akkioDatasetId: text("akkio_dataset_id").notNull().unique(),
+  name: text("name").notNull(),
+  status: text("status").notNull(), // training, ready, error
+  rowCount: integer("row_count").notNull().default(0),
+  purpose: text("purpose").notNull(), // payment_prediction, fraud_detection, etc.
+  description: text("description"),
+  createdBy: integer("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Akkio models management
+export const akkioModels = pgTable("akkio_models", {
+  id: serial("id").primaryKey(),
+  akkioModelId: text("akkio_model_id").notNull().unique(),
+  akkioDatasetId: text("akkio_dataset_id").notNull(),
+  name: text("name").notNull(),
+  status: text("status").notNull(), // training, ready, error
+  accuracy: real("accuracy").default(0),
+  targetColumn: text("target_column").notNull(),
+  modelVersion: text("model_version").default("1.0"),
+  description: text("description"),
+  isActive: boolean("is_active").default(true),
+  createdBy: integer("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Akkio prediction logs
+export const akkioPredictionLogs = pgTable("akkio_prediction_logs", {
+  id: serial("id").primaryKey(),
+  classificationId: integer("classification_id").notNull(),
+  akkioModelId: text("akkio_model_id").notNull(),
+  requestPayload: jsonb("request_payload"),
+  responsePayload: jsonb("response_payload"),
+  predictionResult: jsonb("prediction_result"),
+  processingTimeMs: integer("processing_time_ms"),
+  success: boolean("success").notNull(),
+  errorMessage: text("error_message"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

@@ -1,10 +1,11 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload as UploadIcon, Download, Loader2, X, FileSpreadsheet, CheckCircle2, XCircle, Clock, AlertCircle, Activity, ArrowRight, ClipboardList, Sparkles, Eye, Settings } from "lucide-react";
+import { Upload as UploadIcon, Download, Loader2, X, FileSpreadsheet, CheckCircle2, XCircle, Clock, AlertCircle, Activity, ArrowRight, ClipboardList, Sparkles, Eye, Settings, Brain } from "lucide-react";
 import { useState, useRef } from "react";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 import {
   Table,
   TableBody,
@@ -412,6 +413,15 @@ export default function Home() {
                   <ClipboardList className="h-4 w-4" />
                   Keyword Management
                 </Button>
+                <Link href="/akkio-models">
+                  <Button
+                    variant="outline"
+                    className="flex items-center gap-2"
+                  >
+                    <Brain className="h-4 w-4" />
+                    Akkio Models
+                  </Button>
+                </Link>
               </div>
             </div>
           </div>
@@ -474,6 +484,15 @@ export default function Home() {
                 <ClipboardList className="h-4 w-4" />
                 Keyword Management
               </Button>
+              <Link href="/akkio-models">
+                <Button
+                  variant="outline"
+                  className="flex items-center gap-2"
+                >
+                  <Brain className="h-4 w-4" />
+                  Akkio Models
+                </Button>
+              </Link>
             </div>
           </div>
         </div>

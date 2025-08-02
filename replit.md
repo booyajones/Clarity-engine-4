@@ -50,6 +50,12 @@ Preferred communication style: Simple, everyday language.
   - **Selective Enhancement**: Only uses OpenAI when it can meaningfully improve results (e.g., finding real HQ instead of generic PO Box)
   - **Validation Loop**: Ensures OpenAI improvements actually enhance address quality before using them
   - **Context-Aware**: Uses payee name, type, and industry to make intelligent address corrections
+- **Akkio Payment Prediction** (Added 8/2/2025): Integrated as the final enrichment step
+  - **Purpose**: Predicts payment methods and outcomes using machine learning
+  - **Integration**: Runs after all other enrichments complete
+  - **Model Management**: Automatically selects the most recent ready model
+  - **API Version**: Uses Akkio v2 API with async training pattern
+  - **Batch Processing**: Processes classifications in batches for efficient predictions
 
 ### File Processing Pipeline
 - **Handling**: Asynchronous processing with status tracking.

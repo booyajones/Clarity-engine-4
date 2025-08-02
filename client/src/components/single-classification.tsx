@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Loader2, Search, Building2, User, Landmark, Shield, CreditCard, ArrowRightLeft, HelpCircle, Database, Globe, MapPin } from "lucide-react";
+import { Loader2, Search, Building2, User, Landmark, Shield, CreditCard, ArrowRightLeft, HelpCircle, Database, Globe, MapPin, Brain } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
 interface ClassificationResult {
@@ -61,6 +61,13 @@ interface ClassificationResult {
       };
     };
   };
+  akkioPrediction?: {
+    predicted: boolean;
+    status: string;
+    paymentMethod?: string;
+    confidence?: number;
+    message?: string;
+  };
 }
 
 const getTypeIcon = (type: string) => {
@@ -95,6 +102,7 @@ export function SingleClassification() {
   const [enableFinexioMatching, setEnableFinexioMatching] = useState(true);
   const [enableMastercardMatching, setEnableMastercardMatching] = useState(true);
   const [enableAddressValidation, setEnableAddressValidation] = useState(false);
+  const [enableAkkioMatching, setEnableAkkioMatching] = useState(false);
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
@@ -108,7 +116,8 @@ export function SingleClassification() {
           enableFinexio: enableFinexioMatching,
           enableMastercard: enableMastercardMatching,
           enableGoogleAddressValidation: enableAddressValidation,
-          enableOpenAI: true // Enable intelligent enhancement by default when address validation is on
+          enableOpenAI: true, // Enable intelligent enhancement by default when address validation is on
+          enableAkkio: enableAkkioMatching
         }
       };
 
@@ -221,6 +230,18 @@ export function SingleClassification() {
                   id="address-toggle"
                   checked={enableAddressValidation}
                   onCheckedChange={setEnableAddressValidation}
+                />
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <Brain className="h-4 w-4 text-orange-600" />
+                <Label htmlFor="akkio-toggle" className="text-sm font-normal cursor-pointer">
+                  Akkio Payment Prediction
+                </Label>
+                <Switch
+                  id="akkio-toggle"
+                  checked={enableAkkioMatching}
+                  onCheckedChange={setEnableAkkioMatching}
                 />
               </div>
             </div>
@@ -517,6 +538,45 @@ export function SingleClassification() {
                 {result.addressValidation.status === 'failed' && result.addressValidation.error && (
                   <p className="text-sm text-red-600 dark:text-red-400">
                     {result.addressValidation.error}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {result.akkioPrediction && (
+              <div className={`p-4 rounded-lg space-y-3 border ${
+                result.akkioPrediction.predicted 
+                  ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800' 
+                  : 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <p className={`text-sm font-medium ${
+                    result.akkioPrediction.predicted
+                      ? 'text-orange-800 dark:text-orange-200' 
+                      : 'text-gray-800 dark:text-gray-200'
+                  }`}>
+                    <Brain className="h-4 w-4 inline mr-1" />
+                    Akkio Payment Prediction
+                  </p>
+                  {result.akkioPrediction.confidence && (
+                    <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-800 dark:text-orange-100">
+                      {Math.round(result.akkioPrediction.confidence * 100)}% Confidence
+                    </Badge>
+                  )}
+                </div>
+                
+                {result.akkioPrediction.predicted && result.akkioPrediction.paymentMethod && (
+                  <div>
+                    <label className="text-xs font-medium text-orange-700 dark:text-orange-300">Predicted Payment Method</label>
+                    <p className="text-sm font-semibold text-orange-900 dark:text-orange-100">
+                      {result.akkioPrediction.paymentMethod}
+                    </p>
+                  </div>
+                )}
+                
+                {result.akkioPrediction.message && (
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {result.akkioPrediction.message}
                   </p>
                 )}
               </div>

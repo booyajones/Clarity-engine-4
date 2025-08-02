@@ -11,6 +11,9 @@ import { keywordExclusionService } from './keywordExclusion';
 import { openaiRateLimiter } from './rateLimiter';
 import { mastercardApi } from './mastercardApi';
 import { payeeMatchingService } from './payeeMatchingService';
+import { akkioService } from './akkioService';
+import { akkioModels } from "@shared/schema";
+import { eq, desc, and } from 'drizzle-orm';
 
 // Validate OpenAI API key
 if (!process.env.OPENAI_API_KEY) {
@@ -340,7 +343,16 @@ export class OptimizedClassificationService {
         );
       }
       
-      Promise.all(enrichmentPromises);
+      // Wait for all enrichment processes to complete
+      Promise.all(enrichmentPromises)
+        .then(() => {
+          // After all enrichments complete, start Akkio predictions as the final step
+          console.log(`All enrichments completed for batch ${batchId}, starting Akkio predictions`);
+          return this.startAkkioPredictions(batchId);
+        })
+        .catch(error => {
+          console.error('Error in enrichment pipeline:', error);
+        });
       
       console.log(`Batch ${batchId} classification completed: ${totalProcessed} records in ${elapsedSeconds}s (${recordsPerSecond.toFixed(1)} rec/s)`);
     }
@@ -1168,6 +1180,185 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       }
     } catch (error) {
       console.error('Address validation process failed:', error);
+    }
+  }
+
+  // Start Akkio predictions as the final enrichment step
+  private async startAkkioPredictions(batchId: number): Promise<void> {
+    try {
+      // Check if Akkio predictions are disabled
+      if (this.matchingOptions.enableAkkio !== true) {
+        console.log(`Akkio predictions disabled for batch ${batchId}`);
+        await storage.updateUploadBatch(batchId, {
+          akkioPredictionStatus: "skipped",
+          akkioPredictionCompletedAt: new Date()
+        });
+        return;
+      }
+
+      // Check if Akkio API is configured
+      if (!process.env.AKKIO_API_KEY) {
+        console.log('Akkio API not configured, skipping predictions');
+        await storage.updateUploadBatch(batchId, {
+          akkioPredictionStatus: "skipped",
+          akkioPredictionCompletedAt: new Date()
+        });
+        return;
+      }
+
+      // Get the active Akkio model for payment predictions
+      const activeModel = await this.getActiveAkkioModel();
+      
+      if (!activeModel) {
+        console.log('No active Akkio model found, skipping predictions');
+        await storage.updateUploadBatch(batchId, {
+          akkioPredictionStatus: "no_model",
+          akkioPredictionCompletedAt: new Date()
+        });
+        return;
+      }
+
+      console.log(`Starting Akkio predictions for batch ${batchId} using model ${activeModel.name} (${activeModel.akkioModelId})`);
+
+      // Get all classifications that have been enriched but not yet predicted
+      const classificationsForPrediction = await storage.getClassificationsForAkkioPrediction(batchId);
+      
+      if (classificationsForPrediction.length === 0) {
+        console.log('No classifications ready for Akkio predictions');
+        await storage.updateUploadBatch(batchId, {
+          akkioPredictionStatus: "completed",
+          akkioPredictionCompletedAt: new Date(),
+          akkioPredictionProgress: 100
+        });
+        return;
+      }
+
+      // Update status to in_progress
+      await storage.updateUploadBatch(batchId, {
+        akkioPredictionStatus: "in_progress",
+        akkioPredictionStartedAt: new Date(),
+        akkioPredictionTotal: classificationsForPrediction.length,
+        akkioPredictionProcessed: 0,
+        akkioPredictionProgress: 0
+      });
+
+      console.log(`Starting Akkio predictions for ${classificationsForPrediction.length} classifications`);
+
+      // Process in batches to show progress and avoid overwhelming the API
+      const batchSize = 50;
+      let processedCount = 0;
+      let successCount = 0;
+      let failureCount = 0;
+
+      for (let i = 0; i < classificationsForPrediction.length; i += batchSize) {
+        const batch = classificationsForPrediction.slice(i, i + batchSize);
+        
+        // Process each classification in the batch
+        for (const classification of batch) {
+          try {
+            // Prepare payment data point from enriched classification
+            const paymentData = {
+              payee_name: classification.cleanedName,
+              payee_type: classification.payeeType,
+              sic_code: classification.sicCode || '',
+              sic_description: classification.sicDescription || '',
+              address: classification.googleFormattedAddress || classification.address || '',
+              city: classification.googleCity || classification.city || '',
+              state: classification.googleState || classification.state || '',
+              zip: classification.googlePostalCode || classification.zipCode || '',
+              country: classification.googleCountry || 'US',
+              payment_method: 'ACH', // Default for now
+              amount: 1000, // Default amount
+              vendor_category: classification.mastercardMerchantCategoryDescription || 'Unknown',
+              business_size: classification.payeeType === 'Business' ? 'medium' : 'small',
+              industry_risk_score: classification.confidence < 0.8 ? 0.3 : 0.1,
+              geographic_risk_score: classification.googleAddressConfidence ? (1 - classification.googleAddressConfidence) : 0.2
+            };
+
+            // Make prediction
+            const prediction = await akkioService.predictPaymentOutcome(activeModel.akkioModelId, paymentData);
+            
+            // Update classification with prediction results
+            await storage.updatePayeeClassification(classification.id, {
+              akkioPredictionStatus: 'predicted',
+              akkioPredictedPaymentSuccess: prediction.predicted_payment_success,
+              akkioConfidenceScore: prediction.confidence_score,
+              akkioRiskFactors: prediction.risk_factors,
+              akkioRecommendedPaymentMethod: prediction.recommended_payment_method,
+              akkioProcessingTimeEstimate: prediction.processing_time_estimate,
+              akkioFraudRiskScore: prediction.fraud_risk_score,
+              akkioPredictionDate: new Date(),
+              akkioModelId: activeModel.akkioModelId
+            });
+            
+            successCount++;
+          } catch (error) {
+            console.error(`Failed to predict for classification ${classification.id}:`, error);
+            
+            // Update classification with error status
+            await storage.updatePayeeClassification(classification.id, {
+              akkioPredictionStatus: 'error',
+              akkioPredictionDate: new Date()
+            });
+            
+            failureCount++;
+          }
+          
+          processedCount++;
+        }
+
+        // Update progress
+        const progress = Math.round((processedCount / classificationsForPrediction.length) * 100);
+        await storage.updateUploadBatch(batchId, {
+          akkioPredictionProcessed: processedCount,
+          akkioPredictionProgress: progress,
+          akkioPredictionSuccessCount: successCount,
+          akkioPredictionFailureCount: failureCount
+        });
+      }
+
+      // Final update
+      await storage.updateUploadBatch(batchId, {
+        akkioPredictionStatus: "completed",
+        akkioPredictionCompletedAt: new Date(),
+        akkioPredictionProgress: 100,
+        akkioPredictionProcessed: processedCount,
+        akkioPredictionSuccessCount: successCount,
+        akkioPredictionFailureCount: failureCount
+      });
+
+      console.log(`Akkio predictions completed for batch ${batchId}: ${successCount} successful, ${failureCount} failed out of ${processedCount} total`);
+    } catch (error) {
+      console.error('Akkio prediction process failed:', error);
+      
+      // Update batch with error status
+      await storage.updateUploadBatch(batchId, {
+        akkioPredictionStatus: "failed",
+        akkioPredictionCompletedAt: new Date()
+      });
+    }
+  }
+
+  // Get the active Akkio model for payment predictions
+  private async getActiveAkkioModel(): Promise<any> {
+    try {
+      // Get the most recent ready model
+      const [activeModel] = await db
+        .select()
+        .from(akkioModels)
+        .where(
+          and(
+            eq(akkioModels.status, 'ready'),
+            eq(akkioModels.targetColumn, 'payment_success')
+          )
+        )
+        .orderBy(desc(akkioModels.createdAt))
+        .limit(1);
+      
+      return activeModel;
+    } catch (error) {
+      console.error('Failed to get active Akkio model:', error);
+      return null;
     }
   }
 }
