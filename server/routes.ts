@@ -1,4 +1,4 @@
-import type { Express, Request } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { classificationService } from "./services/classification";
@@ -8,6 +8,12 @@ import XLSX from "xlsx";
 import fs from "fs";
 import path from "path";
 import { z } from "zod";
+import helmet from "helmet";
+import compression from "compression";
+import morgan from "morgan";
+import healthRoutes from "./routes/health";
+import { AppError, errorHandler, notFoundHandler, asyncHandler } from "./middleware/errorHandler";
+import { generalLimiter, uploadLimiter, classificationLimiter, expensiveLimiter } from "./middleware/rateLimiter";
 
 // Financial-themed random batch names
 const FINANCIAL_ADJECTIVES = [
@@ -86,7 +92,57 @@ const upload = multer({
   }
 });
 
+// Rate limiters are imported from middleware/rateLimiter.ts
+
+// Input validation middleware
+function validateRequestBody(schema: z.ZodSchema) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const validated = await schema.parseAsync(req.body);
+      req.body = validated;
+      next();
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          error: 'Validation error',
+          details: error.errors
+        });
+      }
+      next(error);
+    }
+  };
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Apply production middleware
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        imgSrc: ["'self'", "data:", "blob:"],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+      },
+    },
+  }));
+  
+  app.use(compression());
+  
+  // Request logging
+  if (process.env.NODE_ENV === 'production') {
+    app.use(morgan('combined'));
+  } else {
+    app.use(morgan('dev'));
+  }
+  
+  // Apply general rate limiting to all routes
+  app.use('/api/', generalLimiter);
+  
+  // Health check routes (no rate limiting)
+  app.use('/api/health', healthRoutes);
+  
   // Test database connection on startup
   try {
     console.log("Testing database connection...");
@@ -97,16 +153,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Don't crash the server, but log the error
   }
 
-  // Health check
-  app.get("/api/health", async (req, res) => {
-    try {
-      // Test database as part of health check
-      await storage.getClassificationStats();
-      res.json({ status: "ok", database: "connected" });
-    } catch (error) {
-      res.status(503).json({ status: "unhealthy", database: "disconnected", error: (error as Error).message });
-    }
-  });
+  // Note: Health check is now handled by the health routes middleware above
 
   // Dashboard stats
   app.get("/api/dashboard/stats", async (req, res) => {
@@ -149,7 +196,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Upload and preview file headers
-  app.post("/api/upload/preview", upload.single("file"), async (req: MulterRequest, res) => {
+  app.post("/api/upload/preview", uploadLimiter, upload.single("file"), async (req: MulterRequest, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: "No file uploaded" });
@@ -764,14 +811,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Validation schema for single classification
+  const classifySingleSchema = z.object({
+    payeeName: z.string().min(1).max(500),
+    address: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    zipCode: z.string().optional(),
+    matchingOptions: z.object({
+      enableFinexio: z.boolean().optional(),
+      enableMastercard: z.boolean().optional(),
+    }).optional(),
+  });
+  
   // Single payee classification endpoint
-  app.post("/api/classify-single", async (req, res) => {
+  app.post("/api/classify-single", classificationLimiter, validateRequestBody(classifySingleSchema), async (req, res) => {
     try {
       const { payeeName, address, city, state, zipCode, matchingOptions } = req.body;
-      
-      if (!payeeName || typeof payeeName !== 'string') {
-        return res.status(400).json({ error: "payeeName is required and must be a string" });
-      }
 
       const { OptimizedClassificationService } = await import("./services/classificationV2");
       const classificationService = new OptimizedClassificationService();
@@ -1122,6 +1178,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 404 handler for unmatched routes
+  app.use('/api/*', notFoundHandler);
+  
+  // Global error handler (must be last)
+  app.use(errorHandler);
+  
   const httpServer = createServer(app);
   return httpServer;
 }
