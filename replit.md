@@ -45,6 +45,11 @@ Preferred communication style: Simple, everyday language.
   - Smart AI thresholds: skip AI for low confidence (<70%) and single-word surnames
   - Database indexes on key columns for rapid lookups
 - **Processing Order**: Address validation/cleaning happens BEFORE Mastercard enrichment for better enrichment scores (implemented 8/1/2025)
+- **Intelligent Address Enhancement**: Sophisticated OpenAI-powered address improvement system that intelligently decides when AI adds value:
+  - **Smart Decision Strategies**: Google failure recovery, incomplete components, low precision, missing data, business context matching, international formats, typo correction
+  - **Selective Enhancement**: Only uses OpenAI when it can meaningfully improve results (e.g., finding real HQ instead of generic PO Box)
+  - **Validation Loop**: Ensures OpenAI improvements actually enhance address quality before using them
+  - **Context-Aware**: Uses payee name, type, and industry to make intelligent address corrections
 
 ### File Processing Pipeline
 - **Handling**: Asynchronous processing with status tracking.

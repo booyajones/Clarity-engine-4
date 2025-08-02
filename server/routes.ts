@@ -939,12 +939,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log('Performing address validation...');
         const { addressValidationService } = await import("./services/addressValidationService");
         
+        // Pass payee context for intelligent OpenAI decision making
         const validationResult = await addressValidationService.validateAddress(
           address || '',
           city || null,
           state || null,
           zipCode || null,
-          { enableGoogleValidation: true }
+          { 
+            enableGoogleValidation: true,
+            enableOpenAI: matchingOptions?.enableOpenAI !== false, // Default to enabled for smart enhancement
+            payeeName: payeeName.trim(),
+            payeeType: result.payeeType,
+            sicDescription: result.sicDescription
+          }
         );
         
         if (validationResult.success && validationResult.data) {
@@ -965,33 +972,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (!googleData.verdict.hasInferredComponents) confidence += 0.2;
           if (googleData.geocode?.location) confidence += 0.1;
           
+          // Check if intelligent enhancement was used and improved the result
+          let finalAddress = googleData.address.formattedAddress;
+          let finalComponents = {
+            streetAddress: extractComponent('route') || extractComponent('street_address'),
+            city: extractComponent('locality'),
+            state: extractComponent('administrative_area_level_1'),
+            postalCode: extractComponent('postal_code'),
+            country: extractComponent('country')
+          };
+          
+          if (validationResult.intelligentEnhancement?.used && validationResult.intelligentEnhancement.enhancedAddress) {
+            const enhanced = validationResult.intelligentEnhancement.enhancedAddress;
+            console.log(`OpenAI enhanced address: ${validationResult.intelligentEnhancement.reason}`);
+            
+            // Use enhanced components
+            finalComponents = {
+              streetAddress: enhanced.address,
+              city: enhanced.city,
+              state: enhanced.state,
+              postalCode: enhanced.zipCode,
+              country: 'USA'
+            };
+            
+            // Build enhanced formatted address
+            finalAddress = `${enhanced.address}, ${enhanced.city}, ${enhanced.state} ${enhanced.zipCode}, USA`;
+            confidence = enhanced.confidence;
+          }
+          
           addressValidation = {
             status: 'validated',
-            formattedAddress: googleData.address.formattedAddress,
+            formattedAddress: finalAddress,
             confidence: confidence,
-            components: {
-              streetAddress: extractComponent('route') || extractComponent('street_address'),
-              city: extractComponent('locality'),
-              state: extractComponent('administrative_area_level_1'),
-              postalCode: extractComponent('postal_code'),
-              country: extractComponent('country')
-            },
+            components: finalComponents,
             verdict: googleData.verdict,
             metadata: googleData.metadata,
             uspsData: googleData.uspsData,
-            geocode: googleData.geocode
+            geocode: googleData.geocode,
+            intelligentEnhancement: validationResult.intelligentEnhancement
           };
           
-          // Update cleaned address data with validated components for better Mastercard enrichment
-          if (addressValidation.components) {
-            cleanedAddressData = {
-              address: addressValidation.components.streetAddress || cleanedAddressData.address,
-              city: addressValidation.components.city || cleanedAddressData.city,
-              state: addressValidation.components.state || cleanedAddressData.state,
-              zipCode: addressValidation.components.postalCode || cleanedAddressData.zipCode
-            };
-            console.log('Updated address data with validated components:', cleanedAddressData);
-          }
+          // Update cleaned address data with validated/enhanced components for better Mastercard enrichment
+          cleanedAddressData = {
+            address: finalComponents.streetAddress || cleanedAddressData.address,
+            city: finalComponents.city || cleanedAddressData.city,
+            state: finalComponents.state || cleanedAddressData.state,
+            zipCode: finalComponents.postalCode || cleanedAddressData.zipCode
+          };
+          console.log('Updated address data with validated/enhanced components:', cleanedAddressData);
         } else {
           addressValidation = {
             status: 'failed',

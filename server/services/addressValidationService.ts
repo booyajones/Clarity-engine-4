@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { storage } from '../storage.js';
 import type { PayeeClassification } from '@shared/schema.js';
+import { intelligentAddressService } from './intelligentAddressService.js';
 
 // Configuration
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
@@ -182,17 +183,28 @@ export class AddressValidationService {
     return normalized;
   }
 
-  // Validate address with Google Address Validation API
+  // Validate address with Google Address Validation API and intelligent OpenAI enhancement
   async validateAddress(
     address: string,
     city: string | null,
     state: string | null,
     zipCode: string | null,
-    options: AddressValidationOptions = {}
+    options: AddressValidationOptions & {
+      payeeName?: string;
+      payeeType?: string;
+      sicDescription?: string;
+      enableOpenAI?: boolean;
+    } = {}
   ): Promise<{
     success: boolean;
     data?: GoogleAddressValidationResponse;
     error?: string;
+    intelligentEnhancement?: {
+      used: boolean;
+      reason: string;
+      enhancedAddress?: any;
+      strategy: string;
+    };
   }> {
     if (!this.isConfigured || !options.enableGoogleValidation) {
       return { success: false, error: 'Google Address Validation not configured or enabled' };
@@ -223,16 +235,73 @@ export class AddressValidationService {
         body: JSON.stringify(requestBody),
       });
 
+      let googleResult: { success: boolean; data?: GoogleAddressValidationResponse; error?: string };
+      
       if (!response.ok) {
         const errorData = await response.json();
-        return {
+        googleResult = {
           success: false,
           error: `Google API error: ${errorData.error?.message || response.statusText}`,
         };
+      } else {
+        const data = await response.json() as GoogleAddressValidationResponse;
+        googleResult = { success: true, data };
       }
 
-      const data = await response.json() as GoogleAddressValidationResponse;
-      return { success: true, data };
+      // Use intelligent address service to determine if OpenAI enhancement is needed
+      if (options.enableOpenAI !== false) {
+        const intelligentResult = await intelligentAddressService.processAddressIntelligently(
+          address,
+          city,
+          state,
+          zipCode,
+          {
+            payeeName: options.payeeName,
+            payeeType: options.payeeType,
+            sicDescription: options.sicDescription
+          },
+          {
+            enableGoogleValidation: true,
+            enableOpenAI: options.enableOpenAI
+          }
+        );
+
+        // If OpenAI was used and provided enhancement
+        if (intelligentResult.useOpenAI && intelligentResult.enhancedAddress) {
+          // Validate if enhancement improved the result
+          const improvement = await intelligentAddressService.validateEnhancement(
+            googleResult,
+            intelligentResult.enhancedAddress
+          );
+
+          if (improvement.improved) {
+            console.log(`Address enhanced by OpenAI: ${improvement.reason}`);
+            
+            // Return combined result with intelligent enhancement
+            return {
+              ...googleResult,
+              intelligentEnhancement: {
+                used: true,
+                reason: intelligentResult.reason,
+                enhancedAddress: intelligentResult.enhancedAddress,
+                strategy: intelligentResult.strategy
+              }
+            };
+          }
+        }
+
+        // Return with intelligence metadata even if not enhanced
+        return {
+          ...googleResult,
+          intelligentEnhancement: {
+            used: intelligentResult.useOpenAI,
+            reason: intelligentResult.reason,
+            strategy: intelligentResult.strategy
+          }
+        };
+      }
+
+      return googleResult;
     } catch (error) {
       console.error('Address validation error:', error);
       return {
@@ -268,13 +337,18 @@ export class AddressValidationService {
         });
       }
 
-      // Validate with Google
+      // Validate with Google and intelligent enhancement
       const result = await this.validateAddress(
         classification.address,
         classification.city,
         classification.state,
         classification.zipCode,
-        options
+        {
+          ...options,
+          payeeName: classification.payeeName,
+          payeeType: classification.payeeType,
+          sicDescription: classification.sicDescription
+        }
       );
 
       if (result.success && result.data) {
@@ -295,21 +369,49 @@ export class AddressValidationService {
         if (!googleData.verdict.hasInferredComponents) confidence += 0.2;
         if (googleData.geocode?.location) confidence += 0.1;
 
+        // Check if intelligent enhancement was used
+        let finalAddress = googleData.address.formattedAddress;
+        let finalComponents = {
+          streetAddress: extractComponent('route') || extractComponent('street_address'),
+          city: extractComponent('locality'),
+          state: extractComponent('administrative_area_level_1'),
+          postalCode: extractComponent('postal_code'),
+        };
+
+        // If intelligent enhancement improved the address
+        if (result.intelligentEnhancement?.used && result.intelligentEnhancement.enhancedAddress) {
+          const enhanced = result.intelligentEnhancement.enhancedAddress;
+          console.log(`Batch address enhanced by OpenAI for ${classification.payeeName}: ${result.intelligentEnhancement.reason}`);
+          
+          // Use enhanced components
+          finalComponents = {
+            streetAddress: enhanced.address,
+            city: enhanced.city,
+            state: enhanced.state,
+            postalCode: enhanced.zipCode,
+          };
+          
+          // Build enhanced formatted address
+          finalAddress = `${enhanced.address}, ${enhanced.city}, ${enhanced.state} ${enhanced.zipCode}, USA`;
+          confidence = enhanced.confidence;
+        }
+
         await storage.updatePayeeClassification(classification.id, {
           googleAddressValidationStatus: 'validated',
-          googleFormattedAddress: googleData.address.formattedAddress,
+          googleFormattedAddress: finalAddress,
           googleAddressComponents: googleData.address.addressComponents as any,
           googleAddressConfidence: confidence,
           googleAddressMetadata: {
             verdict: googleData.verdict,
             metadata: googleData.metadata,
             uspsData: googleData.uspsData,
+            intelligentEnhancement: result.intelligentEnhancement
           } as any,
           googleValidatedAt: new Date(),
-          googleStreetAddress: extractComponent('route') || extractComponent('street_address'),
-          googleCity: extractComponent('locality'),
-          googleState: extractComponent('administrative_area_level_1'),
-          googlePostalCode: extractComponent('postal_code'),
+          googleStreetAddress: finalComponents.streetAddress,
+          googleCity: finalComponents.city,
+          googleState: finalComponents.state,
+          googlePostalCode: finalComponents.postalCode,
           googleCountry: extractComponent('country'),
           googlePlaceId: googleData.geocode?.placeId || null,
           googlePlusCode: googleData.geocode?.plusCode?.globalCode || null,

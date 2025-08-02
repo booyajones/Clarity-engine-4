@@ -1,40 +1,68 @@
-// Test a single classification
-import OpenAI from 'openai';
+#!/usr/bin/env node
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
+// Test single classification with intelligent address enhancement
 async function testSingleClassification() {
+  console.log('Testing intelligent address enhancement...\n');
+  
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [{
-        role: "system",
-        content: `Classify payees as Business, Individual, or Government with 95%+ confidence.
-
-Business: LLC/INC/CORP/CO/LTD suffixes, business keywords, brand names
-Individual: Personal names without business indicators  
-Government: City/County/State of, agencies, departments
-
-Return concise JSON:
-{"payeeType":"Business|Individual|Government","confidence":0.95-0.99,"sicCode":"XXXX","sicDescription":"Name","reasoning":"Brief reason","flagForReview":false}`
-      }, {
-        role: "user",
-        content: `Classify this payee: "Microsoft Corporation"`
-      }],
-      temperature: 0,
-      max_tokens: 500,
-      response_format: { type: "json_object" }
+    // Test case: Known business with typos in address
+    const response = await fetch('http://localhost:5000/api/classify-single', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        payeeName: 'Microsoft Corporation',
+        address: '1 Main Stret',  // Typo intentional
+        city: 'Redmund',        // Typo intentional
+        state: 'WA',
+        zipCode: '98052',
+        matchingOptions: {
+          enableFinexio: false,
+          enableMastercard: false,
+          enableGoogleAddressValidation: true,
+          enableOpenAI: true
+        }
+      })
     });
+
+    const result = await response.json();
     
-    console.log('Response:', response.choices[0].message.content);
+    if (result.error) {
+      console.error('Error:', result.error);
+      return;
+    }
+
+    console.log('Classification Results:');
+    console.log('- Payee Type:', result.payeeType);
+    console.log('- Confidence:', result.confidence);
+    console.log('- SIC Code:', result.sicCode);
+    console.log('- SIC Description:', result.sicDescription);
     
-    const parsed = JSON.parse(response.choices[0].message.content);
-    console.log('Parsed:', parsed);
-    
+    if (result.addressValidation) {
+      const validation = result.addressValidation;
+      console.log('\nAddress Validation:');
+      console.log('- Status:', validation.status);
+      console.log('- Final Address:', validation.formattedAddress);
+      console.log('- Confidence:', validation.confidence);
+      
+      if (validation.intelligentEnhancement) {
+        console.log('\nIntelligent Enhancement:');
+        console.log('- Used:', validation.intelligentEnhancement.used ? '✓ Yes' : '✗ No');
+        console.log('- Strategy:', validation.intelligentEnhancement.strategy);
+        console.log('- Reason:', validation.intelligentEnhancement.reason);
+        
+        if (validation.intelligentEnhancement.enhancedAddress) {
+          console.log('\nEnhanced Address Details:');
+          const enhanced = validation.intelligentEnhancement.enhancedAddress;
+          console.log('- Street:', enhanced.address);
+          console.log('- City:', enhanced.city);
+          console.log('- State:', enhanced.state);
+          console.log('- ZIP:', enhanced.zipCode);
+          console.log('- Corrections:', enhanced.corrections.join(', '));
+        }
+      }
+    }
   } catch (error) {
-    console.error('Error:', error.message);
+    console.error('Test failed:', error.message);
   }
 }
 
