@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Loader2, Search, Building2, User, Landmark, Shield, CreditCard, ArrowRightLeft, HelpCircle, Database, Globe } from "lucide-react";
+import { Loader2, Search, Building2, User, Landmark, Shield, CreditCard, ArrowRightLeft, HelpCircle, Database, Globe, MapPin } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
 interface ClassificationResult {
@@ -42,6 +42,25 @@ interface ClassificationResult {
       dataQualityLevel?: string;
     } | null;
   };
+  addressValidation?: {
+    status: string;
+    formattedAddress?: string;
+    confidence?: number;
+    error?: string;
+    intelligentEnhancement?: {
+      used: boolean;
+      reason?: string;
+      strategy?: string;
+      enhancedAddress?: {
+        address: string;
+        city: string;
+        state: string;
+        zipCode: string;
+        corrections: string[];
+        confidence: number;
+      };
+    };
+  };
 }
 
 const getTypeIcon = (type: string) => {
@@ -75,16 +94,33 @@ export function SingleClassification() {
   const [result, setResult] = useState<ClassificationResult | null>(null);
   const [enableFinexioMatching, setEnableFinexioMatching] = useState(true);
   const [enableMastercardMatching, setEnableMastercardMatching] = useState(true);
+  const [enableAddressValidation, setEnableAddressValidation] = useState(false);
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [zipCode, setZipCode] = useState("");
 
   const classifyMutation = useMutation({
     mutationFn: async (name: string) => {
-      const response = await apiRequest("POST", "/api/classify-single", { 
+      const requestBody: any = { 
         payeeName: name,
         matchingOptions: {
           enableFinexio: enableFinexioMatching,
-          enableMastercard: enableMastercardMatching
+          enableMastercard: enableMastercardMatching,
+          enableGoogleAddressValidation: enableAddressValidation,
+          enableOpenAI: true // Enable intelligent enhancement by default when address validation is on
         }
-      });
+      };
+
+      // Include address fields if address validation is enabled
+      if (enableAddressValidation) {
+        requestBody.address = address;
+        requestBody.city = city;
+        requestBody.state = state;
+        requestBody.zipCode = zipCode;
+      }
+
+      const response = await apiRequest("POST", "/api/classify-single", requestBody);
       return response.json();
     },
     onSuccess: (data) => {
@@ -150,7 +186,8 @@ export function SingleClassification() {
               </Button>
             </div>
             
-            <div className="flex items-center gap-6 text-sm">
+            {/* Toggles for matching services */}
+            <div className="flex flex-wrap items-center gap-6 text-sm">
               <div className="flex items-center gap-2">
                 <Database className="h-4 w-4 text-purple-600" />
                 <Label htmlFor="finexio-toggle" className="text-sm font-normal cursor-pointer">
@@ -174,7 +211,56 @@ export function SingleClassification() {
                   onCheckedChange={setEnableMastercardMatching}
                 />
               </div>
+              
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-green-600" />
+                <Label htmlFor="address-toggle" className="text-sm font-normal cursor-pointer">
+                  Address Validation
+                </Label>
+                <Switch
+                  id="address-toggle"
+                  checked={enableAddressValidation}
+                  onCheckedChange={setEnableAddressValidation}
+                />
+              </div>
             </div>
+
+            {/* Address fields - shown when address validation is enabled */}
+            {enableAddressValidation && (
+              <div className="mt-4 space-y-3 p-4 bg-gray-50 rounded-lg">
+                <h4 className="text-sm font-medium text-gray-700">Address Information (Optional)</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    placeholder="Street Address"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    disabled={classifyMutation.isPending}
+                  />
+                  <Input
+                    placeholder="City"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    disabled={classifyMutation.isPending}
+                  />
+                  <Input
+                    placeholder="State"
+                    value={state}
+                    onChange={(e) => setState(e.target.value)}
+                    className="w-full"
+                    disabled={classifyMutation.isPending}
+                  />
+                  <Input
+                    placeholder="ZIP Code"
+                    value={zipCode}
+                    onChange={(e) => setZipCode(e.target.value)}
+                    disabled={classifyMutation.isPending}
+                  />
+                </div>
+                <p className="text-xs text-gray-500">
+                  Our intelligent AI will enhance addresses with typos, missing components, or low confidence scores
+                </p>
+              </div>
+            )}
           </form>
         </CardContent>
       </Card>
@@ -353,6 +439,85 @@ export function SingleClassification() {
                       </div>
                     )}
                   </div>
+                )}
+              </div>
+            )}
+
+            {result.addressValidation && (
+              <div className={`p-4 rounded-lg space-y-3 border ${
+                result.addressValidation.status === 'validated' 
+                  ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' 
+                  : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <p className={`text-sm font-medium ${
+                    result.addressValidation.status === 'validated'
+                      ? 'text-green-800 dark:text-green-200' 
+                      : 'text-red-800 dark:text-red-200'
+                  }`}>
+                    <MapPin className="h-4 w-4 inline mr-1" />
+                    {result.addressValidation.status === 'validated' ? 'Address Validation' : 'Address Validation Failed'}
+                  </p>
+                  {result.addressValidation.confidence && (
+                    <Badge className={
+                      result.addressValidation.status === 'validated'
+                        ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100' 
+                        : 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100'
+                    }>
+                      {Math.round(result.addressValidation.confidence * 100)}% Confidence
+                    </Badge>
+                  )}
+                </div>
+                
+                {result.addressValidation.status === 'validated' && (
+                  <>
+                    {result.addressValidation.formattedAddress && (
+                      <div>
+                        <label className="text-xs font-medium text-green-700 dark:text-green-300">Validated Address</label>
+                        <p className="text-sm text-green-900 dark:text-green-100">{result.addressValidation.formattedAddress}</p>
+                      </div>
+                    )}
+                    
+                    {result.addressValidation.intelligentEnhancement?.used && (
+                      <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+                        <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">
+                          ✨ AI Enhanced Address
+                        </p>
+                        <p className="text-xs text-blue-700 dark:text-blue-300 mb-2">
+                          {result.addressValidation.intelligentEnhancement.reason}
+                        </p>
+                        {result.addressValidation.intelligentEnhancement.enhancedAddress && (
+                          <div className="space-y-1 text-xs">
+                            <div className="grid grid-cols-2 gap-2 text-blue-900 dark:text-blue-100">
+                              <div>
+                                <span className="font-medium">Street:</span> {result.addressValidation.intelligentEnhancement.enhancedAddress.address}
+                              </div>
+                              <div>
+                                <span className="font-medium">City:</span> {result.addressValidation.intelligentEnhancement.enhancedAddress.city}
+                              </div>
+                              <div>
+                                <span className="font-medium">State:</span> {result.addressValidation.intelligentEnhancement.enhancedAddress.state}
+                              </div>
+                              <div>
+                                <span className="font-medium">ZIP:</span> {result.addressValidation.intelligentEnhancement.enhancedAddress.zipCode}
+                              </div>
+                            </div>
+                            {result.addressValidation.intelligentEnhancement.enhancedAddress.corrections.length > 0 && (
+                              <p className="text-blue-700 dark:text-blue-300 mt-2">
+                                <span className="font-medium">Corrections:</span> {result.addressValidation.intelligentEnhancement.enhancedAddress.corrections.join(', ')}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+                
+                {result.addressValidation.status === 'failed' && result.addressValidation.error && (
+                  <p className="text-sm text-red-600 dark:text-red-400">
+                    {result.addressValidation.error}
+                  </p>
                 )}
               </div>
             )}
