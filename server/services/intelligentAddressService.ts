@@ -29,10 +29,15 @@ interface IntelligentAddressResult {
 }
 
 export class IntelligentAddressService {
-  private openai: OpenAI;
+  private openai: OpenAI | null;
   
   constructor() {
-    this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    if (process.env.OPENAI_API_KEY) {
+      this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    } else {
+      this.openai = null;
+      console.warn('⚠️ OpenAI API key not configured - intelligent address enhancement disabled');
+    }
   }
 
   /**
@@ -153,6 +158,20 @@ export class IntelligentAddressService {
    * Use OpenAI to intelligently enhance or correct address data
    */
   private async enhanceAddressWithOpenAI(context: AddressContext): Promise<any> {
+    if (!this.openai) {
+      console.warn('OpenAI not configured - cannot enhance address');
+      return {
+        correctedAddress: {
+          streetAddress: context.originalAddress.address || '',
+          city: context.originalAddress.city || '',
+          state: context.originalAddress.state || '',
+          zipCode: context.originalAddress.zipCode || ''
+        },
+        confidence: 0.5,
+        corrections: ['OpenAI not configured'],
+        reasoning: 'OpenAI API key not configured - returning original address'
+      };
+    }
     const prompt = `You are an expert at address validation and correction. Analyze the following information and provide the most accurate, complete address possible.
 
 Context:
@@ -195,7 +214,12 @@ Respond in JSON format:
 }`;
 
     try {
-      const response = await this.openai.chat.completions.create({
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('OpenAI request timeout')), 10000)
+      );
+      
+      const responsePromise = this.openai.chat.completions.create({
         model: "gpt-4o",
         messages: [
           { role: "system", content: "You are an address validation expert. Always respond with valid JSON." },
@@ -205,12 +229,24 @@ Respond in JSON format:
         temperature: 0.1,
         max_tokens: 500
       });
-
+      
+      const response = await Promise.race([responsePromise, timeoutPromise]) as any;
       const result = JSON.parse(response.choices[0].message.content || '{}');
       return result;
-    } catch (error) {
-      console.error('OpenAI address enhancement error:', error);
-      return null;
+    } catch (error: any) {
+      console.error('OpenAI address enhancement error:', error.message);
+      // Return a fallback response when OpenAI fails
+      return {
+        correctedAddress: {
+          streetAddress: context.originalAddress.address || '',
+          city: context.originalAddress.city || '',
+          state: context.originalAddress.state || '',
+          zipCode: context.originalAddress.zipCode || ''
+        },
+        confidence: 0.5,
+        corrections: ['OpenAI enhancement failed - returning original address'],
+        reasoning: `OpenAI error: ${error.message}`
+      };
     }
   }
 
