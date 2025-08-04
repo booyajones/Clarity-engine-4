@@ -257,27 +257,10 @@ export class MastercardApiService {
     // Use custom encoding that only encodes separator characters
     const signatureBase = `${method.toUpperCase()}&${this.oauthPercentEncode(url)}&${this.encodeParameterString(paramString)}`;
 
-    // Debug logging
-    console.log('\n=== OAuth Signature Debug ===');
-    console.log('Parameter string:', paramString);
-    console.log('Encoded param string:', encodeURIComponent(paramString));
-    console.log('Our signature base string:', signatureBase);
-    
-    // Test what happens without encoding the parameter string
-    const testBase = `${method.toUpperCase()}&${this.oauthPercentEncode(url)}&${paramString}`;
-    console.log('Test base (no encoding):', testBase);
-    
-    console.log('Signature base length:', signatureBase.length);
-
     // Sign with private key
-    console.log('Private key first 100 chars:', this.privateKey.substring(0, 100));
-    console.log('Private key last 100 chars:', this.privateKey.substring(this.privateKey.length - 100));
-    
     const sign = crypto.createSign('SHA256');
     sign.update(signatureBase);
     const signature = sign.sign(this.privateKey, 'base64');
-    console.log('Generated signature:', signature.substring(0, 50) + '...');
-    console.log('Signature length:', signature.length);
 
     // Create authorization header
     const authParams = {
@@ -285,13 +268,10 @@ export class MastercardApiService {
       oauth_signature: signature,
     };
 
-    const authHeader = 'OAuth ' + Object.keys(authParams)
+    return 'OAuth ' + Object.keys(authParams)
       .sort()
       .map(key => `${key}="${authParams[key as keyof typeof authParams]}"`)
       .join(', ');
-    
-    console.log('Authorization header:', authHeader);
-    return authHeader;
   }
 
   // Submit a bulk search request
@@ -503,19 +483,24 @@ export class MastercardApiService {
 
     try {
       // Create a single search request
-      const searchRequest: SearchRequest = {
-        searchId: `single_${Date.now()}`,
-        searchItems: [{
-          clientReferenceId: 'single_payee',
-          name: payeeName,
-          address: {
-            line1: address || undefined,
-            city: city || undefined,
-            state: state || undefined,
-            postalCode: zipCode || undefined,
-            countryCode: 'US'
-          }
-        }]
+      const searchItem: any = {
+        clientReferenceId: 'single_payee',
+        name: payeeName
+      };
+
+      // Only include address if we have at least one address field
+      if (address || city || state || zipCode) {
+        searchItem.address = {
+          line1: address || '',
+          city: city || '',
+          state: state || '',
+          postalCode: zipCode || '',
+          countryCode: 'US'
+        };
+      }
+
+      const searchRequest = {
+        searchItems: [searchItem]
       };
 
       // Submit the search
