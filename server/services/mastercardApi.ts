@@ -12,6 +12,7 @@ const MASTERCARD_CONFIG = {
     baseUrl: 'https://sandbox.api.mastercard.com/track/search/bulk-searches',
     consumerKey: process.env.MASTERCARD_CONSUMER_KEY,
     privateKey: process.env.MASTERCARD_PRIVATE_KEY,
+    privateKeyPath: './mastercard-private-key.pem',
     p12Path: process.env.MASTERCARD_P12_PATH || './mastercard-certificate.p12',
     keystorePassword: process.env.MASTERCARD_KEYSTORE_PASSWORD,
     keystoreAlias: process.env.MASTERCARD_KEYSTORE_ALIAS,
@@ -20,6 +21,7 @@ const MASTERCARD_CONFIG = {
     baseUrl: 'https://api.mastercard.com/track/search/bulk-searches',
     consumerKey: process.env.MASTERCARD_CONSUMER_KEY,
     privateKey: process.env.MASTERCARD_PRIVATE_KEY,
+    privateKeyPath: './mastercard-private-key.pem',
     p12Path: process.env.MASTERCARD_P12_PATH || './mastercard-certificate.p12',
     keystorePassword: process.env.MASTERCARD_KEYSTORE_PASSWORD,
     keystoreAlias: process.env.MASTERCARD_KEYSTORE_ALIAS,
@@ -92,10 +94,11 @@ type SearchResult = z.infer<typeof SearchResultSchema>;
 export class MastercardApiService {
   private activeSearches = new Map<string, SearchResponse>();
   private isConfigured: boolean;
+  private privateKey: string | null = null;
 
   constructor() {
-    // Check if we have the necessary credentials
-    this.isConfigured = !!(config.consumerKey && config.privateKey);
+    // Check if we have the necessary credentials and extract private key
+    this.isConfigured = this.initializeCredentials();
     if (!this.isConfigured) {
       console.log('🔔 Mastercard API credentials not configured. Enrichment will be skipped.');
       console.log('   To enable Mastercard enrichment, you need:');
@@ -105,8 +108,68 @@ export class MastercardApiService {
     }
   }
 
+  private initializeCredentials(): boolean {
+    if (!config.consumerKey) {
+      return false;
+    }
+
+    // First try to use direct private key if available
+    if (config.privateKey) {
+      this.privateKey = config.privateKey;
+      return true;
+    }
+
+    // Then try to load from extracted PEM file
+    if (fs.existsSync((config as any).privateKeyPath)) {
+      try {
+        this.privateKey = fs.readFileSync((config as any).privateKeyPath, 'utf8');
+        console.log('✅ Mastercard private key loaded from PEM file successfully');
+        return true;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error('❌ Failed to load Mastercard private key from PEM file:', errorMessage);
+      }
+    }
+
+    // Fallback: try to extract from P12 certificate
+    if (config.keystorePassword && config.keystoreAlias && fs.existsSync(config.p12Path)) {
+      try {
+        const p12Data = fs.readFileSync(config.p12Path);
+        // For P12 certificates, we need to extract the private key
+        // Using Node.js built-in crypto support for PKCS#12
+        const keyObject = crypto.createPrivateKey({
+          key: p12Data,
+          format: 'der',
+          type: 'pkcs12',
+          passphrase: config.keystorePassword
+        });
+        
+        this.privateKey = keyObject.export({
+          type: 'pkcs8',
+          format: 'pem'
+        }) as string;
+        
+        console.log('✅ Mastercard P12 certificate loaded successfully');
+        return true;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error('❌ Failed to load Mastercard P12 certificate:', errorMessage);
+        return false;
+      }
+    }
+
+    return false;
+  }
+
   // Check if service is properly configured
   isServiceConfigured(): boolean {
+    console.log('Mastercard service configuration check:', {
+      isConfigured: this.isConfigured,
+      hasPrivateKey: !!this.privateKey,
+      hasConsumerKey: !!config.consumerKey,
+      keystorePassword: !!config.keystorePassword,
+      keystoreAlias: !!config.keystoreAlias
+    });
     return this.isConfigured;
   }
 
@@ -114,20 +177,27 @@ export class MastercardApiService {
   private generateOAuthSignature(
     method: string,
     url: string,
-    params: Record<string, string>
+    params: Record<string, string>,
+    body?: string
   ): string {
-    if (!config.consumerKey || !config.privateKey) {
+    if (!config.consumerKey || !this.privateKey) {
       throw new Error('Mastercard API credentials not configured');
     }
 
     // OAuth parameters
-    const oauthParams = {
+    const oauthParams: Record<string, string> = {
       oauth_consumer_key: config.consumerKey,
       oauth_nonce: crypto.randomBytes(16).toString('hex'),
       oauth_signature_method: 'RSA-SHA256',
       oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
       oauth_version: '1.0',
     };
+
+    // For POST requests with body, include body hash
+    if (method.toUpperCase() === 'POST' && body) {
+      const bodyHash = crypto.createHash('sha256').update(body, 'utf8').digest('base64');
+      oauthParams.oauth_body_hash = bodyHash;
+    }
 
     // Combine all parameters
     const allParams = { ...params, ...oauthParams };
@@ -144,7 +214,7 @@ export class MastercardApiService {
     // Sign with private key
     const sign = crypto.createSign('RSA-SHA256');
     sign.update(signatureBase);
-    const signature = sign.sign(config.privateKey, 'base64');
+    const signature = sign.sign(this.privateKey, 'base64');
 
     // Create authorization header
     const authParams = {
@@ -165,7 +235,8 @@ export class MastercardApiService {
     
     try {
       const url = config.baseUrl;
-      const authHeader = this.generateOAuthSignature('POST', url, {});
+      const requestBody = JSON.stringify(request);
+      const authHeader = this.generateOAuthSignature('POST', url, {}, requestBody);
 
       const response = await fetch(url, {
         method: 'POST',
@@ -174,7 +245,7 @@ export class MastercardApiService {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        body: JSON.stringify(request),
+        body: requestBody,
       });
 
       if (!response.ok) {
@@ -344,6 +415,83 @@ export class MastercardApiService {
     }
 
     return enrichmentResults;
+  }
+
+  // Single payee enrichment method for immediate use
+  async enrichSinglePayee(
+    payeeName: string,
+    address: string = '',
+    city: string = '',
+    state: string = '',
+    zipCode: string = ''
+  ): Promise<any> {
+    if (!this.isServiceConfigured()) {
+      throw new Error('Mastercard API service is not configured');
+    }
+
+    try {
+      // Create a single search request
+      const searchRequest = {
+        searchId: `single_${Date.now()}`,
+        searches: [{
+          clientReferenceId: 'single_payee',
+          merchantName: payeeName,
+          merchantAddress: {
+            line1: address || undefined,
+            city: city || undefined,
+            countrySubdivision: state || undefined,
+            postalCode: zipCode || undefined,
+            country: 'USA'
+          }
+        }]
+      };
+
+      // Submit the search
+      const searchResponse = await this.submitBulkSearch(searchRequest);
+      
+      if (!searchResponse?.searchId) {
+        throw new Error('Invalid search response from Mastercard API');
+      }
+
+      // Poll for results
+      let status = 'PENDING';
+      let attempts = 0;
+      const maxAttempts = 30; // 30 seconds max wait
+      
+      while (status === 'PENDING' && attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+        
+        const statusResponse = await this.getSearchStatus(searchResponse.searchId);
+        status = statusResponse.status;
+        attempts++;
+      }
+
+      if (status === 'COMPLETED') {
+        const results = await this.getSearchResults(searchResponse.searchId);
+        
+        // Return the first result if available
+        if (results.results && results.results.length > 0) {
+          const result = results.results[0];
+          return {
+            matchStatus: result.matchStatus,
+            matchConfidence: result.matchConfidence,
+            merchantCategoryCode: result.merchantDetails?.merchantCategoryCode,
+            merchantCategoryDescription: result.merchantDetails?.merchantCategoryDescription,
+            acceptanceNetwork: result.merchantDetails?.acceptanceNetwork,
+            lastTransactionDate: result.merchantDetails?.lastTransactionDate,
+            transactionVolume: result.merchantDetails?.transactionVolume,
+            dataQuality: result.merchantDetails?.dataQuality,
+          };
+        }
+      } else {
+        console.error(`Mastercard search ${searchResponse.searchId} failed or timed out with status: ${status}`);
+      }
+
+      return null; // No results found
+    } catch (error) {
+      console.error('Error in single payee enrichment:', error);
+      throw error;
+    }
   }
 }
 

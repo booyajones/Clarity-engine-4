@@ -1091,8 +1091,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // NOW perform Mastercard enrichment with cleaned/validated address data
       let mastercardEnrichment = null;
       if (matchingOptions?.enableMastercard) {
-        // Check if Mastercard API credentials are configured
-        if (!process.env.MASTERCARD_CONSUMER_KEY || !process.env.MASTERCARD_P12_PATH) {
+        // Import and check Mastercard service configuration
+        const { mastercardApi } = await import('./services/mastercardApi');
+        
+        if (!mastercardApi.isServiceConfigured()) {
           mastercardEnrichment = {
             enriched: false,
             status: "not_configured",
@@ -1100,14 +1102,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
             data: null
           };
         } else {
-          // TODO: Implement actual Mastercard enrichment here with cleanedAddressData
-          mastercardEnrichment = {
-            enriched: false,
-            status: "pending",
-            message: "Mastercard enrichment is being processed with validated address data",
-            data: null,
-            addressUsed: cleanedAddressData // Include the cleaned address used for enrichment
-          };
+          try {
+            // Perform actual Mastercard enrichment with cleaned/validated address data
+            const enrichmentResult = await mastercardApi.enrichSinglePayee(
+              payeeName,
+              cleanedAddressData?.address || '',
+              cleanedAddressData?.city || '',
+              cleanedAddressData?.state || '',
+              cleanedAddressData?.zipCode || ''
+            );
+            
+            mastercardEnrichment = {
+              enriched: !!enrichmentResult,
+              status: enrichmentResult ? "completed" : "no_match",
+              message: enrichmentResult ? "Mastercard enrichment completed successfully" : "No matching merchant found in Mastercard database",
+              data: enrichmentResult || null,
+              addressUsed: cleanedAddressData // Include the cleaned address used for enrichment
+            };
+          } catch (error) {
+            console.error('Mastercard enrichment error:', error);
+            mastercardEnrichment = {
+              enriched: false,
+              status: "error",
+              message: `Mastercard enrichment failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              data: null,
+              addressUsed: cleanedAddressData
+            };
+          }
         }
       } else {
         mastercardEnrichment = {
