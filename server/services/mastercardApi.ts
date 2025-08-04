@@ -310,6 +310,48 @@ export class MastercardApiService {
     }
   }
 
+  // Submit multiple search requests
+  async submitMultipleSearch(request: MultipleSearchRequest): Promise<MultipleSearchResponse> {
+    if (!this.isConfigured) {
+      throw new Error('Mastercard API is not configured. Missing consumer key or private key.');
+    }
+    
+    try {
+      const url = `${config.baseUrl}/multiple-searches`;
+      const requestBody = JSON.stringify(request);
+      
+      // Debug logging
+      console.log('Mastercard MMT multi-search request body:', requestBody);
+      console.log('Body hash:', crypto.createHash('sha256').update(requestBody, 'utf8').digest('base64'));
+      
+      const authHeader = this.generateOAuthSignature('POST', url, {}, requestBody);
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': authHeader,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'x-openapi-clientid': config.clientId || 'finexio-clarity-engine'
+        },
+        body: requestBody,
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Mastercard API error: ${response.status} - ${error}`);
+      }
+
+      const data = await response.json();
+      const searchResponse = MultipleSearchResponseSchema.parse(data);
+
+      return searchResponse;
+    } catch (error) {
+      console.error('Error submitting multi-search:', error);
+      throw error;
+    }
+  }
+
   // Get search status
   async getSearchStatus(searchId: string): Promise<SearchResponse> {
     try {
