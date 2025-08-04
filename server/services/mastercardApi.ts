@@ -13,7 +13,7 @@ const MASTERCARD_CONFIG = {
     consumerKey: process.env.MASTERCARD_CONSUMER_KEY,
     privateKey: process.env.MASTERCARD_PRIVATE_KEY,
     privateKeyPath: './mastercard-private-key.pem',
-    p12Path: process.env.MASTERCARD_P12_PATH || './mastercard-certificate.p12',
+    p12Path: process.env.MASTERCARD_P12_PATH || './Finexio_MasterCard_Production_2025-production.p12',
     keystorePassword: process.env.MASTERCARD_KEYSTORE_PASSWORD,
     keystoreAlias: process.env.MASTERCARD_KEYSTORE_ALIAS,
   },
@@ -22,7 +22,7 @@ const MASTERCARD_CONFIG = {
     consumerKey: process.env.MASTERCARD_CONSUMER_KEY,
     privateKey: process.env.MASTERCARD_PRIVATE_KEY,
     privateKeyPath: './mastercard-private-key.pem',
-    p12Path: process.env.MASTERCARD_P12_PATH || './mastercard-certificate.p12',
+    p12Path: process.env.MASTERCARD_P12_PATH || './Finexio_MasterCard_Production_2025-production.p12',
     keystorePassword: process.env.MASTERCARD_KEYSTORE_PASSWORD,
     keystoreAlias: process.env.MASTERCARD_KEYSTORE_ALIAS,
   }
