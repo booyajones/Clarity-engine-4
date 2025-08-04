@@ -83,7 +83,7 @@ Preferred communication style: Simple, everyday language.
 - **csv-parser**: CSV file processing.
 - **xlsx**: Excel file processing.
 - **OpenAI API**: For AI classification functionality.
-- **Mastercard Track Search API**: For business enrichment data.
+- **Mastercard Merchant Match Tool (MMT) API**: For business enrichment data (updated 8/4/2025 from Track Search API to MMT).
 
 ### Development Tools
 - **Vite**: Fast development server and building.

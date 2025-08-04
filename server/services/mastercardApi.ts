@@ -2,29 +2,31 @@ import crypto from 'crypto';
 import fs from 'fs';
 import { z } from 'zod';
 
-// Mastercard Track Search API service
-// This service integrates with Mastercard's B2B search API to enrich business data
+// Mastercard Merchant Match Tool (MMT) API service
+// This service integrates with Mastercard's Merchant Match Tool API to enrich business data
 // OAuth 1.0a authentication implementation
 
 // Configuration
 const MASTERCARD_CONFIG = {
   sandbox: {
-    baseUrl: 'https://sandbox.api.mastercard.com/track/search/bulk-searches',
+    baseUrl: 'https://sandbox.api.mastercard.com/merchants',
     consumerKey: process.env.MASTERCARD_CONSUMER_KEY,
     privateKey: process.env.MASTERCARD_PRIVATE_KEY,
     privateKeyPath: './mastercard-private-key.pem',
     p12Path: process.env.MASTERCARD_P12_PATH || './Finexio_MasterCard_Production_2025-production.p12',
     keystorePassword: process.env.MASTERCARD_KEYSTORE_PASSWORD,
     keystoreAlias: process.env.MASTERCARD_KEYSTORE_ALIAS,
+    clientId: process.env.MASTERCARD_CLIENT_ID,
   },
   production: {
-    baseUrl: 'https://api.mastercard.com/track/search/bulk-searches',
+    baseUrl: 'https://api.mastercard.com/merchants',
     consumerKey: process.env.MASTERCARD_CONSUMER_KEY,
     privateKey: process.env.MASTERCARD_PRIVATE_KEY,
     privateKeyPath: './mastercard-private-key.pem',
     p12Path: process.env.MASTERCARD_P12_PATH || './Finexio_MasterCard_Production_2025-production.p12',
     keystorePassword: process.env.MASTERCARD_KEYSTORE_PASSWORD,
     keystoreAlias: process.env.MASTERCARD_KEYSTORE_ALIAS,
+    clientId: process.env.MASTERCARD_CLIENT_ID,
   }
 };
 
@@ -32,67 +34,56 @@ const MASTERCARD_CONFIG = {
 const environment = process.env.MASTERCARD_ENVIRONMENT || 'sandbox';
 const config = MASTERCARD_CONFIG[environment as keyof typeof MASTERCARD_CONFIG];
 
-// Request/Response schemas
-const SearchRequestSchema = z.object({
-  searchId: z.string().optional(),
-  notificationUrl: z.string().optional(),
-  searchItems: z.array(z.object({
-    clientReferenceId: z.string(),
-    name: z.string(),
-    address: z.object({
-      line1: z.string().optional(),
-      line2: z.string().optional(),
-      city: z.string().optional(),
-      state: z.string().optional(),
-      postalCode: z.string().optional(),
-      countryCode: z.string().optional(),
-    }).optional(),
+// Request/Response schemas for Merchant Match Tool
+const SingleSearchRequestSchema = z.object({
+  requestId: z.string(), // UUID required
+  merchantName: z.string().max(110),
+  streetAddress: z.string().max(110).optional(),
+  city: z.string().max(30).optional(),
+  state: z.string().max(3).optional(),
+  postalCode: z.string().max(10).optional(),
+  country: z.string().max(3),
+  phoneNumber: z.string().max(16).optional(),
+  taxId: z.string().max(9).optional(),
+});
+
+const MultipleSearchRequestSchema = z.object({
+  queries: z.array(SingleSearchRequestSchema).max(100)
+});
+
+// Response schemas for MMT
+const SingleSearchResponseSchema = z.object({
+  requestId: z.string(),
+  matchScore: z.number(),
+  isMatched: z.boolean(),
+  matchedMerchant: z.object({
+    merchantId: z.string(),
+    merchantName: z.string(),
+    merchantCategoryCode: z.string(),
+    merchantCategoryDescription: z.string(),
+    streetAddress: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    postalCode: z.string().optional(),
+    country: z.string().optional(),
     phoneNumber: z.string().optional(),
-    email: z.string().optional(),
-    website: z.string().optional(),
-    taxId: z.string().optional(),
-  }))
+    acceptanceNetwork: z.array(z.string()).optional(),
+    levelOfClearingData: z.string().optional(),
+    transactionRecency: z.string().optional(),
+  }).optional()
 });
 
-const SearchResponseSchema = z.object({
-  searchId: z.string(),
-  status: z.enum(['IN_PROGRESS', 'COMPLETED', 'FAILED']),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-  totalItems: z.number(),
-  processedItems: z.number(),
+const MultipleSearchResponseSchema = z.object({
+  responses: z.array(SingleSearchResponseSchema)
 });
 
-const SearchResultSchema = z.object({
-  searchId: z.string(),
-  results: z.array(z.object({
-    clientReferenceId: z.string(),
-    matchStatus: z.enum(['MATCH', 'NO_MATCH', 'MULTIPLE_MATCHES']),
-    matchConfidence: z.number().optional(),
-    merchantDetails: z.object({
-      merchantCategoryCode: z.string().optional(),
-      merchantCategoryDescription: z.string().optional(),
-      acceptanceNetwork: z.array(z.string()).optional(),
-      lastTransactionDate: z.string().optional(),
-      transactionVolume: z.object({
-        count: z.number().optional(),
-        amount: z.number().optional(),
-        currency: z.string().optional(),
-      }).optional(),
-      dataQuality: z.object({
-        level: z.enum(['HIGH', 'MEDIUM', 'LOW']).optional(),
-        dataProvided: z.array(z.string()).optional(),
-      }).optional(),
-    }).optional(),
-  }))
-});
-
-type SearchRequest = z.infer<typeof SearchRequestSchema>;
-type SearchResponse = z.infer<typeof SearchResponseSchema>;
-type SearchResult = z.infer<typeof SearchResultSchema>;
+type SingleSearchRequest = z.infer<typeof SingleSearchRequestSchema>;
+type SingleSearchResponse = z.infer<typeof SingleSearchResponseSchema>;
+type MultipleSearchRequest = z.infer<typeof MultipleSearchRequestSchema>;
+type MultipleSearchResponse = z.infer<typeof MultipleSearchResponseSchema>;
 
 export class MastercardApiService {
-  private activeSearches = new Map<string, SearchResponse>();
+  private activeSearches = new Map<string, SingleSearchResponse>();
   private isConfigured: boolean;
   private privateKey: string | null = null;
 
@@ -274,18 +265,18 @@ export class MastercardApiService {
       .join(', ');
   }
 
-  // Submit a bulk search request
-  async submitBulkSearch(request: SearchRequest): Promise<SearchResponse> {
+  // Submit a single search request
+  async submitSingleSearch(request: SingleSearchRequest): Promise<SingleSearchResponse> {
     if (!this.isConfigured) {
       throw new Error('Mastercard API is not configured. Missing consumer key or private key.');
     }
     
     try {
-      const url = config.baseUrl;
+      const url = `${config.baseUrl}/single-searches`;
       const requestBody = JSON.stringify(request);
       
       // Debug logging
-      console.log('Mastercard request body:', requestBody);
+      console.log('Mastercard MMT request body:', requestBody);
       console.log('Body hash:', crypto.createHash('sha256').update(requestBody, 'utf8').digest('base64'));
       
       const authHeader = this.generateOAuthSignature('POST', url, {}, requestBody);
@@ -296,6 +287,7 @@ export class MastercardApiService {
           'Authorization': authHeader,
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'x-openapi-clientid': config.clientId || 'finexio-clarity-engine'
         },
         body: requestBody,
       });
@@ -306,10 +298,10 @@ export class MastercardApiService {
       }
 
       const data = await response.json();
-      const searchResponse = SearchResponseSchema.parse(data);
+      const searchResponse = SingleSearchResponseSchema.parse(data);
 
       // Track active search
-      this.activeSearches.set(searchResponse.searchId, searchResponse);
+      this.activeSearches.set(searchResponse.requestId, searchResponse);
 
       return searchResponse;
     } catch (error) {
@@ -482,69 +474,48 @@ export class MastercardApiService {
     }
 
     try {
-      // Create a single search request
-      const searchItem: any = {
-        clientReferenceId: 'single_payee',
-        name: payeeName
+      // Create a single search request using MMT format
+      const searchRequest: SingleSearchRequest = {
+        requestId: crypto.randomUUID(),
+        merchantName: payeeName,
+        country: 'US',
+        streetAddress: address || undefined,
+        city: city || undefined,
+        state: state || undefined,
+        postalCode: zipCode || undefined
       };
 
-      // Only include address if we have at least one address field
-      if (address || city || state || zipCode) {
-        searchItem.address = {
-          line1: address || '',
-          city: city || '',
-          state: state || '',
-          postalCode: zipCode || '',
-          countryCode: 'US'
-        };
-      }
-
-      const searchRequest = {
-        searchItems: [searchItem]
-      };
-
-      // Submit the search
-      const searchResponse = await this.submitBulkSearch(searchRequest);
+      // Submit the search - MMT returns results immediately
+      const searchResponse = await this.submitSingleSearch(searchRequest);
       
-      if (!searchResponse?.searchId) {
+      if (!searchResponse) {
         throw new Error('Invalid search response from Mastercard API');
       }
 
-      // Poll for results
-      let status = 'PENDING';
-      let attempts = 0;
-      const maxAttempts = 30; // 30 seconds max wait
-      
-      while (status === 'PENDING' && attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-        
-        const statusResponse = await this.getSearchStatus(searchResponse.searchId);
-        status = statusResponse.status;
-        attempts++;
+      // MMT returns results immediately - no polling needed
+      if (searchResponse.isMatched && searchResponse.matchedMerchant) {
+        const merchant = searchResponse.matchedMerchant;
+        return {
+          matchStatus: 'MATCH',
+          matchConfidence: searchResponse.matchScore,
+          merchantId: merchant.merchantId,
+          merchantName: merchant.merchantName,
+          merchantCategoryCode: merchant.merchantCategoryCode,
+          merchantCategoryDescription: merchant.merchantCategoryDescription,
+          acceptanceNetwork: merchant.acceptanceNetwork,
+          levelOfClearingData: merchant.levelOfClearingData,
+          transactionRecency: merchant.transactionRecency,
+          address: {
+            streetAddress: merchant.streetAddress,
+            city: merchant.city,
+            state: merchant.state,
+            postalCode: merchant.postalCode,
+            country: merchant.country
+          }
+        };
       }
 
-      if (status === 'COMPLETED') {
-        const results = await this.getSearchResults(searchResponse.searchId);
-        
-        // Return the first result if available
-        if (results.results && results.results.length > 0) {
-          const result = results.results[0];
-          return {
-            matchStatus: result.matchStatus,
-            matchConfidence: result.matchConfidence,
-            merchantCategoryCode: result.merchantDetails?.merchantCategoryCode,
-            merchantCategoryDescription: result.merchantDetails?.merchantCategoryDescription,
-            acceptanceNetwork: result.merchantDetails?.acceptanceNetwork,
-            lastTransactionDate: result.merchantDetails?.lastTransactionDate,
-            transactionVolume: result.merchantDetails?.transactionVolume,
-            dataQuality: result.merchantDetails?.dataQuality,
-          };
-        }
-      } else {
-        console.error(`Mastercard search ${searchResponse.searchId} failed or timed out with status: ${status}`);
-      }
-
-      return null; // No results found
+      return null; // No match found
     } catch (error) {
       console.error('Error in single payee enrichment:', error);
       throw error;
