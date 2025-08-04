@@ -825,6 +825,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     matchingOptions: z.object({
       enableFinexio: z.boolean().optional(),
       enableMastercard: z.boolean().optional(),
+      enableGoogleAddressValidation: z.boolean().optional(),
+      enableOpenAI: z.boolean().optional(),
+      enableAkkio: z.boolean().optional(),
     }).optional(),
   });
   
