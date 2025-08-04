@@ -833,6 +833,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Single payee classification endpoint
   app.post("/api/classify-single", classificationLimiter, validateRequestBody(classifySingleSchema), async (req, res) => {
+    console.log('Single classification request received:', JSON.stringify(req.body, null, 2));
     try {
       const { payeeName, address, city, state, zipCode, matchingOptions } = req.body;
 

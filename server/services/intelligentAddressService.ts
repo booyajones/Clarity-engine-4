@@ -280,7 +280,10 @@ Respond in JSON format:
         city,
         state,
         zipCode,
-        { enableGoogleValidation: true }
+        { 
+          enableGoogleValidation: true,
+          enableOpenAI: false  // CRITICAL: Prevent infinite recursion
+        }
       );
     }
     
