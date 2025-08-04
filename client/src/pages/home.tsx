@@ -86,7 +86,13 @@ export default function Home() {
 
   const { data: batches, isLoading } = useQuery<UploadBatch[]>({
     queryKey: ["/api/upload/batches"],
-    refetchInterval: 1000, // Poll every second
+    refetchInterval: (query) => {
+      // Only poll when there are active processing batches
+      const hasProcessingBatches = query.state.data?.some(
+        batch => batch.status === "processing"
+      );
+      return hasProcessingBatches ? 5000 : false; // Poll every 5 seconds only when processing
+    }
   });
 
   const previewMutation = useMutation({

@@ -255,7 +255,10 @@ export class AddressValidationService {
 
       // Use intelligent address service to determine if OpenAI enhancement is needed
       if (options.enableOpenAI !== false) {
-        const intelligentResult = await intelligentAddressService.processAddressIntelligently(
+        console.log('Starting intelligent address processing...');
+        
+        // Add timeout for intelligent address processing
+        const intelligentPromise = intelligentAddressService.processAddressIntelligently(
           address,
           city,
           state,
@@ -270,6 +273,20 @@ export class AddressValidationService {
             enableOpenAI: options.enableOpenAI
           }
         );
+        
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Intelligent address processing timeout')), 15000);
+        });
+        
+        let intelligentResult: any;
+        try {
+          intelligentResult = await Promise.race([intelligentPromise, timeoutPromise]) as any;
+          console.log('Intelligent address processing completed');
+        } catch (error) {
+          console.error('Intelligent address processing failed:', error);
+          // Return Google result without enhancement if intelligent processing fails
+          return googleResult;
+        }
 
         // If OpenAI was used and provided enhancement
         if (intelligentResult.useOpenAI && intelligentResult.enhancedAddress) {
@@ -350,9 +367,9 @@ export class AddressValidationService {
         classification.zipCode,
         {
           ...options,
-          payeeName: classification.payeeName,
+          payeeName: classification.cleanedName || classification.originalName,
           payeeType: classification.payeeType,
-          sicDescription: classification.sicDescription
+          sicDescription: classification.sicDescription || undefined
         }
       );
 
@@ -386,7 +403,7 @@ export class AddressValidationService {
         // If intelligent enhancement improved the address
         if (result.intelligentEnhancement?.used && result.intelligentEnhancement.enhancedAddress) {
           const enhanced = result.intelligentEnhancement.enhancedAddress;
-          console.log(`Batch address enhanced by OpenAI for ${classification.payeeName}: ${result.intelligentEnhancement.reason}`);
+          console.log(`Batch address enhanced by OpenAI for ${classification.cleanedName || classification.originalName}: ${result.intelligentEnhancement.reason}`);
           
           // Use enhanced components
           finalComponents = {

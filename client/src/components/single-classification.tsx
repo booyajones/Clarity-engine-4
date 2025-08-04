@@ -129,14 +129,30 @@ export function SingleClassification() {
         requestBody.zipCode = zipCode;
       }
 
-      const response = await apiRequest("POST", "/api/classify-single", requestBody);
-      return response.json();
+      console.log('Sending classification request:', requestBody);
+      
+      try {
+        const response = await apiRequest("POST", "/api/classify-single", requestBody);
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Server error:', response.status, errorText);
+          throw new Error(`Server error: ${response.status} - ${errorText}`);
+        }
+        const data = await response.json();
+        console.log('Classification response:', data);
+        return data;
+      } catch (error) {
+        console.error('Request failed:', error);
+        throw error;
+      }
     },
     onSuccess: (data) => {
+      console.log('Classification successful:', data);
       setResult(data);
     },
     onError: (error) => {
       console.error("Classification failed:", error);
+      alert(`Classification failed: ${error.message}`);
     }
   });
 
