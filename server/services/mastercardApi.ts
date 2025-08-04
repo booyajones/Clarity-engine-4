@@ -122,9 +122,20 @@ export class MastercardApiService {
     // Then try to load from extracted PEM file
     if (fs.existsSync((config as any).privateKeyPath)) {
       try {
-        this.privateKey = fs.readFileSync((config as any).privateKeyPath, 'utf8');
-        console.log('✅ Mastercard private key loaded from PEM file successfully');
-        return true;
+        const pemContent = fs.readFileSync((config as any).privateKeyPath, 'utf8');
+        
+        // Extract the actual private key from the PEM content
+        // The file might contain Bag Attributes and other metadata
+        const privateKeyMatch = pemContent.match(/-----BEGIN PRIVATE KEY-----[\s\S]+?-----END PRIVATE KEY-----/);
+        
+        if (privateKeyMatch) {
+          this.privateKey = privateKeyMatch[0];
+          console.log('✅ Mastercard private key loaded from PEM file successfully');
+          return true;
+        } else {
+          console.error('❌ Could not find private key in PEM file');
+          return false;
+        }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         console.error('❌ Failed to load Mastercard private key from PEM file:', errorMessage);
@@ -173,6 +184,40 @@ export class MastercardApiService {
     return this.isConfigured;
   }
 
+  // OAuth percent encoding as per RFC 5849
+  private oauthPercentEncode(str: string): string {
+    // OAuth 1.0a uses specific encoding rules
+    return encodeURIComponent(str)
+      .replace(/!/g, '%21')
+      .replace(/'/g, '%27')
+      .replace(/\(/g, '%28')
+      .replace(/\)/g, '%29')
+      .replace(/\*/g, '%2A');
+  }
+
+  // Custom encoding for parameter string in signature base
+  // Only encodes separator characters without double-encoding already encoded values
+  private encodeParameterString(paramString: string): string {
+    // Split by & to get individual key=value pairs
+    const pairs = paramString.split('&');
+    
+    // Process each pair to encode only the separator = between key and value
+    const encodedPairs = pairs.map(pair => {
+      // Find the first = which separates key from value
+      const firstEqualIndex = pair.indexOf('=');
+      if (firstEqualIndex === -1) return pair;
+      
+      const key = pair.substring(0, firstEqualIndex);
+      const value = pair.substring(firstEqualIndex + 1);
+      
+      // Join with encoded =
+      return key + '%3D' + value;
+    });
+    
+    // Join all pairs with encoded &
+    return encodedPairs.join('%26');
+  }
+
   // OAuth 1.0a signature generation
   private generateOAuthSignature(
     method: string,
@@ -202,19 +247,37 @@ export class MastercardApiService {
     // Combine all parameters
     const allParams = { ...params, ...oauthParams };
 
-    // Create parameter string
+    // Create parameter string (already percent-encoded)
     const paramString = Object.keys(allParams)
       .sort()
-      .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(allParams[key as keyof typeof allParams])}`)
+      .map(key => `${this.oauthPercentEncode(key)}=${this.oauthPercentEncode(allParams[key as keyof typeof allParams])}`)
       .join('&');
 
     // Create signature base string
-    const signatureBase = `${method.toUpperCase()}&${encodeURIComponent(url)}&${encodeURIComponent(paramString)}`;
+    // Use custom encoding that only encodes separator characters
+    const signatureBase = `${method.toUpperCase()}&${this.oauthPercentEncode(url)}&${this.encodeParameterString(paramString)}`;
+
+    // Debug logging
+    console.log('\n=== OAuth Signature Debug ===');
+    console.log('Parameter string:', paramString);
+    console.log('Encoded param string:', encodeURIComponent(paramString));
+    console.log('Our signature base string:', signatureBase);
+    
+    // Test what happens without encoding the parameter string
+    const testBase = `${method.toUpperCase()}&${this.oauthPercentEncode(url)}&${paramString}`;
+    console.log('Test base (no encoding):', testBase);
+    
+    console.log('Signature base length:', signatureBase.length);
 
     // Sign with private key
-    const sign = crypto.createSign('RSA-SHA256');
+    console.log('Private key first 100 chars:', this.privateKey.substring(0, 100));
+    console.log('Private key last 100 chars:', this.privateKey.substring(this.privateKey.length - 100));
+    
+    const sign = crypto.createSign('SHA256');
     sign.update(signatureBase);
     const signature = sign.sign(this.privateKey, 'base64');
+    console.log('Generated signature:', signature.substring(0, 50) + '...');
+    console.log('Signature length:', signature.length);
 
     // Create authorization header
     const authParams = {
@@ -222,9 +285,13 @@ export class MastercardApiService {
       oauth_signature: signature,
     };
 
-    return 'OAuth ' + Object.keys(authParams)
-      .map(key => `${key}="${encodeURIComponent(authParams[key as keyof typeof authParams])}"`)
+    const authHeader = 'OAuth ' + Object.keys(authParams)
+      .sort()
+      .map(key => `${key}="${authParams[key as keyof typeof authParams]}"`)
       .join(', ');
+    
+    console.log('Authorization header:', authHeader);
+    return authHeader;
   }
 
   // Submit a bulk search request
@@ -236,6 +303,11 @@ export class MastercardApiService {
     try {
       const url = config.baseUrl;
       const requestBody = JSON.stringify(request);
+      
+      // Debug logging
+      console.log('Mastercard request body:', requestBody);
+      console.log('Body hash:', crypto.createHash('sha256').update(requestBody, 'utf8').digest('base64'));
+      
       const authHeader = this.generateOAuthSignature('POST', url, {}, requestBody);
 
       const response = await fetch(url, {
@@ -431,17 +503,17 @@ export class MastercardApiService {
 
     try {
       // Create a single search request
-      const searchRequest = {
+      const searchRequest: SearchRequest = {
         searchId: `single_${Date.now()}`,
-        searches: [{
+        searchItems: [{
           clientReferenceId: 'single_payee',
-          merchantName: payeeName,
-          merchantAddress: {
+          name: payeeName,
+          address: {
             line1: address || undefined,
             city: city || undefined,
-            countrySubdivision: state || undefined,
+            state: state || undefined,
             postalCode: zipCode || undefined,
-            country: 'USA'
+            countryCode: 'US'
           }
         }]
       };
