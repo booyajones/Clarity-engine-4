@@ -227,13 +227,18 @@ export class AddressValidationService {
         enableUspsCass: options.enableUSPSCASS ?? true,
       };
 
+      // Add AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
       const response = await fetch(`${GOOGLE_ADDRESS_VALIDATION_API}?key=${GOOGLE_MAPS_API_KEY}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(requestBody),
-      });
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
 
       let googleResult: { success: boolean; data?: GoogleAddressValidationResponse; error?: string };
       

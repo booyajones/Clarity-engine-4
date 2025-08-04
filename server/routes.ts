@@ -1000,22 +1000,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (matchingOptions?.enableGoogleAddressValidation && (address || city || state || zipCode)) {
         console.log('Performing address validation...');
-        const { addressValidationService } = await import("./services/addressValidationService");
-        
-        // Pass payee context for intelligent OpenAI decision making
-        const validationResult = await addressValidationService.validateAddress(
-          address || '',
-          city || null,
-          state || null,
-          zipCode || null,
-          { 
-            enableGoogleValidation: true,
-            enableOpenAI: matchingOptions?.enableOpenAI !== false, // Default to enabled for smart enhancement
-            payeeName: payeeName.trim(),
-            payeeType: result.payeeType,
-            sicDescription: result.sicDescription
-          }
-        );
+        try {
+          const { addressValidationService } = await import("./services/addressValidationService");
+          
+          // Pass payee context for intelligent OpenAI decision making
+          const validationResult = await addressValidationService.validateAddress(
+            address || '',
+            city || null,
+            state || null,
+            zipCode || null,
+            { 
+              enableGoogleValidation: true,
+              enableOpenAI: matchingOptions?.enableOpenAI !== false, // Default to enabled for smart enhancement
+              payeeName: payeeName.trim(),
+              payeeType: result.payeeType,
+              sicDescription: result.sicDescription
+            }
+          );
         
         if (validationResult.success && validationResult.data) {
           const googleData = validationResult.data.result;
@@ -1087,6 +1088,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           addressValidation = {
             status: 'failed',
             error: validationResult.error || 'Address validation failed'
+          };
+        }
+        } catch (error) {
+          console.error('Address validation error:', error);
+          addressValidation = {
+            status: 'error',
+            error: error instanceof Error ? error.message : 'Address validation failed unexpectedly'
           };
         }
       }
