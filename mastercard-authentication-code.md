@@ -328,11 +328,20 @@ Response: 400 Bad Request
 
 The authentication is working perfectly - we can submit searches and get valid bulkSearchIds back. The issue is that the account doesn't have access to production merchant data, so all searches return "RESULTS_NOT_FOUND".
 
+### Diagnostic Test Results (1/7/2025):
+- **Search Submission**: ✅ Works (202 Accepted, bulkSearchId received)
+- **OAuth Authentication**: ✅ Perfect (signatures valid)
+- **Results with full params** `?search_request_id=&offset=0&limit=25`: ❌ RESULTS_NOT_FOUND
+- **Results with partial params** `?offset=0&limit=25`: ❌ RESULTS_NOT_FOUND
+- **Results without params**: ❌ RESULTS_NOT_FOUND
+- **Conclusion**: Query parameters don't matter - account lacks production data access
+
 **Next Steps for Your Developer**:
 1. Authentication code is working correctly - no code changes needed
 2. Contact Mastercard at apisupport@mastercard.com
 3. Request enabling production merchant data access for the Track Search API
 4. The account has API access but needs data permission approval
+5. Once data access is approved, use the full query parameters: `?search_request_id=&offset=0&limit=25`
 
 ## Environment Variables Required
 
