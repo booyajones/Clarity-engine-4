@@ -343,56 +343,55 @@ export class MastercardApiService {
 
 
 
-  // Get search status
+  // Check search status by attempting to get results (no separate status endpoint)
   async getSearchStatus(searchId: string): Promise<SearchStatusResponse> {
     try {
-      const url = `${config.baseUrl}/bulk-searches/${searchId}/status`;
-      console.log('Status check URL:', url);
+      // Try to get results to determine status
+      const url = `${config.baseUrl}/bulk-searches/${searchId}/results`;
       const authHeader = this.generateOAuthSignature('GET', url, {});
 
-      // Debug headers
       const headers = {
         'Authorization': authHeader,
         'Accept': 'application/json',
         'X-Openapi-Clientid': config.clientId || ''
       };
-      
-      console.log('GET request debug:', {
-        url,
-        hasClientId: !!config.clientId,
-        clientId: config.clientId?.substring(0, 20) + '...',
-        authHeaderLength: authHeader.length,
-        headers: Object.keys(headers)
-      });
 
       const response = await fetch(url, {
         method: 'GET',
         headers,
       });
 
-      console.log('GET response status:', response.status);
-
       if (!response.ok) {
         const error = await response.text();
-        console.log('GET error response:', error);
+        
+        // If results aren't ready yet, return pending status
+        if (response.status === 400 && error.includes('RESULTS_NOT_FOUND')) {
+          return {
+            bulkSearchId: searchId,
+            status: 'IN_PROGRESS',
+            totalSearches: 1,
+            completedSearches: 0
+          };
+        }
+        
         throw new Error(`Mastercard API error: ${response.status} - ${error}`);
       }
 
-      const data = await response.json();
-      const searchResponse = SearchStatusResponseSchema.parse(data);
-
-      // Update tracked search
-      this.activeSearches.set(searchId, searchResponse);
-
-      return searchResponse;
+      // Results are ready
+      return {
+        bulkSearchId: searchId,
+        status: 'COMPLETED',
+        totalSearches: 1,
+        completedSearches: 1
+      };
     } catch (error) {
-      console.error('Error getting search status:', error);
+      console.error('Error checking search status:', error);
       throw error;
     }
   }
 
   // Get search results
-  async getSearchResults(searchId: string): Promise<SearchResultsResponse> {
+  async getSearchResults(searchId: string, retries = 3): Promise<SearchResultsResponse> {
     try {
       const url = `${config.baseUrl}/bulk-searches/${searchId}/results`;
       const authHeader = this.generateOAuthSignature('GET', url, {});
@@ -408,6 +407,14 @@ export class MastercardApiService {
 
       if (!response.ok) {
         const error = await response.text();
+        
+        // Retry if results aren't ready yet
+        if (response.status === 400 && error.includes('RESULTS_NOT_FOUND') && retries > 0) {
+          console.log(`Results still processing, retrying in 1 second... (${retries} retries left)`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          return this.getSearchResults(searchId, retries - 1);
+        }
+        
         throw new Error(`Mastercard API error: ${response.status} - ${error}`);
       }
 
