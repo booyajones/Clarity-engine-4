@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { schedulerService } from "./services/schedulerService";
 import { mastercardApi } from "./services/mastercardApi";
+import { getMastercardWorker } from "./services/mastercardWorker";
 
 const app = express();
 // Security and optimization middleware
@@ -88,6 +89,16 @@ app.use((req, res, next) => {
         schedulerService.initialize();
       } catch (error) {
         console.error('Failed to initialize scheduler:', error);
+      }
+
+      // Start Mastercard worker for polling search results
+      try {
+        if (mastercardApi.isServiceConfigured()) {
+          getMastercardWorker().start();
+          console.log('✅ Mastercard worker started for polling search results');
+        }
+      } catch (error) {
+        console.error('Failed to start Mastercard worker:', error);
       }
     });
   } catch (error) {

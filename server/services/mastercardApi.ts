@@ -2,6 +2,9 @@ import crypto from 'crypto';
 import fs from 'fs';
 import { z } from 'zod';
 import oauth from 'mastercard-oauth1-signer';
+import { db } from "../db";
+import { mastercardSearchRequests } from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 // Monkey-patch the OAuth library to fix GET request issues
 // The library always includes body hash, but Mastercard rejects GET requests with body hash
@@ -517,14 +520,15 @@ export class MastercardApiService {
     return enrichmentResults;
   }
 
-  // Single payee enrichment method for immediate use
+  // Single payee enrichment method - now returns search status instead of waiting
   async enrichSinglePayee(
     payeeName: string,
     address: string = '',
     city: string = '',
     state: string = '',
-    zipCode: string = ''
-  ): Promise<any> {
+    zipCode: string = '',
+    payeeClassificationId?: number
+  ): Promise<{ searchId: string; status: string }> {
     if (!this.isServiceConfigured()) {
       throw new Error('Mastercard API service is not configured');
     }
@@ -556,34 +560,48 @@ export class MastercardApiService {
         throw new Error('Invalid search response from Mastercard API');
       }
 
-      // Poll for completion (with timeout for single searches)
-      const bulkSearchId = searchResponse.bulkSearchId;
-      let status = 'PENDING';
-      let attempts = 0;
-      const maxAttempts = 12; // 30 seconds with 2.5-second intervals
+      // Store search request in database
+      await db.insert(mastercardSearchRequests).values({
+        searchId: searchResponse.bulkSearchId,
+        status: 'submitted',
+        searchType: 'single',
+        requestPayload: bulkRequest,
+        payeeClassificationId: payeeClassificationId,
+      });
 
-      while (status === 'PENDING' || status === 'IN_PROGRESS') {
-        if (attempts >= maxAttempts) {
-          console.log('Mastercard search timeout after', attempts, 'attempts');
-          break;
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, 2500)); // Wait 2.5 seconds
-        const statusResponse = await this.getSearchStatus(bulkSearchId);
-        status = statusResponse.status;
-        attempts++;
-        console.log(`Mastercard search status (attempt ${attempts}):`, status);
-      }
+      // Return immediately with search ID
+      return {
+        searchId: searchResponse.bulkSearchId,
+        status: 'submitted'
+      };
+    } catch (error) {
+      console.error('Error in single payee enrichment:', error);
+      throw error;
+    }
+  }
 
-      if (status === 'COMPLETED') {
-        // Get results
-        const results = await this.getSearchResults(bulkSearchId);
-        console.log('Mastercard Track Search results:', JSON.stringify(results, null, 2));
-        const result = results.results?.find(r => r.searchRequestId === searchRequestId);
-        
-        if (result && result.matchStatus !== 'NO_MATCH' && result.merchantDetails) {
-          const merchant = result.merchantDetails;
-          return {
+  // New method to check search status from database
+  async getSearchStatusFromDb(searchId: string): Promise<any> {
+    const [search] = await db
+      .select()
+      .from(mastercardSearchRequests)
+      .where(eq(mastercardSearchRequests.searchId, searchId))
+      .limit(1);
+
+    if (!search) {
+      return null;
+    }
+
+    // If search is completed, return the results
+    if (search.status === 'completed' && search.responsePayload) {
+      const results = search.responsePayload as any;
+      const result = results.results?.find((r: any) => r.searchRequestId);
+      
+      if (result && result.matchStatus !== 'NO_MATCH' && result.merchantDetails) {
+        const merchant = result.merchantDetails;
+        return {
+          status: 'completed',
+          data: {
             matchStatus: result.matchStatus,
             matchConfidence: result.matchConfidence,
             merchantId: merchant.merchantId,
@@ -594,15 +612,18 @@ export class MastercardApiService {
             lastTransactionDate: merchant.lastTransactionDate,
             transactionVolume: merchant.transactionVolume,
             dataQuality: merchant.dataQuality
-          };
-        }
+          }
+        };
       }
-
-      return null; // No match found or timeout
-    } catch (error) {
-      console.error('Error in single payee enrichment:', error);
-      throw error;
     }
+
+    // Return current status
+    return {
+      status: search.status,
+      error: search.error,
+      pollAttempts: search.pollAttempts,
+      maxPollAttempts: search.maxPollAttempts
+    };
   }
 }
 

@@ -7,6 +7,7 @@ import {
   exclusionKeywords,
   exclusionLogs,
   payeeMatches,
+  mastercardSearchRequests,
   type User, 
   type InsertUser,
   type UploadBatch,
@@ -22,7 +23,9 @@ import {
   type ExclusionLog,
   type InsertExclusionLog,
   type PayeeMatch,
-  type InsertPayeeMatch
+  type InsertPayeeMatch,
+  type MastercardSearchRequest,
+  type InsertMastercardSearchRequest
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, lt, count, sql, inArray } from "drizzle-orm";
@@ -100,6 +103,12 @@ export interface IStorage {
 
   // Akkio prediction operations
   getClassificationsForAkkioPrediction(batchId: number): Promise<PayeeClassification[]>;
+  
+  // Mastercard search request operations
+  createMastercardSearchRequest(request: InsertMastercardSearchRequest): Promise<MastercardSearchRequest>;
+  getMastercardSearchRequest(searchId: string): Promise<MastercardSearchRequest | undefined>;
+  updateMastercardSearchRequest(searchId: string, updates: Partial<MastercardSearchRequest>): Promise<MastercardSearchRequest>;
+  getPendingMastercardSearches(): Promise<MastercardSearchRequest[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -181,21 +190,22 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getBatchClassifications(batchId: number, limit?: number, offset?: number): Promise<PayeeClassification[]> {
-    let query = db
+    const baseQuery = db
       .select()
       .from(payeeClassifications)
       .where(eq(payeeClassifications.batchId, batchId))
       .orderBy(desc(payeeClassifications.createdAt));
     
-    if (limit !== undefined) {
-      query = query.limit(limit);
+    // Apply limit and offset if provided
+    if (limit !== undefined && offset !== undefined) {
+      return await baseQuery.limit(limit).offset(offset);
+    } else if (limit !== undefined) {
+      return await baseQuery.limit(limit);
+    } else if (offset !== undefined) {
+      return await baseQuery.offset(offset);
     }
     
-    if (offset !== undefined) {
-      query = query.offset(offset);
-    }
-    
-    return await query;
+    return await baseQuery;
   }
 
   async getBatchClassificationCount(batchId: number): Promise<number> {
@@ -541,6 +551,40 @@ export class DatabaseStorage implements IStorage {
         )
       )
       .orderBy(payeeClassifications.id);
+  }
+
+  // Mastercard search request operations
+  async createMastercardSearchRequest(request: InsertMastercardSearchRequest): Promise<MastercardSearchRequest> {
+    const [searchRequest] = await db
+      .insert(mastercardSearchRequests)
+      .values(request)
+      .returning();
+    return searchRequest;
+  }
+
+  async getMastercardSearchRequest(searchId: string): Promise<MastercardSearchRequest | undefined> {
+    const [searchRequest] = await db
+      .select()
+      .from(mastercardSearchRequests)
+      .where(eq(mastercardSearchRequests.searchId, searchId));
+    return searchRequest || undefined;
+  }
+
+  async updateMastercardSearchRequest(searchId: string, updates: Partial<MastercardSearchRequest>): Promise<MastercardSearchRequest> {
+    const [searchRequest] = await db
+      .update(mastercardSearchRequests)
+      .set(updates)
+      .where(eq(mastercardSearchRequests.searchId, searchId))
+      .returning();
+    return searchRequest;
+  }
+
+  async getPendingMastercardSearches(): Promise<MastercardSearchRequest[]> {
+    return await db
+      .select()
+      .from(mastercardSearchRequests)
+      .where(eq(mastercardSearchRequests.status, 'pending'))
+      .orderBy(mastercardSearchRequests.createdAt);
   }
 }
 

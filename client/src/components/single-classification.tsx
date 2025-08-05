@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import React, { useState, useEffect } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +33,7 @@ interface ClassificationResult {
   mastercardEnrichment?: {
     enriched: boolean;
     status: string;
+    searchId?: string;
     message: string;
     data?: {
       merchantCategoryCode?: string;
@@ -107,6 +108,61 @@ export function SingleClassification() {
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [zipCode, setZipCode] = useState("");
+  const [pendingMastercardSearchId, setPendingMastercardSearchId] = useState<string | null>(null);
+
+  // Poll for Mastercard search results
+  const mastercardSearchQuery = useQuery<{
+    searchId: string;
+    status: string;
+    results?: any[];
+    error?: string;
+  }>({
+    queryKey: [`/api/mastercard/search/${pendingMastercardSearchId}`],
+    enabled: !!pendingMastercardSearchId,
+    refetchInterval: (query) => {
+      // Poll every 2 seconds if still pending, stop if completed or failed
+      if (query.state.data?.status === 'pending') {
+        return 2000;
+      }
+      return false;
+    },
+  });
+
+  // Update result when Mastercard search completes
+  useEffect(() => {
+    if (mastercardSearchQuery.data && mastercardSearchQuery.data.status === 'completed' && result) {
+      const mastercardResults = mastercardSearchQuery.data.results;
+      if (mastercardResults && mastercardResults.length > 0) {
+        const firstResult = mastercardResults[0];
+        setResult({
+          ...result,
+          mastercardEnrichment: {
+            enriched: true,
+            status: 'completed',
+            message: 'Mastercard enrichment completed successfully',
+            data: {
+              merchantCategoryCode: firstResult.merchantDetails?.merchantCategoryCode,
+              merchantCategoryDescription: firstResult.merchantDetails?.merchantCategoryDescription,
+              acceptanceNetwork: firstResult.merchantDetails?.acceptanceNetwork?.join(', '),
+              lastTransactionDate: firstResult.merchantDetails?.lastTransactionDate,
+              dataQualityLevel: firstResult.merchantDetails?.dataQuality?.level,
+            }
+          }
+        });
+      } else {
+        setResult({
+          ...result,
+          mastercardEnrichment: {
+            enriched: false,
+            status: 'completed',
+            message: 'No matching merchant found in Mastercard database',
+            data: null
+          }
+        });
+      }
+      setPendingMastercardSearchId(null);
+    }
+  }, [mastercardSearchQuery.data, result]);
 
   const classifyMutation = useMutation({
     mutationFn: async (name: string) => {
@@ -149,6 +205,11 @@ export function SingleClassification() {
     onSuccess: (data) => {
       console.log('Classification successful:', data);
       setResult(data);
+      
+      // Check if Mastercard search is pending
+      if (data.mastercardEnrichment?.searchId && data.mastercardEnrichment?.status === 'pending') {
+        setPendingMastercardSearchId(data.mastercardEnrichment.searchId);
+      }
     },
     onError: (error) => {
       console.error("Classification failed:", error);
@@ -439,7 +500,8 @@ export function SingleClassification() {
                     </Badge>
                   )}
                   {result.mastercardEnrichment.status === "pending" && (
-                    <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100">
+                    <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100 flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" />
                       Processing
                     </Badge>
                   )}

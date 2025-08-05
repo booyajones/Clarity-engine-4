@@ -1116,8 +1116,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
         } else {
           try {
-            // Perform actual Mastercard enrichment with cleaned/validated address data
-            const enrichmentResult = await mastercardApi.enrichSinglePayee(
+            // Submit Mastercard search (now async - returns immediately)
+            const searchResult = await mastercardApi.enrichSinglePayee(
               payeeName,
               cleanedAddressData?.address || '',
               cleanedAddressData?.city || '',
@@ -1126,10 +1126,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             );
             
             mastercardEnrichment = {
-              enriched: !!enrichmentResult,
-              status: enrichmentResult ? "completed" : "no_match",
-              message: enrichmentResult ? "Mastercard enrichment completed successfully" : "No matching merchant found in Mastercard database",
-              data: enrichmentResult || null,
+              enriched: false, // Not enriched yet, search is in progress
+              status: searchResult.status,
+              searchId: searchResult.searchId,
+              message: "Mastercard search submitted. Results will be available shortly.",
+              data: null,
               addressUsed: cleanedAddressData // Include the cleaned address used for enrichment
             };
           } catch (error) {
@@ -1171,6 +1172,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const { default: bigqueryRouter } = await import('./routes/bigquery');
   app.use('/api/bigquery', bigqueryRouter);
   
+  // Check Mastercard search status endpoint
+  app.get("/api/mastercard/search/:searchId", async (req, res) => {
+    try {
+      const { searchId } = req.params;
+      const searchRequest = await storage.getMastercardSearchRequest(searchId);
+      
+      if (!searchRequest) {
+        return res.status(404).json({ error: "Search not found" });
+      }
+      
+      res.json({
+        searchId: searchRequest.searchId,
+        status: searchRequest.status,
+        createdAt: searchRequest.createdAt,
+        completedAt: searchRequest.completedAt,
+        results: searchRequest.results,
+        error: searchRequest.error
+      });
+    } catch (error) {
+      console.error('Error fetching Mastercard search status:', error);
+      res.status(500).json({ error: 'Failed to fetch search status' });
+    }
+  });
+
   // Mastercard webhook endpoint
   app.post("/api/webhooks/mastercard", async (req, res) => {
     try {
