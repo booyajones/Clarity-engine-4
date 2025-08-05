@@ -431,6 +431,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get batch progress for monitoring
+  app.get("/api/batch/:id/progress", async (req, res) => {
+    try {
+      const batchId = parseInt(req.params.id);
+      const batch = await storage.getUploadBatch(batchId);
+      
+      if (!batch) {
+        return res.status(404).json({ error: "Batch not found" });
+      }
+      
+      // Calculate processing time if completed
+      let processingTime = null;
+      if (batch.startedAt && batch.completedAt) {
+        const start = new Date(batch.startedAt).getTime();
+        const end = new Date(batch.completedAt).getTime();
+        processingTime = `${Math.round((end - start) / 1000)}s`;
+      }
+      
+      res.json({
+        batchId: batch.id,
+        status: batch.status,
+        progress: batch.progress || 0,
+        totalRecords: batch.totalRecords || 0,
+        processedRecords: batch.processedRecords || 0,
+        skippedRecords: batch.skippedRecords || 0,
+        currentStep: batch.currentStep,
+        progressMessage: batch.progressMessage,
+        processingTime,
+        startedAt: batch.startedAt,
+        completedAt: batch.completedAt
+      });
+    } catch (error) {
+      console.error("Error getting batch progress:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Get classifications for viewing with pagination
   app.get("/api/classifications/:id", async (req, res) => {
     try {
