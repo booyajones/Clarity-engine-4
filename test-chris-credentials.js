@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import oauth from 'mastercard-oauth1-signer';
 
 // Chris Finexio's credentials
-const consumerKey = '55124b42d06f4266a079a0bdc4cf1c8b0000000000000000';
+const consumerKey = 'bP1a8mezuZIbvkZDCcl9DLSQ8S-pR2Royr6r_V9g1d663824!55124b42d06f4266a079a0bdc4cf1c8b0000000000000000';
 const privateKeyPem = fs.readFileSync('./mastercard-chris-private-key.pem', 'utf8');
 const clientId = 'bP1a8mezuZIbvkZDCcl9DLSQ8S-pR2Royr6r_V9g1d663824';
 
