@@ -6,6 +6,7 @@ const p12Path = './chris-finexio-new.p12';
 
 // Try different passwords
 const passwords = [
+  'Finexi0$', // User provided password
   process.env.MASTERCARD_KEYSTORE_PASSWORD || '',
   '', // empty password
   'changeit', // common default
