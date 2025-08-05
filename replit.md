@@ -10,6 +10,8 @@ Clarity Engine 3 is an AI-powered web application for finance and accounting pro
 - **Memory-Efficient Processing**: Streaming CSV processing with chunked batches for large datasets
 - **Production-Ready Scalability**: Concurrent processing with progress tracking, error recovery, and database optimizations
 - **Mastercard API Fix**: Resolved "RESULTS_NOT_FOUND" issue by adding required query parameters (?search_request_id=&offset=0&limit=25) to polling endpoints
+- **Mastercard Authentication**: Technical authentication working correctly; awaiting production data access approval from Mastercard
+- **Chris Finexio Credentials**: API key in PENDING status, awaiting Mastercard activation (consumer key format validated)
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.

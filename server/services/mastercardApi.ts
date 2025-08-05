@@ -93,24 +93,41 @@ const BulkSearchRequestSchema = z.object({
       townName: z.string().optional(), // City
     }).optional(),
   })),
+  // Alternative merchants property for backwards compatibility
+  merchants: z.array(z.object({
+    searchId: z.string(),
+    merchantName: z.string(),
+    merchantAddress: z.object({
+      streetAddress1: z.string().optional(),
+      city: z.string().optional(),
+      region: z.string().optional(),
+      postalCode: z.string().optional(),
+      countryCode: z.string().optional(),
+    }).optional(),
+  })).optional(),
 });
 
 // Track Search response schemas
 // Track Search API returns just a bulkSearchId initially
 const BulkSearchSubmitResponseSchema = z.object({
   bulkSearchId: z.string(),
+  searchId: z.string().optional(), // Some responses use searchId
+  status: z.string().optional(), // Some responses include status
 });
 
 const SearchStatusResponseSchema = z.object({
   bulkSearchId: z.string(),
   status: z.enum(['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED']),
   message: z.string().optional(),
+  totalSearches: z.number().optional(),
+  completedSearches: z.number().optional(),
 });
 
 const SearchResultsResponseSchema = z.object({
   bulkSearchId: z.string(),
   results: z.array(z.object({
     searchRequestId: z.string(), // Maps back to the searchRequestId in the request
+    clientReferenceId: z.string().optional(), // Alternative ID used in some responses
     matchStatus: z.enum(['EXACT_MATCH', 'PARTIAL_MATCH', 'NO_MATCH']),
     matchConfidence: z.string().optional(),
     merchantDetails: z.object({
@@ -476,31 +493,48 @@ export class MastercardApiService {
       const merchants = this.prepareMerchants(batch);
 
       try {
-        // Submit search
+        // Submit search - convert merchants to searches format
+        const searches = batch.map(payee => ({
+          searchRequestId: payee.id.toString(),
+          businessName: payee.name,
+          businessAddress: {
+            addressLine1: payee.address,
+            townName: payee.city,
+            countrySubDivision: payee.state,
+            postCode: payee.zipCode,
+            country: 'USA'
+          }
+        }));
+
         const searchResponse = await this.submitBulkSearch({
-          merchants
+          lookupType: 'SUPPLIERS' as const,
+          maximumMatches: 1,
+          minimumConfidenceThreshold: '0.1',
+          searches
         });
 
-        console.log(`Submitted Mastercard search ${searchResponse.searchId} for ${batch.length} payees`);
+        const searchId = searchResponse.searchId || searchResponse.bulkSearchId;
+        console.log(`Submitted Mastercard search ${searchId} for ${batch.length} payees`);
 
         // Poll for completion (in production, use webhooks instead)
-        let status = searchResponse.status;
+        let status = searchResponse.status || 'IN_PROGRESS';
         let attempts = 0;
         const maxAttempts = 60; // 5 minutes with 5-second intervals
 
         while (status === 'IN_PROGRESS' && attempts < maxAttempts) {
           await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
-          const statusResponse = await this.getSearchStatus(searchResponse.searchId);
+          const statusResponse = await this.getSearchStatus(searchId);
           status = statusResponse.status;
           attempts++;
         }
 
         if (status === 'COMPLETED') {
-          const results = await this.getSearchResults(searchResponse.searchId);
+          const results = await this.getSearchResults(searchId);
           
           // Map results back to payees
           for (const result of results.results) {
-            enrichmentResults.set(result.clientReferenceId, {
+            const referenceId = result.clientReferenceId || result.searchRequestId;
+            enrichmentResults.set(referenceId, {
               matchStatus: result.matchStatus,
               matchConfidence: result.matchConfidence,
               merchantCategoryCode: result.merchantDetails?.merchantCategoryCode,
@@ -512,7 +546,7 @@ export class MastercardApiService {
             });
           }
         } else {
-          console.error(`Mastercard search ${searchResponse.searchId} failed or timed out with status: ${status}`);
+          console.error(`Mastercard search ${searchId} failed or timed out with status: ${status}`);
         }
       } catch (error) {
         console.error('Error enriching batch:', error);
