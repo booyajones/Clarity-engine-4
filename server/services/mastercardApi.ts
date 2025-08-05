@@ -36,31 +36,38 @@ const config = MASTERCARD_CONFIG[environment as keyof typeof MASTERCARD_CONFIG];
 
 // Request/Response schemas for Track Search API
 const BulkSearchRequestSchema = z.object({
-  merchants: z.array(z.object({
-    searchId: z.string(), // Unique identifier for this merchant
-    merchantName: z.string(),
-    merchantAddress: z.object({
-      streetAddress1: z.string().optional(),
-      streetAddress2: z.string().optional(),
-      city: z.string().optional(),
-      region: z.string().optional(),
-      postalCode: z.string().optional(),
-      countryCode: z.string().default('US'),
+  lookupType: z.literal('SUPPLIERS'),
+  maximumMatches: z.number().default(1),
+  minimumConfidenceThreshold: z.string().default('0.1'),
+  searches: z.array(z.object({
+    searchRequestId: z.string(), // Unique identifier for this search
+    businessName: z.string(),
+    businessAddress: z.object({
+      addressLine1: z.string().optional(),
+      country: z.string().default('USA'),
+      countrySubDivision: z.string().optional(), // State
+      postCode: z.string().optional(), // Zip code
+      townName: z.string().optional(), // City
     }).optional(),
   })),
 });
 
 // Track Search response schemas
-const SearchResponseSchema = z.object({
-  searchId: z.string(),
+// Track Search API returns just a bulkSearchId initially
+const BulkSearchSubmitResponseSchema = z.object({
+  bulkSearchId: z.string(),
+});
+
+const SearchStatusResponseSchema = z.object({
+  bulkSearchId: z.string(),
   status: z.enum(['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED']),
   message: z.string().optional(),
 });
 
 const SearchResultsResponseSchema = z.object({
-  searchId: z.string(),
+  bulkSearchId: z.string(),
   results: z.array(z.object({
-    searchId: z.string(), // Maps back to the merchant's searchId in the request
+    searchRequestId: z.string(), // Maps back to the searchRequestId in the request
     matchStatus: z.enum(['EXACT_MATCH', 'PARTIAL_MATCH', 'NO_MATCH']),
     matchConfidence: z.string().optional(),
     merchantDetails: z.object({
@@ -77,11 +84,12 @@ const SearchResultsResponseSchema = z.object({
 });
 
 type BulkSearchRequest = z.infer<typeof BulkSearchRequestSchema>;
-type SearchResponse = z.infer<typeof SearchResponseSchema>;
+type BulkSearchSubmitResponse = z.infer<typeof BulkSearchSubmitResponseSchema>;
+type SearchStatusResponse = z.infer<typeof SearchStatusResponseSchema>;
 type SearchResultsResponse = z.infer<typeof SearchResultsResponseSchema>;
 
 export class MastercardApiService {
-  private activeSearches = new Map<string, SearchResponse>();
+  private activeSearches = new Map<string, SearchStatusResponse>();
   private isConfigured: boolean;
   private privateKey: string | null = null;
 
@@ -263,7 +271,7 @@ export class MastercardApiService {
   }
 
   // Submit a bulk search request
-  async submitBulkSearch(request: BulkSearchRequest): Promise<SearchResponse> {
+  async submitBulkSearch(request: BulkSearchRequest): Promise<BulkSearchSubmitResponse> {
     if (!this.isConfigured) {
       throw new Error('Mastercard API is not configured. Missing consumer key or private key.');
     }
@@ -286,21 +294,26 @@ export class MastercardApiService {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
           'X-Openapi-Clientid': config.clientId || '',
-          'X-Client-Correlation-Id': request.merchants[0]?.searchId || ''
+          'X-Client-Correlation-Id': (request.searches && request.searches[0] && request.searches[0].searchRequestId) || ''
         },
         body: requestBody,
       });
 
       if (!response.ok) {
         const error = await response.text();
+        console.log('Mastercard Track Search error response:', error);
         throw new Error(`Mastercard API error: ${response.status} - ${error}`);
       }
 
       const data = await response.json();
-      const searchResponse = SearchResponseSchema.parse(data);
+      console.log('Mastercard Track Search raw response:', JSON.stringify(data, null, 2));
+      const searchResponse = BulkSearchSubmitResponseSchema.parse(data);
 
-      // Track active search
-      this.activeSearches.set(searchResponse.searchId, searchResponse);
+      // Track active search with initial status
+      this.activeSearches.set(searchResponse.bulkSearchId, {
+        bulkSearchId: searchResponse.bulkSearchId,
+        status: 'PENDING'
+      });
 
       return searchResponse;
     } catch (error) {
@@ -312,7 +325,7 @@ export class MastercardApiService {
 
 
   // Get search status
-  async getSearchStatus(searchId: string): Promise<SearchResponse> {
+  async getSearchStatus(searchId: string): Promise<SearchStatusResponse> {
     try {
       const url = `${config.baseUrl}/bulk-searches/${searchId}/status`;
       const authHeader = this.generateOAuthSignature('GET', url, {});
@@ -331,7 +344,7 @@ export class MastercardApiService {
       }
 
       const data = await response.json();
-      const searchResponse = SearchResponseSchema.parse(data);
+      const searchResponse = SearchStatusResponseSchema.parse(data);
 
       // Update tracked search
       this.activeSearches.set(searchId, searchResponse);
@@ -475,17 +488,20 @@ export class MastercardApiService {
 
     try {
       // Track Search requires bulk endpoint even for single searches
-      const searchId = crypto.randomUUID();
+      const searchRequestId = crypto.randomUUID();
       const bulkRequest: BulkSearchRequest = {
-        merchants: [{
-          searchId: searchId,
-          merchantName: payeeName,
-          merchantAddress: {
-            streetAddress1: address || undefined,
-            city: city || undefined,
-            region: state || undefined,
-            postalCode: zipCode || undefined,
-            countryCode: 'US'
+        lookupType: 'SUPPLIERS',
+        maximumMatches: 1,
+        minimumConfidenceThreshold: '0.1',
+        searches: [{
+          searchRequestId: searchRequestId,
+          businessName: payeeName,
+          businessAddress: {
+            addressLine1: address || undefined,
+            country: 'USA',
+            countrySubDivision: state || undefined,
+            postCode: zipCode || undefined,
+            townName: city || undefined
           }
         }]
       };
@@ -498,21 +514,29 @@ export class MastercardApiService {
       }
 
       // Poll for completion (with timeout for single searches)
-      let status = searchResponse.status;
+      const bulkSearchId = searchResponse.bulkSearchId;
+      let status = 'PENDING';
       let attempts = 0;
       const maxAttempts = 12; // 30 seconds with 2.5-second intervals
 
-      while (status === 'IN_PROGRESS' && attempts < maxAttempts) {
+      while (status === 'PENDING' || status === 'IN_PROGRESS') {
+        if (attempts >= maxAttempts) {
+          console.log('Mastercard search timeout after', attempts, 'attempts');
+          break;
+        }
+        
         await new Promise(resolve => setTimeout(resolve, 2500)); // Wait 2.5 seconds
-        const statusResponse = await this.getSearchStatus(searchResponse.searchId);
+        const statusResponse = await this.getSearchStatus(bulkSearchId);
         status = statusResponse.status;
         attempts++;
+        console.log(`Mastercard search status (attempt ${attempts}):`, status);
       }
 
       if (status === 'COMPLETED') {
         // Get results
-        const results = await this.getSearchResults(searchResponse.searchId);
-        const result = results.results?.find(r => r.searchId === searchId);
+        const results = await this.getSearchResults(bulkSearchId);
+        console.log('Mastercard Track Search results:', JSON.stringify(results, null, 2));
+        const result = results.results?.find(r => r.searchRequestId === searchRequestId);
         
         if (result && result.matchStatus !== 'NO_MATCH' && result.merchantDetails) {
           const merchant = result.merchantDetails;

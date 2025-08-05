@@ -1,0 +1,105 @@
+import logger from "../utils/logger";
+
+// Load the signing key
+import forge from "node-forge";
+import fs from "fs";
+import path from "path";
+import oauth from "mastercard-oauth1-signer";
+const trackSearchApi = require("mastercard_track_search_api");
+import config from "../utils/config";
+
+const p12Content = fs.readFileSync(path.join(__dirname, "..", "mastercard.p12"), "binary");
+const p12Asn1 = forge.asn1.fromDer(p12Content, false);
+const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, false, config.mastercardTrackSearchKeyPassword);
+const keyObj = p12.getBags({
+	friendlyName: config.mastercardTrackSearchFriendlyName,
+	bagType: forge.pki.oids.pkcs8ShroudedKeyBag,
+}).friendlyName[0];
+const signingKey = forge.pki.privateKeyToPem(keyObj.key);
+const { ApiClient: openAPIClient, TrackSearchApi } = trackSearchApi;
+const client = openAPIClient.instance;
+// Configure the Mastercard service URL
+client.basePath = "https://api.mastercard.com/track/search";
+
+// Add the interceptor code responsible for signing HTTP requests
+client.applyAuthToRequest = function(request) {
+	const _end = request._end;
+	request._end = function() {
+		const authHeader = oauth.getAuthorizationHeader(request.url, request.method, JSON.stringify(request._data), config.mastercardTrackSearchConsumerKey, signingKey);
+		request.req.setHeader("Authorization", authHeader);
+		_end.call(request);
+	};
+	return request;
+};
+
+const serviceApi = (new TrackSearchApi());
+
+export const handleSubmitBulkSearch = async (dataList) => {
+	return new Promise((resolve, reject) => {
+		const searchEntities = dataList.map((it) => ({
+			"businessAddress": {
+				"addressLine1": it.Address1,
+				"country": "USA", // todo remove hardcode
+				"countrySubDivision": it.State,
+				"postCode": it.ZipCode,
+				"townName": it.City,
+			},
+			"businessName": it.SupplierName,
+			"searchRequestId": it.uId,
+		}));
+		const opts = {
+			"lookupType": "SUPPLIERS",
+			"maximumMatches": 1,
+			"minimumConfidenceThreshold": "0.1",
+			"searches": searchEntities,
+		};
+
+		serviceApi.submitBulkSearch(opts, function(error, data/* , response */) {
+			// …
+			if (error) {
+				logger.error("[mastercard] [track search] [bulk search] error", error.response.status);
+				logger.error(error.response.text);
+				reject(error);
+			} else {
+				logger.info("mastercard response", data);
+				resolve(data);
+			}
+		});
+	});
+};
+
+export const handleGetBulkSearchStatus = (bulkSearchId) => {
+	return new Promise((resolve, reject) => {
+		serviceApi.getBulkSearchStatus(bulkSearchId, function(error, data/* , response */) {
+			// …
+			if (error) {
+				logger.error(error.response.status);
+				logger.error(error.response.text);
+				reject(error);
+			} else {
+				logger.info("[bulk] [search] [result]", data);
+				resolve(data);
+			}
+		});
+	});
+};
+
+export const handleGetBulkSearchResults = (bulkSearchId, offset, limit) => {
+	return new Promise((resolve, reject) => {
+		const optsForResult = {
+			// searchRequestId: "7d5cff1f-c877-4a0b-a70a-a21bc2c820c8",
+			offset,
+			limit,
+		};
+		serviceApi.getBulkSearchResults(bulkSearchId, optsForResult, function(error, data/* , response */) {
+			// …
+			if (error) {
+				logger.error(error.response.status);
+				logger.error(error.response.text);
+				reject(error);
+			} else {
+				resolve(data);
+			}
+		});
+	});
+};
