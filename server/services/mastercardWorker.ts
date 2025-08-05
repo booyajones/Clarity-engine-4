@@ -117,6 +117,22 @@ export class MastercardWorker {
     } catch (error: any) {
       console.error(`Error processing search ${search.searchId}:`, error);
 
+      // Check if it's a "no results found" error (which is actually a successful search)
+      if (error.message && error.message.includes("RESULTS_NOT_FOUND")) {
+        // Mark as completed with no results
+        await db
+          .update(mastercardSearchRequests)
+          .set({
+            status: "completed",
+            responsePayload: { results: [], message: "No matching merchants found" },
+            completedAt: new Date(),
+          })
+          .where(eq(mastercardSearchRequests.id, search.id));
+
+        console.log(`✅ Mastercard search ${search.searchId} completed with no results`);
+        return;
+      }
+
       // Check if we've exceeded max attempts
       if (search.pollAttempts + 1 >= search.maxPollAttempts) {
         await db

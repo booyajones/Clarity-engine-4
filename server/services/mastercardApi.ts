@@ -536,20 +536,31 @@ export class MastercardApiService {
     try {
       // Track Search requires bulk endpoint even for single searches
       const searchRequestId = crypto.randomUUID();
+      
+      // Log what we're sending to Mastercard
+      console.log('Mastercard search data:', {
+        payeeName,
+        address,
+        city,
+        state,
+        zipCode
+      });
+      
+      // Build address object only if we have address data
+      const businessAddress: any = { country: 'USA' };
+      if (address) businessAddress.addressLine1 = address;
+      if (city) businessAddress.townName = city;
+      if (state) businessAddress.countrySubdivision = state;
+      if (zipCode) businessAddress.postCode = zipCode;
+      
       const bulkRequest: BulkSearchRequest = {
         lookupType: 'SUPPLIERS',
-        maximumMatches: 1,
+        maximumMatches: 5, // Increase to get more potential matches
         minimumConfidenceThreshold: '0.1',
         searches: [{
           searchRequestId: searchRequestId,
           businessName: payeeName,
-          businessAddress: {
-            addressLine1: address || undefined,
-            country: 'USA',
-            countrySubDivision: state || undefined,
-            postCode: zipCode || undefined,
-            townName: city || undefined
-          }
+          businessAddress
         }]
       };
 

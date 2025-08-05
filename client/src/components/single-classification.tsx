@@ -114,14 +114,15 @@ export function SingleClassification() {
   const mastercardSearchQuery = useQuery<{
     searchId: string;
     status: string;
-    results?: any[];
+    results?: any;
     error?: string;
   }>({
     queryKey: [`/api/mastercard/search/${pendingMastercardSearchId}`],
     enabled: !!pendingMastercardSearchId,
     refetchInterval: (query) => {
-      // Poll every 2 seconds if still pending, stop if completed or failed
-      if (query.state.data?.status === 'pending') {
+      // Poll every 2 seconds if still pending or polling, stop if completed/failed/timeout
+      const status = query.state.data?.status;
+      if (status === 'pending' || status === 'polling' || status === 'submitted') {
         return 2000;
       }
       return false;
