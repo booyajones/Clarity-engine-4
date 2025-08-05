@@ -2,14 +2,14 @@ import crypto from 'crypto';
 import fs from 'fs';
 import { z } from 'zod';
 
-// Mastercard Merchant Match Tool (MMT) API service
-// This service integrates with Mastercard's Merchant Match Tool API to enrich business data
+// Mastercard Track Search API service
+// This service integrates with Mastercard's Track Search API to enrich business data
 // OAuth 1.0a authentication implementation
 
 // Configuration
 const MASTERCARD_CONFIG = {
   sandbox: {
-    baseUrl: 'https://sandbox.api.mastercard.com/merchants',
+    baseUrl: 'https://sandbox.api.mastercard.com/track/search',
     consumerKey: process.env.MASTERCARD_CONSUMER_KEY,
     privateKey: process.env.MASTERCARD_PRIVATE_KEY,
     privateKeyPath: './mastercard-private-key.pem',
@@ -19,7 +19,7 @@ const MASTERCARD_CONFIG = {
     clientId: process.env.MASTERCARD_CLIENT_ID,
   },
   production: {
-    baseUrl: 'https://api.mastercard.com/merchants',
+    baseUrl: 'https://api.mastercard.com/track/search',
     consumerKey: process.env.MASTERCARD_CONSUMER_KEY,
     privateKey: process.env.MASTERCARD_PRIVATE_KEY,
     privateKeyPath: './mastercard-private-key.pem',
@@ -34,56 +34,54 @@ const MASTERCARD_CONFIG = {
 const environment = process.env.MASTERCARD_ENVIRONMENT || 'sandbox';
 const config = MASTERCARD_CONFIG[environment as keyof typeof MASTERCARD_CONFIG];
 
-// Request/Response schemas for Merchant Match Tool
-const SingleSearchRequestSchema = z.object({
-  requestId: z.string(), // UUID required
-  merchantName: z.string().max(110),
-  streetAddress: z.string().max(110).optional(),
-  city: z.string().max(30).optional(),
-  state: z.string().max(3).optional(),
-  postalCode: z.string().max(10).optional(),
-  country: z.string().max(3),
-  phoneNumber: z.string().max(16).optional(),
-  taxId: z.string().max(9).optional(),
-});
-
-const MultipleSearchRequestSchema = z.object({
-  queries: z.array(SingleSearchRequestSchema).max(100)
-});
-
-// Response schemas for MMT
-const SingleSearchResponseSchema = z.object({
-  requestId: z.string(),
-  matchScore: z.number(),
-  isMatched: z.boolean(),
-  matchedMerchant: z.object({
-    merchantId: z.string(),
+// Request/Response schemas for Track Search API
+const BulkSearchRequestSchema = z.object({
+  merchants: z.array(z.object({
+    searchId: z.string(), // Unique identifier for this merchant
     merchantName: z.string(),
-    merchantCategoryCode: z.string(),
-    merchantCategoryDescription: z.string(),
-    streetAddress: z.string().optional(),
-    city: z.string().optional(),
-    state: z.string().optional(),
-    postalCode: z.string().optional(),
-    country: z.string().optional(),
-    phoneNumber: z.string().optional(),
-    acceptanceNetwork: z.array(z.string()).optional(),
-    levelOfClearingData: z.string().optional(),
-    transactionRecency: z.string().optional(),
-  }).optional()
+    merchantAddress: z.object({
+      streetAddress1: z.string().optional(),
+      streetAddress2: z.string().optional(),
+      city: z.string().optional(),
+      region: z.string().optional(),
+      postalCode: z.string().optional(),
+      countryCode: z.string().default('US'),
+    }).optional(),
+  })),
 });
 
-const MultipleSearchResponseSchema = z.object({
-  responses: z.array(SingleSearchResponseSchema)
+// Track Search response schemas
+const SearchResponseSchema = z.object({
+  searchId: z.string(),
+  status: z.enum(['PENDING', 'IN_PROGRESS', 'COMPLETED', 'FAILED']),
+  message: z.string().optional(),
 });
 
-type SingleSearchRequest = z.infer<typeof SingleSearchRequestSchema>;
-type SingleSearchResponse = z.infer<typeof SingleSearchResponseSchema>;
-type MultipleSearchRequest = z.infer<typeof MultipleSearchRequestSchema>;
-type MultipleSearchResponse = z.infer<typeof MultipleSearchResponseSchema>;
+const SearchResultsResponseSchema = z.object({
+  searchId: z.string(),
+  results: z.array(z.object({
+    searchId: z.string(), // Maps back to the merchant's searchId in the request
+    matchStatus: z.enum(['EXACT_MATCH', 'PARTIAL_MATCH', 'NO_MATCH']),
+    matchConfidence: z.string().optional(),
+    merchantDetails: z.object({
+      merchantId: z.string().optional(),
+      merchantName: z.string().optional(),
+      merchantCategoryCode: z.string().optional(),
+      merchantCategoryDescription: z.string().optional(),
+      acceptanceNetwork: z.array(z.string()).optional(),
+      lastTransactionDate: z.string().optional(),
+      transactionVolume: z.string().optional(),
+      dataQuality: z.string().optional(),
+    }).optional(),
+  })),
+});
+
+type BulkSearchRequest = z.infer<typeof BulkSearchRequestSchema>;
+type SearchResponse = z.infer<typeof SearchResponseSchema>;
+type SearchResultsResponse = z.infer<typeof SearchResultsResponseSchema>;
 
 export class MastercardApiService {
-  private activeSearches = new Map<string, SingleSearchResponse>();
+  private activeSearches = new Map<string, SearchResponse>();
   private isConfigured: boolean;
   private privateKey: string | null = null;
 
@@ -142,7 +140,6 @@ export class MastercardApiService {
         const keyObject = crypto.createPrivateKey({
           key: p12Data,
           format: 'der',
-          type: 'pkcs12',
           passphrase: config.keystorePassword
         });
         
@@ -265,18 +262,19 @@ export class MastercardApiService {
       .join(', ');
   }
 
-  // Submit a single search request
-  async submitSingleSearch(request: SingleSearchRequest): Promise<SingleSearchResponse> {
+  // Submit a bulk search request
+  async submitBulkSearch(request: BulkSearchRequest): Promise<SearchResponse> {
     if (!this.isConfigured) {
       throw new Error('Mastercard API is not configured. Missing consumer key or private key.');
     }
     
     try {
-      const url = `${config.baseUrl}/single-searches`;
+      const url = `${config.baseUrl}/bulk-searches`;
       const requestBody = JSON.stringify(request);
       
       // Debug logging
-      console.log('Mastercard MMT request body:', requestBody);
+      console.log('Mastercard Track Search URL:', url);
+      console.log('Mastercard Track Search request body:', requestBody);
       console.log('Body hash:', crypto.createHash('sha256').update(requestBody, 'utf8').digest('base64'));
       
       const authHeader = this.generateOAuthSignature('POST', url, {}, requestBody);
@@ -287,7 +285,8 @@ export class MastercardApiService {
           'Authorization': authHeader,
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'x-openapi-clientid': config.clientId || 'finexio-clarity-engine'
+          'X-Openapi-Clientid': config.clientId || '',
+          'X-Client-Correlation-Id': request.merchants[0]?.searchId || ''
         },
         body: requestBody,
       });
@@ -298,10 +297,10 @@ export class MastercardApiService {
       }
 
       const data = await response.json();
-      const searchResponse = SingleSearchResponseSchema.parse(data);
+      const searchResponse = SearchResponseSchema.parse(data);
 
       // Track active search
-      this.activeSearches.set(searchResponse.requestId, searchResponse);
+      this.activeSearches.set(searchResponse.searchId, searchResponse);
 
       return searchResponse;
     } catch (error) {
@@ -310,52 +309,12 @@ export class MastercardApiService {
     }
   }
 
-  // Submit multiple search requests
-  async submitMultipleSearch(request: MultipleSearchRequest): Promise<MultipleSearchResponse> {
-    if (!this.isConfigured) {
-      throw new Error('Mastercard API is not configured. Missing consumer key or private key.');
-    }
-    
-    try {
-      const url = `${config.baseUrl}/multiple-searches`;
-      const requestBody = JSON.stringify(request);
-      
-      // Debug logging
-      console.log('Mastercard MMT multi-search request body:', requestBody);
-      console.log('Body hash:', crypto.createHash('sha256').update(requestBody, 'utf8').digest('base64'));
-      
-      const authHeader = this.generateOAuthSignature('POST', url, {}, requestBody);
 
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': authHeader,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'x-openapi-clientid': config.clientId || 'finexio-clarity-engine'
-        },
-        body: requestBody,
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Mastercard API error: ${response.status} - ${error}`);
-      }
-
-      const data = await response.json();
-      const searchResponse = MultipleSearchResponseSchema.parse(data);
-
-      return searchResponse;
-    } catch (error) {
-      console.error('Error submitting multi-search:', error);
-      throw error;
-    }
-  }
 
   // Get search status
   async getSearchStatus(searchId: string): Promise<SearchResponse> {
     try {
-      const url = `${config.baseUrl}/${searchId}`;
+      const url = `${config.baseUrl}/bulk-searches/${searchId}/status`;
       const authHeader = this.generateOAuthSignature('GET', url, {});
 
       const response = await fetch(url, {
@@ -385,9 +344,9 @@ export class MastercardApiService {
   }
 
   // Get search results
-  async getSearchResults(searchId: string): Promise<SearchResult> {
+  async getSearchResults(searchId: string): Promise<SearchResultsResponse> {
     try {
-      const url = `${config.baseUrl}/${searchId}/results`;
+      const url = `${config.baseUrl}/bulk-searches/${searchId}/results`;
       const authHeader = this.generateOAuthSignature('GET', url, {});
 
       const response = await fetch(url, {
@@ -404,7 +363,7 @@ export class MastercardApiService {
       }
 
       const data = await response.json();
-      const searchResult = SearchResultSchema.parse(data);
+      const searchResult = SearchResultsResponseSchema.parse(data);
 
       // Remove from active searches once results are retrieved
       this.activeSearches.delete(searchId);
@@ -416,22 +375,22 @@ export class MastercardApiService {
     }
   }
 
-  // Helper to prepare business data for Mastercard search
-  prepareSearchItems(payees: Array<{
+  // Helper to prepare business data for Track Search
+  prepareMerchants(payees: Array<{
     id: string;
     name: string;
     address?: string;
     city?: string;
     state?: string;
     zipCode?: string;
-  }>): SearchRequest['searchItems'] {
+  }>): BulkSearchRequest['merchants'] {
     return payees.map(payee => ({
-      clientReferenceId: payee.id.toString(),
-      name: payee.name,
-      address: {
-        line1: payee.address,
+      searchId: payee.id.toString(),
+      merchantName: payee.name,
+      merchantAddress: {
+        streetAddress1: payee.address,
         city: payee.city,
-        state: payee.state,
+        region: payee.state,
         postalCode: payee.zipCode,
         countryCode: 'US', // Default to US, can be made configurable
       },
@@ -453,13 +412,12 @@ export class MastercardApiService {
     const batchSize = 3000;
     for (let i = 0; i < payees.length; i += batchSize) {
       const batch = payees.slice(i, i + batchSize);
-      const searchItems = this.prepareSearchItems(batch);
+      const merchants = this.prepareMerchants(batch);
 
       try {
         // Submit search
         const searchResponse = await this.submitBulkSearch({
-          searchItems,
-          notificationUrl: process.env.MASTERCARD_WEBHOOK_URL,
+          merchants
         });
 
         console.log(`Submitted Mastercard search ${searchResponse.searchId} for ${batch.length} payees`);
@@ -516,48 +474,64 @@ export class MastercardApiService {
     }
 
     try {
-      // Create a single search request using MMT format
-      const searchRequest: SingleSearchRequest = {
-        requestId: crypto.randomUUID(),
-        merchantName: payeeName,
-        country: 'US',
-        streetAddress: address || undefined,
-        city: city || undefined,
-        state: state || undefined,
-        postalCode: zipCode || undefined
+      // Track Search requires bulk endpoint even for single searches
+      const searchId = crypto.randomUUID();
+      const bulkRequest: BulkSearchRequest = {
+        merchants: [{
+          searchId: searchId,
+          merchantName: payeeName,
+          merchantAddress: {
+            streetAddress1: address || undefined,
+            city: city || undefined,
+            region: state || undefined,
+            postalCode: zipCode || undefined,
+            countryCode: 'US'
+          }
+        }]
       };
 
-      // Submit the search - MMT returns results immediately
-      const searchResponse = await this.submitSingleSearch(searchRequest);
+      // Submit the bulk search with one merchant
+      const searchResponse = await this.submitBulkSearch(bulkRequest);
       
       if (!searchResponse) {
         throw new Error('Invalid search response from Mastercard API');
       }
 
-      // MMT returns results immediately - no polling needed
-      if (searchResponse.isMatched && searchResponse.matchedMerchant) {
-        const merchant = searchResponse.matchedMerchant;
-        return {
-          matchStatus: 'MATCH',
-          matchConfidence: searchResponse.matchScore,
-          merchantId: merchant.merchantId,
-          merchantName: merchant.merchantName,
-          merchantCategoryCode: merchant.merchantCategoryCode,
-          merchantCategoryDescription: merchant.merchantCategoryDescription,
-          acceptanceNetwork: merchant.acceptanceNetwork,
-          levelOfClearingData: merchant.levelOfClearingData,
-          transactionRecency: merchant.transactionRecency,
-          address: {
-            streetAddress: merchant.streetAddress,
-            city: merchant.city,
-            state: merchant.state,
-            postalCode: merchant.postalCode,
-            country: merchant.country
-          }
-        };
+      // Poll for completion (with timeout for single searches)
+      let status = searchResponse.status;
+      let attempts = 0;
+      const maxAttempts = 12; // 30 seconds with 2.5-second intervals
+
+      while (status === 'IN_PROGRESS' && attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 2500)); // Wait 2.5 seconds
+        const statusResponse = await this.getSearchStatus(searchResponse.searchId);
+        status = statusResponse.status;
+        attempts++;
       }
 
-      return null; // No match found
+      if (status === 'COMPLETED') {
+        // Get results
+        const results = await this.getSearchResults(searchResponse.searchId);
+        const result = results.results?.find(r => r.searchId === searchId);
+        
+        if (result && result.matchStatus !== 'NO_MATCH' && result.merchantDetails) {
+          const merchant = result.merchantDetails;
+          return {
+            matchStatus: result.matchStatus,
+            matchConfidence: result.matchConfidence,
+            merchantId: merchant.merchantId,
+            merchantName: merchant.merchantName,
+            merchantCategoryCode: merchant.merchantCategoryCode,
+            merchantCategoryDescription: merchant.merchantCategoryDescription,
+            acceptanceNetwork: merchant.acceptanceNetwork,
+            lastTransactionDate: merchant.lastTransactionDate,
+            transactionVolume: merchant.transactionVolume,
+            dataQuality: merchant.dataQuality
+          };
+        }
+      }
+
+      return null; // No match found or timeout
     } catch (error) {
       console.error('Error in single payee enrichment:', error);
       throw error;
