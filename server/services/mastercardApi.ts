@@ -1,6 +1,44 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import { z } from 'zod';
+import oauth from 'mastercard-oauth1-signer';
+
+// Monkey-patch the OAuth library to fix GET request issues
+// The library always includes body hash, but Mastercard rejects GET requests with body hash
+const originalGetOAuthParams = oauth.getOAuthParams;
+oauth.getOAuthParams = function(consumerKey: string, payload: string | undefined, method?: string) {
+  const oauthParams = originalGetOAuthParams.call(this, consumerKey, payload);
+  
+  // Log original params for debugging
+  console.log(`OAuth params before patch (${method}):`, Array.from(oauthParams.keys()));
+  
+  // Remove body hash for GET requests
+  if (method && method.toUpperCase() === 'GET') {
+    oauthParams.delete('oauth_body_hash');
+    console.log('Removed oauth_body_hash for GET request');
+  }
+  
+  console.log(`OAuth params after patch (${method}):`, Array.from(oauthParams.keys()));
+  
+  return oauthParams;
+};
+
+// Also patch the main method to pass method parameter
+const originalGetAuthorizationHeader = oauth.getAuthorizationHeader;
+oauth.getAuthorizationHeader = function(uri: string, method: string, payload: string | undefined, consumerKey: string, signingKey: string) {
+  // Pass method to getOAuthParams
+  const originalMethod = this.getOAuthParams;
+  this.getOAuthParams = function(key: string, data: string | undefined) {
+    return originalMethod.call(this, key, data, method);
+  };
+  
+  const result = originalGetAuthorizationHeader.call(this, uri, method, payload, consumerKey, signingKey);
+  
+  // Restore original method
+  this.getOAuthParams = originalMethod;
+  
+  return result;
+};
 
 // Mastercard Track Search API service
 // This service integrates with Mastercard's Track Search API to enrich business data
@@ -16,7 +54,8 @@ const MASTERCARD_CONFIG = {
     p12Path: process.env.MASTERCARD_P12_PATH || './Finexio_MasterCard_Production_2025-production.p12',
     keystorePassword: process.env.MASTERCARD_KEYSTORE_PASSWORD,
     keystoreAlias: process.env.MASTERCARD_KEYSTORE_ALIAS,
-    clientId: process.env.MASTERCARD_CLIENT_ID,
+    // Extract clientId from consumer key (part after the !)
+    clientId: process.env.MASTERCARD_CLIENT_ID || process.env.MASTERCARD_CONSUMER_KEY?.split('!')[1],
   },
   production: {
     baseUrl: 'https://api.mastercard.com/track/search',
@@ -26,7 +65,8 @@ const MASTERCARD_CONFIG = {
     p12Path: process.env.MASTERCARD_P12_PATH || './Finexio_MasterCard_Production_2025-production.p12',
     keystorePassword: process.env.MASTERCARD_KEYSTORE_PASSWORD,
     keystoreAlias: process.env.MASTERCARD_KEYSTORE_ALIAS,
-    clientId: process.env.MASTERCARD_CLIENT_ID,
+    // Extract clientId from consumer key (part after the !)
+    clientId: process.env.MASTERCARD_CLIENT_ID || process.env.MASTERCARD_CONSUMER_KEY?.split('!')[1],
   }
 };
 
@@ -214,60 +254,39 @@ export class MastercardApiService {
     return encodedPairs.join('%26');
   }
 
-  // OAuth 1.0a signature generation
+  // Generate OAuth signature
   private generateOAuthSignature(
     method: string,
     url: string,
-    params: Record<string, string>,
+    params: Record<string, string> = {},
     body?: string
   ): string {
     if (!config.consumerKey || !this.privateKey) {
       throw new Error('Mastercard API credentials not configured');
     }
 
-    // OAuth parameters
-    const oauthParams: Record<string, string> = {
-      oauth_consumer_key: config.consumerKey,
-      oauth_nonce: crypto.randomBytes(16).toString('hex'),
-      oauth_signature_method: 'RSA-SHA256',
-      oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
-      oauth_version: '1.0',
-    };
-
-    // For POST requests with body, include body hash
-    if (method.toUpperCase() === 'POST' && body) {
-      const bodyHash = crypto.createHash('sha256').update(body, 'utf8').digest('base64');
-      oauthParams.oauth_body_hash = bodyHash;
+    // Use the patched OAuth library for all requests
+    // For GET requests, pass undefined payload to avoid body hash (will be removed by our patch)
+    // For POST requests, pass the actual body
+    const payload = method.toUpperCase() === 'POST' ? body : undefined;
+    
+    console.log('OAuth generation:', {
+      method,
+      url,
+      hasPayload: !!payload,
+      consumerKey: config.consumerKey.substring(0, 20) + '...'
+    });
+    
+    const authHeader = oauth.getAuthorizationHeader(url, method, payload, config.consumerKey, this.privateKey);
+    
+    // Log full OAuth header for GET requests to debug
+    if (method.toUpperCase() === 'GET') {
+      console.log('Full OAuth header for GET:', authHeader);
+    } else {
+      console.log(`Generated OAuth header for ${method}:`, authHeader.substring(0, 100) + '...');
     }
-
-    // Combine all parameters
-    const allParams = { ...params, ...oauthParams };
-
-    // Create parameter string (already percent-encoded)
-    const paramString = Object.keys(allParams)
-      .sort()
-      .map(key => `${this.oauthPercentEncode(key)}=${this.oauthPercentEncode(allParams[key as keyof typeof allParams])}`)
-      .join('&');
-
-    // Create signature base string
-    // Use custom encoding that only encodes separator characters
-    const signatureBase = `${method.toUpperCase()}&${this.oauthPercentEncode(url)}&${this.encodeParameterString(paramString)}`;
-
-    // Sign with private key
-    const sign = crypto.createSign('SHA256');
-    sign.update(signatureBase);
-    const signature = sign.sign(this.privateKey, 'base64');
-
-    // Create authorization header
-    const authParams = {
-      ...oauthParams,
-      oauth_signature: signature,
-    };
-
-    return 'OAuth ' + Object.keys(authParams)
-      .sort()
-      .map(key => `${key}="${authParams[key as keyof typeof authParams]}"`)
-      .join(', ');
+    
+    return authHeader;
   }
 
   // Submit a bulk search request
@@ -328,18 +347,34 @@ export class MastercardApiService {
   async getSearchStatus(searchId: string): Promise<SearchStatusResponse> {
     try {
       const url = `${config.baseUrl}/bulk-searches/${searchId}/status`;
+      console.log('Status check URL:', url);
       const authHeader = this.generateOAuthSignature('GET', url, {});
+
+      // Debug headers
+      const headers = {
+        'Authorization': authHeader,
+        'Accept': 'application/json',
+        'X-Openapi-Clientid': config.clientId || ''
+      };
+      
+      console.log('GET request debug:', {
+        url,
+        hasClientId: !!config.clientId,
+        clientId: config.clientId?.substring(0, 20) + '...',
+        authHeaderLength: authHeader.length,
+        headers: Object.keys(headers)
+      });
 
       const response = await fetch(url, {
         method: 'GET',
-        headers: {
-          'Authorization': authHeader,
-          'Accept': 'application/json',
-        },
+        headers,
       });
+
+      console.log('GET response status:', response.status);
 
       if (!response.ok) {
         const error = await response.text();
+        console.log('GET error response:', error);
         throw new Error(`Mastercard API error: ${response.status} - ${error}`);
       }
 
@@ -367,6 +402,7 @@ export class MastercardApiService {
         headers: {
           'Authorization': authHeader,
           'Accept': 'application/json',
+          'X-Openapi-Clientid': config.clientId || ''
         },
       });
 
