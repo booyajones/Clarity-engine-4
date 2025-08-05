@@ -166,7 +166,8 @@ export class MastercardApiService {
         
         // Extract the actual private key from the PEM content
         // The file might contain Bag Attributes and other metadata
-        const privateKeyMatch = pemContent.match(/-----BEGIN PRIVATE KEY-----[\s\S]+?-----END PRIVATE KEY-----/);
+        // Support both PKCS#1 (RSA PRIVATE KEY) and PKCS#8 (PRIVATE KEY) formats
+        const privateKeyMatch = pemContent.match(/-----BEGIN (RSA )?PRIVATE KEY-----[\s\S]+?-----END (RSA )?PRIVATE KEY-----/);
         
         if (privateKeyMatch) {
           this.privateKey = privateKeyMatch[0];
