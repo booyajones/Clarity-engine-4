@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import oauth from 'mastercard-oauth1-signer';
 
 // Current configuration
-const consumerKey = '8Mg4p8h-0kO7rNwUlRfWhRyvQlzRphvEEujbNW8yabd509dd!e334d994fc924ed6bba81a28ae90399f0000000000000000';
+const consumerKey = '8Mg4p8h-0kO7rNwUlRfWhRyvQlzRphvEEujbNW8yabd509dd!e09833ad819042f695507b05bdd001230000000000000000';
 const privateKeyPem = fs.readFileSync('./mastercard-private-key.pem', 'utf8');
 
 console.log('=== Testing Mastercard Authentication ===\n');
