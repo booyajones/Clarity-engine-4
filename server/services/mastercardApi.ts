@@ -349,8 +349,8 @@ export class MastercardApiService {
   // Check search status by attempting to get results (no separate status endpoint)
   async getSearchStatus(searchId: string): Promise<SearchStatusResponse> {
     try {
-      // Try to get results to determine status
-      const url = `${config.baseUrl}/bulk-searches/${searchId}/results`;
+      // Try to get results to determine status - include required query parameters
+      const url = `${config.baseUrl}/bulk-searches/${searchId}/results?search_request_id=&offset=0&limit=25`;
       const authHeader = this.generateOAuthSignature('GET', url, {});
 
       const headers = {
@@ -396,7 +396,8 @@ export class MastercardApiService {
   // Get search results
   async getSearchResults(searchId: string, retries = 3): Promise<SearchResultsResponse> {
     try {
-      const url = `${config.baseUrl}/bulk-searches/${searchId}/results`;
+      // Include query parameters as Mastercard requires them
+      const url = `${config.baseUrl}/bulk-searches/${searchId}/results?search_request_id=&offset=0&limit=25`;
       const authHeader = this.generateOAuthSignature('GET', url, {});
 
       const response = await fetch(url, {

@@ -9,9 +9,19 @@ const consumerKey = process.env.MASTERCARD_CONSUMER_KEY;
 const privateKeyPem = fs.readFileSync('./mastercard-private-key.pem', 'utf8');
 
 // Function to generate OAuth 1.0a header
-function generateOAuthHeader(method, url) {
+function generateOAuthHeader(method, fullUrl) {
   const timestamp = Math.floor(Date.now() / 1000);
   const nonce = crypto.randomBytes(16).toString('hex');
+  
+  // Parse URL and query parameters
+  const urlObj = new URL(fullUrl);
+  const baseUrl = `${urlObj.protocol}//${urlObj.host}${urlObj.pathname}`;
+  
+  // Extract query parameters (including empty ones)
+  const queryParams = {};
+  urlObj.searchParams.forEach((value, key) => {
+    queryParams[key] = value; // Include even empty values
+  });
   
   const oauthParams = {
     oauth_consumer_key: consumerKey,
@@ -21,13 +31,16 @@ function generateOAuthHeader(method, url) {
     oauth_version: '1.0'
   };
 
+  // Combine OAuth and query parameters for signature
+  const allParams = { ...queryParams, ...oauthParams };
+  
   // Create base string
-  const paramString = Object.keys(oauthParams)
+  const paramString = Object.keys(allParams)
     .sort()
-    .map(key => `${key}=${encodeURIComponent(oauthParams[key])}`)
+    .map(key => `${key}=${encodeURIComponent(allParams[key])}`)
     .join('&');
 
-  const baseString = `${method}&${encodeURIComponent(url)}&${encodeURIComponent(paramString)}`;
+  const baseString = `${method}&${encodeURIComponent(baseUrl)}&${encodeURIComponent(paramString)}`;
 
   // Generate signature
   const sign = crypto.createSign('RSA-SHA256');
@@ -45,7 +58,8 @@ function generateOAuthHeader(method, url) {
 // Test the provided bulk search ID
 async function testBulkSearchResults() {
   const bulkSearchId = 'ac654a4c-55a7-4ed7-8485-1817a10e37bd';
-  const url = `https://api.mastercard.com/small-business/suppliers/bulk-searches/${bulkSearchId}/results`;
+  // Using the TRACK API endpoint (not small-business/suppliers)
+  const url = `https://api.mastercard.com/track/search/bulk-searches/${bulkSearchId}/results?search_request_id=&offset=0&limit=25`;
 
   try {
     console.log(`\nPolling for results of bulk search: ${bulkSearchId}`);

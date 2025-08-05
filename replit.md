@@ -9,6 +9,7 @@ Clarity Engine 3 is an AI-powered web application for finance and accounting pro
 - **Rate Limiting System**: Token bucket algorithm preventing API throttling (Mastercard: 5/sec, OpenAI: 500/min, Google Maps: 50/sec)
 - **Memory-Efficient Processing**: Streaming CSV processing with chunked batches for large datasets
 - **Production-Ready Scalability**: Concurrent processing with progress tracking, error recovery, and database optimizations
+- **Mastercard API Fix**: Resolved "RESULTS_NOT_FOUND" issue by adding required query parameters (?search_request_id=&offset=0&limit=25) to polling endpoints
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.

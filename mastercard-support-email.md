@@ -9,7 +9,9 @@ We are experiencing an issue with the Mastercard Track Search API where all merc
 ## Account Details
 - **Consumer Key**: 8Mg4p8h-0kO7rNwUlRfWhRyvQlzRphvEEujbNW8yabd509dd
 - **Environment**: Production (https://api.mastercard.com)
-- **API**: Track Search API for merchant enrichment
+- **API Endpoints Used**: 
+  - Submit: `POST https://api.mastercard.com/track/search/bulk-searches`
+  - Results: `GET https://api.mastercard.com/track/search/bulk-searches/{id}/results`
 - **Integration Status**: OAuth 1.0a authentication working correctly
 
 ## Issue Description
