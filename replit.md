@@ -30,11 +30,15 @@ Clarity Engine 3 is an AI-powered web application for finance and accounting pro
   - Increased Mastercard polling interval from 5s to 30s to avoid rate limiting (429 errors)
   - Fixed batch upload test endpoints (/api/upload/preview and /api/upload/process)
   - Fixed Mastercard "RESULTS_NOT_FOUND" handling - now correctly returns empty results instead of infinite polling
-  - **CRITICAL ISSUE**: Mastercard API returns NO MERCHANT DATA for any company (0/18 searches successful)
+  - **CRITICAL ISSUE**: Mastercard API returns NO MERCHANT DATA for any company (0/19 searches successful)
     - Production endpoint is being used correctly (`https://api.mastercard.com/track/search`)
     - All searches return "RESULTS_NOT_FOUND" with "Recoverable": false
-    - Tested with major companies: Microsoft, Home Depot, Walmart - all return empty results
-    - Possible causes: API credentials don't have merchant data access, account in trial mode, or missing required parameters
+    - Tested with major companies: Microsoft, Home Depot, Walmart, Starbucks - all return empty results
+    - Fixed empty search_request_id parameter issue (now using `search_request_id=&` as required)
+    - Fixed response parsing to handle actual data structure (`data.items[]` with nested fields)
+    - Known working search ID `ac654a4c-55a7-4ed7-8485-1817a10e37bd` has 1000 merchant results (submitted by others)
+    - Root cause: Our search parameters don't match any merchants in Mastercard's database
+    - Likely needs exact business names or different search criteria to match their merchant records
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.

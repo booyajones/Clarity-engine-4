@@ -559,10 +559,9 @@ export class MastercardApiService {
     
     while (retries < maxRetries) {
       try {
-        // Include query parameters as Mastercard requires them
-        // Use the searchRequestId if provided, otherwise use the searchId as fallback
-        const requestId = searchRequestId || searchId;
-        const url = `${config.baseUrl}/bulk-searches/${searchId}/results?search_request_id=${requestId}&offset=0&limit=25`;
+        // CRITICAL: Use EMPTY search_request_id parameter for results endpoint
+        // This is required by Mastercard API - don't pass the search ID as the parameter value
+        const url = `${config.baseUrl}/bulk-searches/${searchId}/results?search_request_id=&offset=0&limit=25`;
         const authHeader = this.generateOAuthSignature('GET', url, {});
 
         const response = await fetch(url, {
@@ -620,11 +619,29 @@ export class MastercardApiService {
         const data = await response.json();
         console.log(`Search ${searchId}: Got results!`);
         
-        // Handle the actual Mastercard response structure: data.data.items
+        // Handle the actual Mastercard response structure: data.items with nested fields
         let results = [];
         if (data.data && data.data.items) {
-          console.log(`Found ${data.data.items.length} merchant results`);
-          results = data.data.items;
+          console.log(`Found ${data.data.items.length} merchant results out of ${data.data.total} total`);
+          // Transform the actual data structure to our expected format
+          results = data.data.items.map((item: any) => ({
+            searchRequestId: item.searchRequestId,
+            matchStatus: item.isMatched ? (item.confidence === 'HIGH' ? 'EXACT_MATCH' : 'PARTIAL_MATCH') : 'NO_MATCH',
+            matchConfidence: item.confidence,
+            merchantDetails: item.searchResult ? {
+              merchantName: item.searchResult.entityDetails?.businessName,
+              merchantId: item.searchResult.entityDetails?.organisationIdentifications?.[0]?.identification, // Tax ID
+              merchantIds: item.searchResult.entityDetails?.merchantIds,
+              merchantCategoryCode: item.searchResult.cardProcessingHistory?.mcc,
+              merchantCategoryDescription: item.searchResult.cardProcessingHistory?.mccGroup,
+              lastTransactionDate: item.searchResult.cardProcessingHistory?.transactionRecency,
+              transactionVolume: item.searchResult.cardProcessingHistory?.commercialRecency,
+              dataQuality: item.confidence,
+              acceptanceNetwork: [], // Not in the response
+              businessAddress: item.searchResult.entityDetails?.businessAddress,
+              phoneNumber: item.searchResult.entityDetails?.phoneNumber
+            } : undefined
+          }));
         } else if (data.bulkSearchResults) {
           results = data.bulkSearchResults;
         } else if (data.results) {
