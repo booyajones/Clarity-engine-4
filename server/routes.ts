@@ -15,6 +15,9 @@ import healthRoutes from "./routes/health";
 import akkioRoutes from "./routes/akkio";
 import { AppError, errorHandler, notFoundHandler, asyncHandler } from "./middleware/errorHandler";
 import { generalLimiter, uploadLimiter, classificationLimiter, expensiveLimiter } from "./middleware/rateLimiter";
+import { db } from "./db";
+import { mastercardSearchRequests } from "@shared/schema";
+import { eq, desc } from "drizzle-orm";
 
 // Global type for Mastercard results cache
 declare global {
@@ -987,6 +990,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error("Status check error:", error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+  
+  // Check Mastercard search status directly from database
+  app.get("/api/mastercard/search-status/:searchId", async (req, res) => {
+    try {
+      const { searchId } = req.params;
+      
+      // Query the database for the search status
+      const search = await db
+        .select()
+        .from(mastercardSearchRequests)
+        .where(eq(mastercardSearchRequests.searchId, searchId))
+        .limit(1);
+      
+      if (!search || search.length === 0) {
+        res.status(404).json({ error: 'Search not found' });
+        return;
+      }
+      
+      const searchData = search[0];
+      
+      res.json({
+        searchId: searchData.searchId,
+        status: searchData.status,
+        pollAttempts: searchData.pollAttempts,
+        maxPollAttempts: searchData.maxPollAttempts,
+        lastPolledAt: searchData.lastPolledAt,
+        submittedAt: searchData.submittedAt,
+        completedAt: searchData.completedAt,
+        error: searchData.error,
+        responsePayload: searchData.responsePayload
+      });
+    } catch (error) {
+      console.error("Mastercard search status error:", error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+  
+  // Get all Mastercard searches for monitoring
+  app.get("/api/mastercard/searches", async (req, res) => {
+    try {
+      // Query all searches, ordered by most recent first
+      const searches = await db
+        .select()
+        .from(mastercardSearchRequests)
+        .orderBy(desc(mastercardSearchRequests.submittedAt))
+        .limit(100); // Limit to 100 most recent searches
+      
+      res.json(searches);
+    } catch (error) {
+      console.error("Error fetching Mastercard searches:", error);
       res.status(500).json({ error: (error as Error).message });
     }
   });

@@ -2,9 +2,12 @@ import { nanoid } from 'nanoid';
 import { classificationService } from './classification';
 import { supplierCacheService } from './supplierCacheService';
 import { mastercardBatchOptimizedService } from './mastercardBatchOptimized';
+import { MastercardApiService } from './mastercardApi';
 import { addressValidationService } from './addressValidationService';
 import { akkioService } from './akkioService';
 import { payeeMatchingService } from './payeeMatchingService';
+import { db } from '../db';
+import { mastercardSearchRequests } from '@shared/schema';
 
 // Define ClassificationResult type
 interface ClassificationResult {
@@ -208,18 +211,74 @@ export class ProgressiveClassificationService {
       }
       
       // Stage 4: Mastercard enrichment - TEMPORARILY DISABLED
-      // TODO: Fix Mastercard integration with proper async search
+      // Stage 4: Mastercard enrichment (async, polls in background)
       if (options.enableMastercard) {
         job.stage = 'mastercard';
         job.updatedAt = Date.now();
-        console.log(`Job ${jobId}: Mastercard search temporarily disabled in progressive mode`);
+        console.log(`Job ${jobId}: Starting Mastercard search...`);
         
-        job.result.mastercardEnrichment = {
-          enriched: false,
-          status: 'pending',
-          searchId: `pending_${jobId}`,
-          message: 'Mastercard search will be processed separately'
-        };
+        try {
+          const mastercardApi = new MastercardApiService();
+          
+          // Check if the service is configured
+          if (mastercardApi.isServiceConfigured()) {
+            // Submit the search request to Mastercard
+            const searchResponse = await mastercardApi.submitBulkSearch({
+              lookupType: 'SUPPLIERS' as const,
+              maximumMatches: 1, // Get only the best match
+              minimumConfidenceThreshold: '0.3',
+              searches: [{
+                searchRequestId: `prog_${jobId}_${Date.now()}`,
+                businessName: payeeName,
+                businessAddress: job.result.address ? {
+                  addressLine1: job.result.address,
+                  country: 'USA'
+                } : {
+                  country: 'USA'
+                }
+              }]
+            });
+            
+            // Save the search request to database for worker polling
+            await db.insert(mastercardSearchRequests).values({
+              searchId: searchResponse.bulkSearchId,
+              payeeClassificationId: null, // Will be linked later if needed
+              status: 'submitted',
+              searchType: 'single',
+              requestPayload: {
+                payeeName,
+                jobId,
+                address: job.result.address
+              },
+              pollAttempts: 0,
+              maxPollAttempts: 30
+            });
+            
+            console.log(`Job ${jobId}: Mastercard search submitted with ID ${searchResponse.bulkSearchId}`);
+            
+            job.result.mastercardEnrichment = {
+              enriched: false,
+              status: 'processing',
+              searchId: searchResponse.bulkSearchId,
+              message: 'Mastercard search in progress, results will be available soon'
+            };
+          } else {
+            console.log(`Job ${jobId}: Mastercard service not configured, skipping`);
+            job.result.mastercardEnrichment = {
+              enriched: false,
+              status: 'skipped',
+              message: 'Mastercard service not configured'
+            };
+          }
+        } catch (error) {
+          console.error(`Job ${jobId}: Mastercard search error:`, error);
+          job.result.mastercardEnrichment = {
+            enriched: false,
+            status: 'error',
+            error: (error as Error).message,
+            message: 'Mastercard search failed'
+          };
+        }
       }
       
       // Stage 5: Akkio prediction - TEMPORARILY DISABLED

@@ -152,7 +152,14 @@ export function SingleClassification() {
       if (status === 'completed' && progressiveResult) {
         console.log('Progressive classification completed:', progressiveResult);
         setResult(progressiveResult);
-        setJobId(null); // Stop polling
+        
+        // Check if Mastercard search is still processing
+        if (progressiveResult.mastercardEnrichment?.status === 'processing' && 
+            progressiveResult.mastercardEnrichment?.searchId) {
+          setPendingMastercardSearchId(progressiveResult.mastercardEnrichment.searchId);
+        }
+        
+        setJobId(null); // Stop polling job status
         setProgressiveStatus('');
       } else if (status === 'failed') {
         console.error('Progressive classification failed:', error);
@@ -165,30 +172,69 @@ export function SingleClassification() {
     }
   }, [progressiveQuery.data]);
 
-  // Poll for Mastercard search results (legacy support)
+  // Poll for Mastercard search results
   const mastercardStatusQuery = useQuery<any>({
-    queryKey: [`/api/mastercard/status/${pendingMastercardSearchId}`],
-    enabled: !!pendingMastercardSearchId && !jobId, // Only use if not using progressive mode
+    queryKey: [`/api/mastercard/search-status/${pendingMastercardSearchId}`],
+    enabled: !!pendingMastercardSearchId,
     refetchInterval: (query) => {
-      const completed = query.state.data?.completed;
-      if (!completed) {
-        return 2000; // Poll every 2 seconds
+      const status = query.state.data?.status;
+      // Stop polling if completed, failed, or timeout
+      if (status === 'completed' || status === 'failed' || status === 'timeout') {
+        return false;
       }
-      return false; // Stop polling when completed
+      // Adaptive polling intervals based on attempts
+      const attempts = query.state.data?.pollAttempts || 0;
+      if (attempts < 5) return 1000; // First 5 attempts: 1 second
+      if (attempts < 10) return 2000; // Next 5: 2 seconds
+      if (attempts < 20) return 5000; // Next 10: 5 seconds
+      return 10000; // After that: 10 seconds
     },
   });
 
-  // Update result when Mastercard search completes (legacy support)
+  // Update result when Mastercard search completes
   useEffect(() => {
-    if (mastercardStatusQuery.data && mastercardStatusQuery.data.completed && result && !jobId) {
-      console.log('Mastercard search completed:', mastercardStatusQuery.data);
-      setResult({
-        ...result,
-        mastercardEnrichment: mastercardStatusQuery.data
-      });
-      setPendingMastercardSearchId(null);
+    if (mastercardStatusQuery.data && result) {
+      const { status, responsePayload, error } = mastercardStatusQuery.data;
+      
+      if (status === 'completed' && responsePayload) {
+        console.log('Mastercard search completed:', responsePayload);
+        
+        // Extract the first result if available
+        const mastercardData = responsePayload.results?.[0];
+        
+        setResult({
+          ...result,
+          mastercardEnrichment: {
+            enriched: !!mastercardData && mastercardData.matchStatus !== 'NO_MATCH',
+            status: 'completed',
+            data: mastercardData ? {
+              businessName: mastercardData.merchantDetails?.merchantName,
+              merchantCategoryCode: mastercardData.merchantDetails?.merchantCategoryCode,
+              merchantCategoryDescription: mastercardData.merchantDetails?.merchantCategoryDescription,
+              matchConfidence: mastercardData.matchConfidence,
+              acceptanceNetwork: mastercardData.merchantDetails?.acceptanceNetwork,
+              lastTransactionDate: mastercardData.merchantDetails?.lastTransactionDate,
+              dataQualityLevel: mastercardData.merchantDetails?.dataQualityLevel,
+            } : null,
+            message: mastercardData ? 'Mastercard enrichment successful' : 'No matching merchants found'
+          }
+        });
+        setPendingMastercardSearchId(null);
+      } else if (status === 'failed' || status === 'timeout') {
+        console.error('Mastercard search failed:', error);
+        setResult({
+          ...result,
+          mastercardEnrichment: {
+            enriched: false,
+            status: 'error',
+            message: error || `Search ${status}`,
+            data: null
+          }
+        });
+        setPendingMastercardSearchId(null);
+      }
     }
-  }, [mastercardStatusQuery.data, result, jobId]);
+  }, [mastercardStatusQuery.data]);
 
   const classifyMutation = useMutation({
     mutationFn: async (name: string) => {

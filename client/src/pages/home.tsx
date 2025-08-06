@@ -428,6 +428,15 @@ export default function Home() {
                     Akkio Models
                   </Button>
                 </Link>
+                <Link href="/mastercard-monitor">
+                  <Button
+                    variant="outline"
+                    className="flex items-center gap-2"
+                  >
+                    <Activity className="h-4 w-4" />
+                    Mastercard Monitor
+                  </Button>
+                </Link>
               </div>
             </div>
           </div>
@@ -497,6 +506,15 @@ export default function Home() {
                 >
                   <Brain className="h-4 w-4" />
                   Akkio Models
+                </Button>
+              </Link>
+              <Link href="/mastercard-monitor">
+                <Button
+                  variant="outline"
+                  className="flex items-center gap-2"
+                >
+                  <Activity className="h-4 w-4" />
+                  Mastercard Monitor
                 </Button>
               </Link>
             </div>

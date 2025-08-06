@@ -462,20 +462,15 @@ export class MastercardApiService {
               
               const result = {
                 matchConfidence: firstResult.matchConfidence || firstResult.matchStatus,
-                businessName: merchant.businessName,
-                taxId: merchant.taxId || merchant.ein,
+                businessName: merchant.merchantName || '',
+                taxId: merchant.merchantId || '',
                 merchantIds: merchant.merchantId ? [merchant.merchantId] : [],
-                address: merchant.address?.street,
-                city: merchant.address?.city,
-                state: merchant.address?.state,
-                zipCode: merchant.address?.postalCode,
-                phone: merchant.phoneNumber,
-                mccCode: merchant.mccCode,
-                mccGroup: merchant.mccDescription,
-                transactionRecency: merchant.transactionData?.lastTransactionDate,
-                commercialHistory: merchant.businessYears,
-                smallBusiness: merchant.isSmallBusiness,
-                purchaseCardLevel: merchant.purchaseCardLevel,
+                mccCode: merchant.merchantCategoryCode,
+                mccGroup: merchant.merchantCategoryDescription,
+                transactionRecency: merchant.lastTransactionDate,
+                transactionVolume: merchant.transactionVolume,
+                dataQuality: merchant.dataQuality,
+                acceptanceNetwork: merchant.acceptanceNetwork,
                 source: 'Mastercard Track API'
               };
               

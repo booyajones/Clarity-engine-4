@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Home from "@/pages/home";
 import NotFound from "@/pages/not-found";
 import { AkkioModels } from "@/pages/akkio-models";
+import MastercardMonitor from "@/pages/mastercard-monitor";
 
 function Router() {
   return (
@@ -13,6 +14,7 @@ function Router() {
       <Switch>
         <Route path="/" component={Home} />
         <Route path="/akkio-models" component={AkkioModels} />
+        <Route path="/mastercard-monitor" component={MastercardMonitor} />
         <Route component={NotFound} />
       </Switch>
     </div>
