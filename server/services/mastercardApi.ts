@@ -457,17 +457,23 @@ export class MastercardApiService {
 
         // Success! Parse and return results
         const data = await response.json();
-        console.log(`Search ${searchId}: Got results!`, data);
+        console.log(`Search ${searchId}: Got results!`);
         
-        // Handle empty results structure
-        if (!data.results) {
-          data.results = [];
+        // Handle the actual Mastercard response structure: data.data.items
+        let results = [];
+        if (data.data && data.data.items) {
+          console.log(`Found ${data.data.items.length} merchant results`);
+          results = data.data.items;
+        } else if (data.bulkSearchResults) {
+          results = data.bulkSearchResults;
+        } else if (data.results) {
+          results = data.results;
         }
         
         // Build proper response structure
         const searchResult = {
           bulkSearchId: searchId,
-          results: data.results || []
+          results: results
         };
 
         // Remove from active searches once results are retrieved
@@ -559,22 +565,48 @@ export class MastercardApiService {
         // Try to get results with patient retrying
         const results = await this.getSearchResults(searchId);
         
-        if (results && results.results) {
-          // Map results back to payees
+        if (results && results.results && results.results.length > 0) {
+          // Map results back to payees - handle both expected schema and real data structure
           for (const result of results.results) {
-            const referenceId = result.clientReferenceId || result.searchRequestId;
-            enrichmentResults.set(referenceId, {
-              matchStatus: result.matchStatus,
-              matchConfidence: result.matchConfidence,
-              merchantCategoryCode: result.merchantDetails?.merchantCategoryCode,
-              merchantCategoryDescription: result.merchantDetails?.merchantCategoryDescription,
-              acceptanceNetwork: result.merchantDetails?.acceptanceNetwork,
-              lastTransactionDate: result.merchantDetails?.lastTransactionDate,
-              transactionVolume: result.merchantDetails?.transactionVolume,
-              dataQuality: result.merchantDetails?.dataQuality,
-            });
+            // Cast to any to handle the real Mastercard response structure
+            const anyResult = result as any;
+            const referenceId = anyResult.searchRequestId;
+            
+            // Check if this is the real Mastercard structure (with isMatched and searchResult)
+            if (anyResult.isMatched !== undefined && anyResult.searchResult) {
+              const entityDetails = anyResult.searchResult.entityDetails;
+              const cardHistory = anyResult.searchResult.cardProcessingHistory;
+              
+              enrichmentResults.set(referenceId, {
+                matchStatus: anyResult.isMatched ? 'MATCHED' : 'NOT_MATCHED',
+                matchConfidence: anyResult.confidence || anyResult.matchConfidence,
+                merchantCategoryCode: cardHistory?.mcc,
+                merchantCategoryDescription: cardHistory?.mccGroup,
+                acceptanceNetwork: cardHistory?.purchaseCardLevel ? `Level ${cardHistory.purchaseCardLevel}` : undefined,
+                lastTransactionDate: cardHistory?.transactionRecency,
+                transactionVolume: cardHistory?.commercialRecency,
+                dataQuality: cardHistory?.commercialHistory ? 'HIGH' : 'MEDIUM',
+                // Additional fields from real data
+                taxId: entityDetails?.organisationIdentifications?.[0]?.identification,
+                businessName: entityDetails?.businessName,
+                merchantIds: entityDetails?.merchantIds,
+                smallBusiness: cardHistory?.smallBusiness,
+              } as any);
+            } else if (anyResult.matchStatus) {
+              // Handle the expected schema format
+              enrichmentResults.set(referenceId, {
+                matchStatus: anyResult.matchStatus,
+                matchConfidence: anyResult.matchConfidence,
+                merchantCategoryCode: anyResult.merchantDetails?.merchantCategoryCode,
+                merchantCategoryDescription: anyResult.merchantDetails?.merchantCategoryDescription,
+                acceptanceNetwork: anyResult.merchantDetails?.acceptanceNetwork,
+                lastTransactionDate: anyResult.merchantDetails?.lastTransactionDate,
+                transactionVolume: anyResult.merchantDetails?.transactionVolume,
+                dataQuality: anyResult.merchantDetails?.dataQuality,
+              });
+            }
           }
-          console.log(`Mastercard search ${searchId} completed with ${results.results.length} results`);
+          console.log(`Mastercard search ${searchId} completed with ${results.results.length} matched merchants`);
         } else {
           console.log(`Mastercard search ${searchId} returned no results after polling`);
         }

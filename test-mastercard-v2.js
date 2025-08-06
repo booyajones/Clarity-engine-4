@@ -11,57 +11,103 @@ const clientId = 'e09833ad819042f695507b05bdd001230000000000000000';
 const privateKeyPem = fs.readFileSync(privateKeyPath, 'utf8');
 const cleanPrivateKey = privateKeyPem.match(/-----BEGIN (RSA )?PRIVATE KEY-----[\s\S]+?-----END (RSA )?PRIVATE KEY-----/)[0];
 
-async function testMastercardAPI2() {
-  console.log('🔍 Testing Mastercard API v2 with known working search ID...\n');
+async function testMastercardAPI() {
+  console.log('🔍 Testing Mastercard API with hard-coded ID\n');
   
-  // Using the known working search ID
-  const bulkSearchId = 'ac654a4c-55a7-4ed7-8485-1817a10e37bd';
-  console.log('Using search ID:', bulkSearchId);
-  
-  console.log('⏳ Waiting 10 seconds...');
-  await new Promise(resolve => setTimeout(resolve, 10000));
-
-  // IMPORTANT: Include query parameters
-  const resultsUrl = `https://api.mastercard.com/track/search/bulk-searches/${bulkSearchId}/results?search_request_id=&offset=0&limit=25`;
-  console.log('Results URL:', resultsUrl);
-
-  const resultsAuthHeader = oauth.getAuthorizationHeader(
-    resultsUrl,
-    'GET',
-    undefined, // No body for GET
-    consumerKey,
-    cleanPrivateKey
-  );
-
-  const resultsResponse = await fetch(resultsUrl, {
-    method: 'GET',
-    headers: {
-      'Authorization': resultsAuthHeader,
-      'Accept': 'application/json',
-      'X-Openapi-Clientid': clientId
-    }
-  });
-
-  console.log('Results Response Status:', resultsResponse.status);
-  const resultsData = await resultsResponse.text();
-  
-  if (resultsResponse.status === 200) {
-    console.log('✅ SUCCESS! Got data from Mastercard!\n');
-    try {
-      const parsedData = JSON.parse(resultsData);
-      console.log('Results Summary:');
-      console.log('- Total Count:', parsedData.totalCount);
-      console.log('- Has Results:', parsedData.results && parsedData.results.length > 0);
-      if (parsedData.results && parsedData.results.length > 0) {
-        console.log('- First Result:', JSON.stringify(parsedData.results[0], null, 2));
+  try {
+    // Skip submission - use a hard-coded ID that has actual data
+    // This is an ID that was found to have real merchant results
+    const bulkSearchId = 'ac654a4c-55a7-4ed7-8485-1817a10e37bd';
+    
+    console.log(`Using hard-coded search ID: ${bulkSearchId}`);
+    console.log('Fetching results directly...\n');
+    
+    // Get results directly
+    const resultsUrl = `https://api.mastercard.com/track/search/bulk-searches/${bulkSearchId}/results?search_request_id=&offset=0&limit=25`;
+    
+    const resultsAuthHeader = oauth.getAuthorizationHeader(
+      resultsUrl,
+      'GET',
+      undefined,
+      consumerKey,
+      cleanPrivateKey
+    );
+    
+    console.log('Making request to:', resultsUrl);
+    
+    const resultsResponse = await fetch(resultsUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': resultsAuthHeader,
+        'Accept': 'application/json',
+        'X-Openapi-Clientid': clientId
       }
-    } catch (e) {
-      console.log('Raw Results:', resultsData);
+    });
+    
+    console.log('Response status:', resultsResponse.status);
+    
+    const responseText = await resultsResponse.text();
+    
+    if (resultsResponse.status === 200) {
+      const data = JSON.parse(responseText);
+      
+      console.log('\n✅ SUCCESS! Got response from Mastercard:\n');
+      console.log('Full response:', JSON.stringify(data, null, 2));
+      
+      // The actual field structure is data.items!
+      if (data.data && data.data.items && data.data.items.length > 0) {
+        console.log('\n🎉 FOUND REAL MERCHANT DATA!');
+        console.log(`Results on this page: ${data.data.items.length}`);
+        console.log(`Total available: ${data.data.total || data.data.count}`);
+        
+        // Show first 3 merchants in detail
+        data.data.items.slice(0, 3).forEach((result, index) => {
+          console.log(`\n--- Merchant ${index + 1} ---`);
+          console.log('✅ Matched:', result.isMatched);
+          console.log('📊 Confidence:', result.confidence);
+          console.log('🏢 Business Name:', result.searchResult?.entityDetails?.businessName);
+          console.log('📍 Address:', result.searchResult?.entityDetails?.businessAddress?.addressLine1);
+          console.log('🌆 City/State:', 
+            `${result.searchResult?.entityDetails?.businessAddress?.townName}, ${result.searchResult?.entityDetails?.businessAddress?.countrySubDivision}`);
+          
+          if (result.searchResult?.cardProcessingHistory) {
+            const history = result.searchResult.cardProcessingHistory;
+            console.log('💳 Card Processing:');
+            console.log('  - MCC Code:', history.mcc);
+            console.log('  - MCC Group:', history.mccGroup);
+            console.log('  - Transaction Recency:', history.transactionRecency);
+            console.log('  - Commercial History:', history.commercialHistory);
+            console.log('  - Small Business:', history.smallBusiness);
+          }
+          
+          if (result.searchResult?.entityDetails?.organisationIdentifications?.[0]) {
+            console.log('🆔 Tax ID:', result.searchResult.entityDetails.organisationIdentifications[0].identification);
+          }
+        });
+        
+        console.log('\n📈 Summary of ALL merchants found:');
+        const businessNames = data.data.items
+          .map(r => r.searchResult?.entityDetails?.businessName)
+          .filter(Boolean)
+          .slice(0, 10);
+        businessNames.forEach(name => console.log(`  • ${name}`));
+        if (data.data.items.length > 10) {
+          console.log(`  ... and ${data.data.items.length - 10} more merchants on this page`);
+        }
+      } else {
+        console.log('Response structure not as expected');
+        console.log('Top level keys:', Object.keys(data));
+        if (data.data) {
+          console.log('data keys:', Object.keys(data.data));
+        }
+      }
+    } else {
+      console.log('❌ Error response:', responseText);
     }
-  } else {
-    console.log('❌ Failed to get results');
-    console.log('Results:', resultsData);
+    
+  } catch (error) {
+    console.error('Test failed:', error);
   }
 }
 
-testMastercardAPI2();
+testMastercardAPI();
