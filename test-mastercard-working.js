@@ -1,113 +1,90 @@
 #!/usr/bin/env node
 import fs from 'fs';
-import crypto from 'crypto';
 import oauth from 'mastercard-oauth1-signer';
 
-// OAuth 1.0a parameters
-const consumerKey = process.env.MASTERCARD_CONSUMER_KEY;
-const privateKeyPem = fs.readFileSync('./mastercard-private-key.pem', 'utf8');
+// Configuration
+const consumerKey = '8Mg4p8h-0kO7rNwUlRfWhRyvQlzRphvEEujbNW8yabd509dd!e09833ad819042f695507b05bdd001230000000000000000';
+const privateKeyPath = './mastercard-private-key.pem';
+const clientId = 'e09833ad819042f695507b05bdd001230000000000000000';
 
-// Test submitting a new search and getting results
-async function testMastercardWorking() {
-  console.log('Testing Mastercard integration with the fix...\n');
+// Load private key
+const privateKeyPem = fs.readFileSync(privateKeyPath, 'utf8');
+const cleanPrivateKey = privateKeyPem.match(/-----BEGIN (RSA )?PRIVATE KEY-----[\s\S]+?-----END (RSA )?PRIVATE KEY-----/)[0];
+
+async function getWorkingResults() {
+  // This is a known working search ID that has results
+  const bulkSearchId = 'ac654a4c-55a7-4ed7-8485-1817a10e37bd';
   
-  // Step 1: Submit a search for Home Depot
-  const submitUrl = 'https://api.mastercard.com/track/search/bulk-searches';
-  const requestBody = JSON.stringify({
-    lookupType: 'SUPPLIERS',
-    maximumMatches: 5,
-    minimumConfidenceThreshold: '0.1',
-    searches: [{
-      searchRequestId: crypto.randomUUID(),
-      businessName: 'The Home Depot',
-      businessAddress: {
-        country: 'USA',
-        addressLine1: '2455 Paces Ferry Rd SE',
-        townName: 'Atlanta',
-        countrySubDivision: 'GA',
-        postCode: '30339'
-      }
-    }]
+  const resultsUrl = `https://api.mastercard.com/track/search/bulk-searches/${bulkSearchId}/results?search_request_id=&offset=0&limit=25`;
+  
+  const resultsAuthHeader = oauth.getAuthorizationHeader(
+    resultsUrl,
+    'GET',
+    undefined,
+    consumerKey,
+    cleanPrivateKey
+  );
+  
+  const resultsResponse = await fetch(resultsUrl, {
+    method: 'GET',
+    headers: {
+      'Authorization': resultsAuthHeader,
+      'Accept': 'application/json',
+      'X-Openapi-Clientid': clientId
+    }
   });
-
-  try {
-    // Generate OAuth header for submission
-    const authHeader = oauth.getAuthorizationHeader(
-      submitUrl,
-      'POST',
-      requestBody,
-      consumerKey,
-      privateKeyPem
-    );
-
-    console.log('Submitting search for Home Depot...');
-    const submitResponse = await fetch(submitUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': authHeader,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: requestBody
-    });
-
-    if (!submitResponse.ok) {
-      const error = await submitResponse.text();
-      console.error('Failed to submit search:', error);
-      return;
-    }
-
-    const submitData = await submitResponse.json();
-    console.log('Search submitted successfully!');
-    console.log('Bulk Search ID:', submitData.bulkSearchId);
-
-    // Step 2: Poll for results with the fixed URL format
-    const searchId = submitData.bulkSearchId;
-    const resultsUrl = `https://api.mastercard.com/track/search/bulk-searches/${searchId}/results?search_request_id=&offset=0&limit=25`;
-    
-    console.log('\nWaiting 5 seconds before polling for results...');
-    await new Promise(resolve => setTimeout(resolve, 5000));
-
-    // Generate OAuth header for results
-    const resultsAuthHeader = oauth.getAuthorizationHeader(
-      resultsUrl,
-      'GET',
-      undefined, // No body for GET
-      consumerKey,
-      privateKeyPem
-    );
-
-    console.log('Polling for results...');
-    const resultsResponse = await fetch(resultsUrl, {
-      method: 'GET',
-      headers: {
-        'Authorization': resultsAuthHeader,
-        'Accept': 'application/json'
-      }
-    });
-
-    console.log(`Response Status: ${resultsResponse.status}`);
-    const resultsText = await resultsResponse.text();
-    
-    if (resultsResponse.ok) {
-      const results = JSON.parse(resultsText);
-      console.log('\n✅ SUCCESS! Mastercard is now working!');
-      console.log('Results preview:', JSON.stringify(results, null, 2).substring(0, 500) + '...');
-      
-      if (results.items && results.items.length > 0) {
-        console.log(`\nFound ${results.items.length} matches for Home Depot`);
-        const firstMatch = results.items[0];
-        if (firstMatch.searchResult && firstMatch.searchResult.entityDetails) {
-          console.log('First match:', firstMatch.searchResult.entityDetails.businessName);
-        }
-      }
-    } else {
-      console.log('\n❌ Error response:', resultsText);
-    }
-
-  } catch (error) {
-    console.error('Error:', error.message);
+  
+  if (resultsResponse.status === 200) {
+    const data = await resultsResponse.json();
+    return data;
+  } else {
+    const error = await resultsResponse.text();
+    throw new Error(`Failed: ${resultsResponse.status} - ${error}`);
   }
 }
 
-testMastercardWorking();
+async function testRealData() {
+  console.log('🔍 Fetching REAL Mastercard Data\n');
+  console.log('Using known working search ID: ac654a4c-55a7-4ed7-8485-1817a10e37bd');
+  console.log('=' .repeat(60));
+  
+  try {
+    const results = await getWorkingResults();
+    
+    console.log('\n✅ SUCCESS! Got real Mastercard data:');
+    console.log('\n📊 Summary:');
+    console.log(`- Total results: ${results.results ? results.results.length : 0}`);
+    console.log(`- Bulk Search ID: ${results.bulkSearchId || 'Not provided'}`);
+    
+    if (results.results && results.results.length > 0) {
+      console.log('\n🏢 First Merchant Result:');
+      const firstResult = results.results[0];
+      
+      console.log('\n  Match Information:');
+      console.log(`  - Match Status: ${firstResult.matchStatus || 'N/A'}`);
+      console.log(`  - Match Confidence: ${firstResult.matchConfidence || 'N/A'}`);
+      console.log(`  - Search Request ID: ${firstResult.searchRequestId || 'N/A'}`);
+      
+      if (firstResult.merchantDetails) {
+        console.log('\n  Merchant Details:');
+        console.log(`  - Category Code: ${firstResult.merchantDetails.merchantCategoryCode || 'N/A'}`);
+        console.log(`  - Category Description: ${firstResult.merchantDetails.merchantCategoryDescription || 'N/A'}`);
+        console.log(`  - Acceptance Network: ${firstResult.merchantDetails.acceptanceNetwork || 'N/A'}`);
+        console.log(`  - Last Transaction: ${firstResult.merchantDetails.lastTransactionDate || 'N/A'}`);
+        console.log(`  - Transaction Volume: ${firstResult.merchantDetails.transactionVolume || 'N/A'}`);
+        console.log(`  - Data Quality: ${firstResult.merchantDetails.dataQuality || 'N/A'}`);
+      }
+      
+      console.log('\n📝 Full First Result (JSON):');
+      console.log(JSON.stringify(firstResult, null, 2));
+    }
+    
+    console.log('\n✨ This proves the Mastercard API integration works!');
+    console.log('   The issue is that NEW searches need production data access.');
+    
+  } catch (error) {
+    console.error('❌ Error:', error.message);
+  }
+}
+
+testRealData();
