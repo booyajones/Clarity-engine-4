@@ -59,61 +59,32 @@ export class ProgressiveClassificationService {
       stage: 'initial',
     };
     
-    // Stage 1: Quick Finexio matching WITHOUT AI for instant results
+    // Stage 1: Quick Finexio matching WITHOUT AI (should be < 1 second)
     if (matchingOptions?.enableFinexio !== false) {
       try {
-        // Import the cache service directly for ultra-fast matching
+        // Import the cache service directly for fast matching
         const { supplierCacheService } = await import('./supplierCacheService');
         
-        // Do a simple database search (no AI, just SQL matching)
+        // Do a simple string match in the cache (no AI, no fuzzy matching)
         const cachedSuppliers = await supplierCacheService.searchCachedSuppliers(payeeName.trim());
         
         if (cachedSuppliers.length > 0) {
-          // Simple scoring without AI
-          const searchName = payeeName.toLowerCase().trim();
-          let bestMatch = cachedSuppliers[0];
-          let bestScore = 0;
+          // Just take the first match without AI scoring
+          const bestMatch = cachedSuppliers[0];
           
-          for (const supplier of cachedSuppliers.slice(0, 10)) { // Check top 10 only
-            const supplierName = supplier.payeeName.toLowerCase().trim();
-            let score = 0;
-            
-            // Exact match
-            if (supplierName === searchName) {
-              score = 1.0;
+          result.bigQueryMatch = {
+            matched: true,
+            finexioSupplier: {
+              id: bestMatch.payeeId,
+              name: bestMatch.payeeName,
+              finexioMatchScore: 100, // Simple match
+              paymentType: bestMatch.paymentType || 'ACH',
+              matchReasoning: 'Quick cache match (no AI)',
+              matchType: 'cache_simple',
+              confidence: 1
             }
-            // Contains match
-            else if (supplierName.includes(searchName) || searchName.includes(supplierName)) {
-              score = 0.8;
-            }
-            // Starts with match
-            else if (supplierName.startsWith(searchName) || searchName.startsWith(supplierName)) {
-              score = 0.7;
-            }
-            
-            if (score > bestScore) {
-              bestScore = score;
-              bestMatch = supplier;
-            }
-          }
-          
-          if (bestScore > 0) {
-            result.bigQueryMatch = {
-              matched: true,
-              finexioSupplier: {
-                id: bestMatch.payeeId,
-                name: bestMatch.payeeName,
-                finexioMatchScore: Math.round(bestScore * 100),
-                paymentType: bestMatch.paymentType || 'ACH',
-                matchReasoning: `Quick match (${Math.round(bestScore * 100)}% confidence)`,
-                matchType: bestScore === 1.0 ? 'exact' : 'partial',
-                confidence: bestScore
-              }
-            };
-            result.stage = 'finexio';
-            result.payeeType = 'Business';
-            result.confidence = bestScore;
-          }
+          };
+          result.stage = 'finexio';
         }
       } catch (error) {
         console.error('Quick Finexio matching error:', error);

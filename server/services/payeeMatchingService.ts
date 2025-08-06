@@ -97,12 +97,8 @@ export class PayeeMatchingService {
       let bestConfidence = 0;
       let bestMatchResult = null;
       
-      // OPTIMIZATION: Only check top 5 candidates with AI to avoid 40+ second delays
-      const maxCandidatesToCheck = 5;
-      const candidatesToCheck = candidates.slice(0, maxCandidatesToCheck);
-      
-      // Evaluate top candidates with our fuzzy matcher
-      for (const candidate of candidatesToCheck) {
+      // Evaluate each candidate with our fuzzy matcher
+      for (const candidate of candidates) {
         const fuzzyResult = await fuzzyMatcher.matchPayee(
           classification.cleanedName,
           candidate.payeeName
@@ -119,7 +115,7 @@ export class PayeeMatchingService {
         return { matched: false };
       }
       
-      // Use the matcher's confidence and reasoning
+      // Use the fuzzy matcher's confidence and reasoning
       let finalConfidence = bestMatchResult.confidence;
       let matchReasoning = bestMatchResult.matchType === 'ai_enhanced' 
         ? bestMatchResult.details.aiReasoning || 'AI-enhanced match'
