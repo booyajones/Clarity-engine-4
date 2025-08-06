@@ -119,6 +119,55 @@ router.post('/retry', async (req, res) => {
   }
 });
 
+// Cancel an active search
+router.post('/searches/:id/cancel', async (req, res) => {
+  try {
+    const searchId = parseInt(req.params.id);
+    
+    if (isNaN(searchId)) {
+      return res.status(400).json({ error: 'Invalid search ID' });
+    }
+
+    // Get the existing search
+    const [existingSearch] = await db
+      .select()
+      .from(mastercardSearchRequests)
+      .where(eq(mastercardSearchRequests.id, searchId))
+      .limit(1);
+
+    if (!existingSearch) {
+      return res.status(404).json({ error: 'Search not found' });
+    }
+
+    // Only cancel active searches (pending, submitted, polling)
+    if (!['pending', 'submitted', 'polling'].includes(existingSearch.status)) {
+      return res.status(400).json({ 
+        error: 'Can only cancel active searches',
+        currentStatus: existingSearch.status 
+      });
+    }
+
+    // Update the search status to cancelled
+    await db
+      .update(mastercardSearchRequests)
+      .set({ 
+        status: 'cancelled',
+        completedAt: new Date(),
+        error: 'Search cancelled by user'
+      })
+      .where(eq(mastercardSearchRequests.id, searchId));
+
+    res.json({ 
+      success: true, 
+      message: 'Search cancelled successfully',
+      searchId: existingSearch.searchId
+    });
+  } catch (error) {
+    console.error('Error cancelling Mastercard search:', error);
+    res.status(500).json({ error: 'Failed to cancel search' });
+  }
+});
+
 // Get a specific search by ID
 router.get('/searches/:id', async (req, res) => {
   try {

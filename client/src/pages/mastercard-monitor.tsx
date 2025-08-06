@@ -38,6 +38,8 @@ const getStatusIcon = (status: string) => {
     case 'failed':
     case 'timeout':
       return <XCircle className="h-4 w-4 text-red-500" />;
+    case 'cancelled':
+      return <XCircle className="h-4 w-4 text-orange-500" />;
     case 'submitted':
     case 'polling':
       return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />;
@@ -53,6 +55,7 @@ const getStatusBadge = (status: string) => {
     completed: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
     failed: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
     timeout: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+    cancelled: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
     submitted: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
     polling: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
     pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
@@ -105,6 +108,17 @@ export default function MastercardMonitor() {
     },
   });
 
+  // Cancel mutation for active searches
+  const cancelMutation = useMutation({
+    mutationFn: async (searchId: number) => {
+      const res = await apiRequest('POST', `/api/mastercard/searches/${searchId}/cancel`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/mastercard/searches'] });
+    },
+  });
+
   const handleRefresh = () => {
     searchesQuery.refetch();
   };
@@ -134,7 +148,7 @@ export default function MastercardMonitor() {
   );
   
   const completedSearches = filteredSearches.filter(s => 
-    ['completed', 'failed', 'timeout'].includes(s.status)
+    ['completed', 'failed', 'timeout', 'cancelled'].includes(s.status)
   );
 
   // Pagination
@@ -222,6 +236,7 @@ export default function MastercardMonitor() {
                 <SelectItem value="completed">Completed</SelectItem>
                 <SelectItem value="failed">Failed</SelectItem>
                 <SelectItem value="timeout">Timeout</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -321,8 +336,28 @@ export default function MastercardMonitor() {
                           size="sm"
                           variant="ghost"
                           onClick={() => setSelectedSearch(search)}
+                          title="View Details"
                         >
                           <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => cancelMutation.mutate(search.id)}
+                          disabled={cancelMutation.isPending}
+                          title="Cancel Search"
+                          className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                        >
+                          <XCircle className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setDeleteSearchId(search.id)}
+                          title="Delete Search"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </TableCell>
