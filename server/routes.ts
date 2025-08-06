@@ -645,25 +645,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to check Mastercard status" });
     }
   });
-  
-  // Progressive classification status endpoint
-  app.get("/api/classification/status/:cacheKey", async (req, res) => {
-    try {
-      const { cacheKey } = req.params;
-      const { progressiveClassificationService } = await import("./services/progressiveClassification");
-      
-      const status = await progressiveClassificationService.getClassificationStatus(cacheKey);
-      
-      if (!status) {
-        return res.status(404).json({ error: "Classification not found" });
-      }
-      
-      res.json(status);
-    } catch (error) {
-      console.error("Error getting classification status:", error);
-      res.status(500).json({ error: "Failed to get classification status" });
-    }
-  });
 
   // Export classifications  
   app.get("/api/classifications/export/:id", async (req, res) => {
@@ -944,37 +925,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }).optional(),
   });
   
-  // Single payee classification endpoint - PROGRESSIVE VERSION
+  // Single payee classification endpoint
   app.post("/api/classify-single", classificationLimiter, validateRequestBody(classifySingleSchema), async (req, res) => {
     console.log('Single classification request received:', JSON.stringify(req.body, null, 2));
     try {
       const { payeeName, address, city, state, zipCode, matchingOptions } = req.body;
 
-      // Use progressive classification for instant response
-      const { progressiveClassificationService } = await import("./services/progressiveClassification");
-      
-      // Get immediate results (< 2 seconds)
-      const immediateResult = await progressiveClassificationService.getImmediateResults(
-        payeeName.trim(),
-        address,
-        matchingOptions
-      );
-      
-      // Return immediately with available data
-      res.json({
-        ...immediateResult,
-        // Add placeholder values for UI compatibility
-        payeeType: immediateResult.payeeType || "Processing",
-        confidence: immediateResult.confidence || 0,
-        flagForReview: false,
-        progressiveMode: true,
-        cacheKey: immediateResult['cacheKey']
-      });
-      
-      return;
-      
-      // Old synchronous code (removed):
-      /*
       const { OptimizedClassificationService } = await import("./services/classificationV2");
       const classificationService = new OptimizedClassificationService();
       
@@ -990,7 +946,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Classify the single payee
       const result = await classificationService.classifyPayee(payeeData);
-      */
       
       // Extract the corrected name from the result
       let cleanedName = payeeName.trim();
