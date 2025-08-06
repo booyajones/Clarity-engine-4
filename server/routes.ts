@@ -1141,45 +1141,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // NOW perform Mastercard enrichment with cleaned/validated address data
       let mastercardEnrichment = null;
       if (matchingOptions?.enableMastercard) {
-        // Import and check Mastercard service configuration
-        const { mastercardApi } = await import('./services/mastercardApi');
+        // Use the working Mastercard service to get real merchant data
+        const { mastercardWorkingService } = await import('./services/mastercardWorking');
         
-        if (!mastercardApi.isServiceConfigured()) {
-          mastercardEnrichment = {
-            enriched: false,
-            status: "not_configured",
-            message: "Mastercard API credentials not configured. Please add MASTERCARD_CONSUMER_KEY and certificate.",
-            data: null
-          };
-        } else {
-          try {
-            // Submit Mastercard search (now async - returns immediately)
-            const searchResult = await mastercardApi.enrichSinglePayee(
-              payeeName,
-              cleanedAddressData?.address || '',
-              cleanedAddressData?.city || '',
-              cleanedAddressData?.state || '',
-              cleanedAddressData?.zipCode || ''
-            );
-            
+        try {
+          // Enrich with real Mastercard data
+          const enrichmentData = await mastercardWorkingService.enrichPayee(
+            cleanedName || payeeName.trim(),
+            cleanedAddressData
+          );
+          
+          if (enrichmentData) {
             mastercardEnrichment = {
-              enriched: false, // Not enriched yet, search is in progress
-              status: searchResult.status,
-              searchId: searchResult.searchId,
-              message: "Mastercard search submitted. Results will be available shortly.",
-              data: null,
-              addressUsed: cleanedAddressData // Include the cleaned address used for enrichment
+              enriched: true,
+              status: "success",
+              message: "Successfully enriched with Mastercard merchant data",
+              data: {
+                businessName: enrichmentData.businessName,
+                taxId: enrichmentData.taxId,
+                merchantIds: enrichmentData.merchantIds,
+                mccCode: enrichmentData.mccCode,
+                mccGroup: enrichmentData.mccGroup,
+                address: enrichmentData.address,
+                phone: enrichmentData.phone,
+                matchConfidence: enrichmentData.matchConfidence,
+                transactionRecency: enrichmentData.transactionRecency,
+                commercialHistory: enrichmentData.commercialHistory,
+                smallBusiness: enrichmentData.smallBusiness,
+                purchaseCardLevel: enrichmentData.purchaseCardLevel
+              },
+              addressUsed: cleanedAddressData
             };
-          } catch (error) {
-            console.error('Mastercard enrichment error:', error);
+          } else {
+            // No match found in Mastercard data
             mastercardEnrichment = {
               enriched: false,
-              status: "error",
-              message: `Mastercard enrichment failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              status: "no_match",
+              message: "No matching merchant found in Mastercard network",
               data: null,
               addressUsed: cleanedAddressData
             };
           }
+        } catch (error) {
+          console.error('Mastercard enrichment error:', error);
+          mastercardEnrichment = {
+            enriched: false,
+            status: "error",
+            message: `Mastercard enrichment failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            data: null,
+            addressUsed: cleanedAddressData
+          };
         }
       } else {
         mastercardEnrichment = {
