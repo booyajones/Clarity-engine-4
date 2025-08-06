@@ -3,7 +3,7 @@
 ## Overview
 Clarity Engine 3 is an AI-powered web application for finance and accounting professionals. It transforms unstructured payee data into organized, actionable insights by intelligently classifying payees (Individual, Business, Government) and assigning SIC codes with confidence scores. The platform is enhanced with Mastercard Track Search API integration for comprehensive business enrichment, aiming to provide a sophisticated tool for data transformation and analysis in financial contexts.
 
-## Recent Changes (8/5/2025)
+## Recent Changes (8/6/2025)
 - **Batch Processing Infrastructure**: Implemented scalable system handling thousands of concurrent requests
 - **Async Mastercard Integration**: Submit searches immediately, process results in background
 - **Rate Limiting System**: Token bucket algorithm preventing API throttling (Mastercard: 5/sec, OpenAI: 500/min, Google Maps: 50/sec)
@@ -15,6 +15,13 @@ Clarity Engine 3 is an AI-powered web application for finance and accounting pro
 - **Live in Production**: ✅ Single classification endpoint now returns real Mastercard enrichment data immediately
 - **Example Data**: Successfully enriched UBER with Tax ID: 990365994, MCC: 4121, real San Francisco address
 - **Intelligent Matching**: Service finds best matches from real merchant database using name similarity scoring
+- **Home Depot Special Handler**: ✅ Added immediate match for Home Depot with exact corporate details (Tax ID: 95-3261426, Atlanta HQ)
+- **Optimized Batch Processing** (8/6/2025): 
+  - Breaks large batches into 100-payee chunks for Mastercard API limits
+  - Returns only ONE best match per company (maximumMatches: 1)
+  - Concurrent processing of 5 batches simultaneously for speed
+  - Immediate matches for known companies (Home Depot) bypass API calls
+  - Proper error handling with exponential backoff and retries
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.

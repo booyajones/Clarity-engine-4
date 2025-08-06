@@ -1016,102 +1016,59 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
         mastercardEnrichmentProgress: 0
       });
 
-      console.log(`Starting enrichment for ${businessClassifications.length} business classifications`);
+      console.log(`📦 Starting optimized Mastercard enrichment for ${businessClassifications.length} business classifications`);
 
-      // Process in batches of 100 to show progress
-      const batchSize = 100;
-      let processedCount = 0;
-
-      for (let i = 0; i < businessClassifications.length; i += batchSize) {
-        const batch = businessClassifications.slice(i, i + batchSize);
+      // Import the optimized batch service
+      const { mastercardBatchOptimizedService } = await import('./mastercardBatchOptimized');
+      
+      // Prepare all payees for enrichment
+      const payeesForEnrichment = businessClassifications.map(c => ({
+        id: c.id.toString(),
+        name: c.cleanedName,
+        address: c.address || undefined,
+        city: c.city || undefined,
+        state: c.state || undefined,
+        zipCode: c.zipCode || undefined,
+      }));
+      
+      try {
+        // Use the optimized batch service which handles:
+        // 1. Immediate matches (like Home Depot)
+        // 2. Breaking into optimal batch sizes
+        // 3. Returning only the BEST match per company
+        // 4. Concurrent processing for speed
+        const enrichmentResults = await mastercardBatchOptimizedService.enrichBatch(payeesForEnrichment);
         
-        // Update enrichment status for each classification
-        for (const classification of batch) {
-          await storage.updatePayeeClassificationEnrichmentStatus(classification.id, {
-            enrichmentStatus: "in_progress",
-            enrichmentStartedAt: new Date()
-          });
-        }
+        // Update database with all results
+        await mastercardBatchOptimizedService.updateDatabaseWithResults(enrichmentResults);
         
-        // Prepare payees for Mastercard search
-        const payeesForEnrichment = batch.map(c => ({
-          id: c.id.toString(),
-          name: c.cleanedName,
-          address: c.address || undefined,
-          city: c.city || undefined,
-          state: c.state || undefined,
-          zipCode: c.zipCode || undefined,
-        }));
-
-        try {
-          // Check if Mastercard API is configured before attempting enrichment
-          if (!mastercardApi.isServiceConfigured()) {
-            console.log('Mastercard API not configured - skipping enrichment batch');
-            // Mark all classifications as skipped
-            for (const classification of batch) {
-              await storage.updatePayeeClassificationEnrichmentStatus(classification.id, {
-                enrichmentStatus: "skipped",
-                enrichmentCompletedAt: new Date()
-              });
-            }
-            continue;
-          }
-          
-          // Call Mastercard API to enrich
-          const enrichmentResults = await mastercardApi.enrichPayees(payeesForEnrichment);
-
-          // Update classifications with Mastercard data
-          for (const [payeeId, mastercardData] of enrichmentResults) {
-            const classificationId = parseInt(payeeId);
-            
-            await storage.updatePayeeClassificationWithMastercard(classificationId, {
-              mastercardMatchStatus: mastercardData.matchStatus,
-              mastercardMatchConfidence: mastercardData.matchConfidence,
-              mastercardMerchantCategoryCode: mastercardData.merchantCategoryCode,
-              mastercardMerchantCategoryDescription: mastercardData.merchantCategoryDescription,
-              mastercardAcceptanceNetwork: mastercardData.acceptanceNetwork,
-              mastercardLastTransactionDate: mastercardData.lastTransactionDate,
-              mastercardDataQualityLevel: mastercardData.dataQuality?.level,
-            });
-            
-            // Update individual classification status
-            await storage.updatePayeeClassificationEnrichmentStatus(classificationId, {
-              enrichmentStatus: "completed",
-              enrichmentCompletedAt: new Date()
-            });
-          }
-        } catch (batchError) {
-          console.error('Error enriching batch:', batchError);
-          // Mark failed classifications
-          for (const classification of batch) {
-            await storage.updatePayeeClassificationEnrichmentStatus(classification.id, {
-              enrichmentStatus: "failed",
-              enrichmentError: String(batchError),
-              enrichmentCompletedAt: new Date()
-            });
-          }
-        }
-
-        // Update progress
-        processedCount += batch.length;
-        const progress = Math.round((processedCount / businessClassifications.length) * 100);
-        
-        await storage.updateUploadBatch(batchId, {
-          mastercardEnrichmentProcessed: processedCount,
-          mastercardEnrichmentProgress: progress
+        // Count successful enrichments
+        let successCount = 0;
+        enrichmentResults.forEach(result => {
+          if (result.enriched) successCount++;
         });
         
-        console.log(`Enrichment progress: ${processedCount}/${businessClassifications.length} (${progress}%)`);
+        // Update batch status
+        await storage.updateUploadBatch(batchId, {
+          mastercardEnrichmentStatus: "completed",
+          mastercardEnrichmentCompletedAt: new Date(),
+          mastercardEnrichmentProcessed: businessClassifications.length,
+          mastercardEnrichmentProgress: 100,
+          mastercardEnrichmentSuccessCount: successCount
+        });
+        
+        console.log(`✅ Mastercard enrichment completed: ${successCount}/${businessClassifications.length} successfully enriched`);
+        
+      } catch (error) {
+        console.error('Mastercard batch enrichment failed:', error);
+        
+        // Mark batch as failed but don't fail the overall processing
+        await storage.updateUploadBatch(batchId, {
+          mastercardEnrichmentStatus: "failed",
+          mastercardEnrichmentCompletedAt: new Date(),
+          mastercardEnrichmentError: error instanceof Error ? error.message : 'Unknown error'
+        });
       }
-
-      // Mark enrichment as complete
-      await storage.updateUploadBatch(batchId, {
-        mastercardEnrichmentStatus: "completed",
-        mastercardEnrichmentCompletedAt: new Date(),
-        mastercardEnrichmentProgress: 100
-      });
-
-      console.log(`Enrichment completed for batch ${batchId}`);
     } catch (error) {
       console.error('Error in enrichment process:', error);
       await storage.updateUploadBatch(batchId, {
