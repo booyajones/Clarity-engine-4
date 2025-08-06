@@ -108,7 +108,7 @@ export function AkkioModels() {
         </div>
       </div>
 
-      <Card className="mb-6">
+      <Card className="mb-6 shadow-sm hover:shadow-md transition-shadow duration-200">
         <CardHeader>
           <CardTitle>Model Overview</CardTitle>
           <CardDescription>
@@ -123,6 +123,7 @@ export function AkkioModels() {
             <Button
               onClick={() => trainModelMutation.mutate()}
               disabled={trainModelMutation.isPending || isTraining}
+              className="btn-hover-lift bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white"
             >
               {trainModelMutation.isPending ? (
                 <>
@@ -131,7 +132,7 @@ export function AkkioModels() {
                 </>
               ) : isTraining ? (
                 <>
-                  <Clock className="h-4 w-4 mr-2" />
+                  <Clock className="h-4 w-4 mr-2 animate-pulse" />
                   Training in Progress
                 </>
               ) : (

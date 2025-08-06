@@ -294,35 +294,35 @@ export default function Home() {
     switch (status) {
       case "completed":
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r from-green-50 to-emerald-50 text-green-800 border border-green-200 animate-fade-in">
             <CheckCircle2 className="h-3 w-3 mr-1" />
             Completed
           </span>
         );
       case "processing":
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-800 border border-blue-200">
             <Loader2 className="h-3 w-3 mr-1 animate-spin" />
             Processing
           </span>
         );
       case "failed":
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r from-red-50 to-rose-50 text-red-800 border border-red-200">
             <XCircle className="h-3 w-3 mr-1" />
             Failed
           </span>
         );
       case "cancelled":
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r from-gray-50 to-slate-50 text-gray-800 border border-gray-200">
             <X className="h-3 w-3 mr-1" />
             Cancelled
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r from-gray-50 to-slate-50 text-gray-600 border border-gray-200">
             <Clock className="h-3 w-3 mr-1" />
             Pending
           </span>
@@ -478,7 +478,7 @@ export default function Home() {
               <Button
                 variant={currentView === "upload" ? "default" : "outline"}
                 onClick={() => setCurrentView("upload")}
-                className="flex items-center gap-2"
+                className={`flex items-center gap-2 transition-all ${currentView === "upload" ? "shadow-lg" : "hover:shadow-md hover:border-blue-300"}`}
               >
                 <UploadIcon className="h-4 w-4" />
                 Upload & Process
@@ -486,7 +486,7 @@ export default function Home() {
               <Button
                 variant={currentView === "single" ? "default" : "outline"}
                 onClick={() => setCurrentView("single")}
-                className="flex items-center gap-2"
+                className={`flex items-center gap-2 transition-all ${currentView === "single" ? "shadow-lg" : "hover:shadow-md hover:border-purple-300"}`}
               >
                 <Sparkles className="h-4 w-4" />
                 Quick Classify
@@ -494,7 +494,7 @@ export default function Home() {
               <Button
                 variant={currentView === "keywords" ? "default" : "outline"}
                 onClick={() => setCurrentView("keywords")}
-                className="flex items-center gap-2"
+                className={`flex items-center gap-2 transition-all ${currentView === "keywords" ? "shadow-lg" : "hover:shadow-md hover:border-amber-300"}`}
               >
                 <ClipboardList className="h-4 w-4" />
                 Keyword Management
@@ -502,7 +502,7 @@ export default function Home() {
               <Link href="/akkio-models">
                 <Button
                   variant="outline"
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 hover:shadow-md hover:border-orange-300 transition-all"
                 >
                   <Brain className="h-4 w-4" />
                   Akkio Models
@@ -511,7 +511,7 @@ export default function Home() {
               <Link href="/mastercard-monitor">
                 <Button
                   variant="outline"
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 hover:shadow-md hover:border-green-300 transition-all"
                 >
                   <Activity className="h-4 w-4" />
                   Mastercard Monitor
@@ -524,7 +524,7 @@ export default function Home() {
       <div className="flex-1 p-8 max-w-7xl mx-auto">
 
       {/* Upload Section */}
-      <Card className="mb-8 border border-gray-200 shadow-sm">
+      <Card className="mb-8 border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200">
         <CardHeader>
           <CardTitle className="text-xl font-semibold text-gray-900">
             Upload New File
@@ -547,6 +547,7 @@ export default function Home() {
                 variant="outline"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
+                className="btn-hover-lift"
               >
                 <UploadIcon className="mr-2 h-4 w-4" />
                 Choose File
@@ -765,6 +766,7 @@ export default function Home() {
                   <Button
                     onClick={handleProcessFile}
                     disabled={!selectedColumn || processMutation.isPending}
+                    className="btn-hover-lift bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
                   >
                     {processMutation.isPending ? (
                       <>
@@ -772,7 +774,10 @@ export default function Home() {
                         Processing...
                       </>
                     ) : (
-                      "Process File"
+                      <>
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        Process File
+                      </>
                     )}
                   </Button>
                   <Button
@@ -785,6 +790,7 @@ export default function Home() {
                         fileInputRef.current.value = "";
                       }
                     }}
+                    className="hover:bg-red-50 hover:text-red-600 transition-colors"
                   >
                     Cancel
                   </Button>
@@ -797,11 +803,17 @@ export default function Home() {
 
       {/* Active Jobs */}
       {processingBatches.length > 0 && (
-        <Card className="mb-8 border border-gray-200 shadow-sm">
+        <Card className="mb-8 border border-orange-200 shadow-sm hover:shadow-md transition-all duration-200 bg-gradient-to-r from-orange-50 to-yellow-50">
           <CardHeader>
-            <CardTitle className="text-xl font-semibold text-gray-900">
-              Active Jobs
-            </CardTitle>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Clock className="h-5 w-5 text-orange-600" />
+                <div className="absolute -top-1 -right-1 h-2 w-2 bg-orange-500 rounded-full animate-pulse" />
+              </div>
+              <CardTitle className="text-xl font-semibold text-gray-900">
+                Active Jobs
+              </CardTitle>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -831,14 +843,37 @@ export default function Home() {
       )}
 
       {/* All Jobs Table */}
-      {batches && batches.length > 0 && (
-        <Card className="border border-gray-200 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-xl font-semibold text-gray-900">
-              Classification History
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+      <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200">
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle className="text-xl font-semibold text-gray-900">
+                Classification History
+              </CardTitle>
+              <CardDescription className="mt-1">
+                {batches && batches.length > 0 
+                  ? `${batches.length} batch${batches.length !== 1 ? 'es' : ''} processed`
+                  : 'No batches processed yet'
+                }
+              </CardDescription>
+            </div>
+            {batches && batches.length > 0 && (
+              <Badge variant="secondary" className="text-xs">
+                {completedBatches.length} completed
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {!batches || batches.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <FileSpreadsheet className="h-12 w-12 text-gray-300 mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No classification history</h3>
+              <p className="text-sm text-gray-500 max-w-sm">
+                Upload a CSV or Excel file above to start classifying payees with AI
+              </p>
+            </div>
+          ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -854,7 +889,7 @@ export default function Home() {
               </TableHeader>
               <TableBody>
                 {[...completedBatches, ...otherBatches].map((batch) => (
-                  <TableRow key={batch.id}>
+                  <TableRow key={batch.id} className="hover:bg-gray-50 transition-colors animate-fade-in">
                     <TableCell className="font-medium">{batch.originalFilename}</TableCell>
                     <TableCell>{getStatusBadge(batch.status)}</TableCell>
                     <TableCell>
@@ -927,6 +962,7 @@ export default function Home() {
                               variant="outline"
                               onClick={() => setViewingBatchId(batch.id)}
                               title="View Results"
+                              className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -935,6 +971,7 @@ export default function Home() {
                               variant="outline"
                               onClick={() => handleDownload(batch.id, batch.originalFilename)}
                               title="Download CSV"
+                              className="hover:bg-green-50 hover:text-green-600 transition-colors"
                             >
                               <Download className="h-4 w-4" />
                             </Button>
@@ -945,6 +982,7 @@ export default function Home() {
                           variant="ghost"
                           onClick={() => deleteMutation.mutate(batch.id)}
                           title="Delete"
+                          className="hover:bg-red-50 hover:text-red-600 transition-colors"
                         >
                           <X className="h-4 w-4" />
                         </Button>
@@ -954,9 +992,9 @@ export default function Home() {
                 ))}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
       </div>
     </div>
   );

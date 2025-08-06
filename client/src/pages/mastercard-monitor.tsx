@@ -145,38 +145,46 @@ export default function MastercardMonitor() {
   );
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      {/* Header with Navigation */}
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <Link href="/">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-5 w-5" />
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-orange-50">
+      <div className="container mx-auto p-6 space-y-6">
+        {/* Header with Navigation */}
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <Link href="/">
+              <Button variant="ghost" size="icon" className="hover:bg-amber-100 transition-colors">
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+            </Link>
+            <div className="relative">
+              <Globe className="h-8 w-8 text-amber-600" />
+              {activeSearches.length > 0 && (
+                <div className="absolute -top-1 -right-1 h-3 w-3 bg-amber-500 rounded-full animate-pulse" />
+              )}
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">
+                Mastercard Search Monitor
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400">Track all Mastercard Track™ API searches</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Link href="/">
+              <Button variant="outline" className="hover:bg-amber-50 transition-colors">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Home
+              </Button>
+            </Link>
+            <Button 
+              onClick={handleRefresh}
+              disabled={searchesQuery.isLoading}
+              variant="outline"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${searchesQuery.isLoading ? 'animate-spin' : ''}`} />
+              Refresh
             </Button>
-          </Link>
-          <Globe className="h-8 w-8 text-amber-600" />
-          <div>
-            <h1 className="text-3xl font-bold">Mastercard Search Monitor</h1>
-            <p className="text-gray-600 dark:text-gray-400">Track all Mastercard Track™ API searches</p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Link href="/">
-            <Button variant="outline">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Home
-            </Button>
-          </Link>
-          <Button 
-            onClick={handleRefresh}
-            disabled={searchesQuery.isLoading}
-            variant="outline"
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${searchesQuery.isLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-        </div>
-      </div>
 
       {/* Search and Filter Bar */}
       <Card>
@@ -557,6 +565,7 @@ export default function MastercardMonitor() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      </div>
     </div>
   );
 }
