@@ -1153,15 +1153,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // NOW perform Mastercard enrichment with cleaned/validated address data
       let mastercardEnrichment = null;
       if (matchingOptions?.enableMastercard) {
-        // Use the working Mastercard service to get real merchant data
-        const { mastercardWorkingService } = await import('./services/mastercardWorking');
+        // Use the real Mastercard API to search for the company
+        const { mastercardApi } = await import('./services/mastercardApi');
         
         try {
-          // Enrich with real Mastercard data
-          const enrichmentData = await mastercardWorkingService.enrichPayee(
-            cleanedName || payeeName.trim(),
+          const searchName = cleanedName || payeeName.trim();
+          console.log('=== MASTERCARD SEARCH DEBUG ===');
+          console.log('Searching for company:', searchName);
+          console.log('Address data:', cleanedAddressData);
+          console.log('Using real Mastercard API...');
+          
+          // Search using the real Mastercard API
+          const enrichmentData = await mastercardApi.searchSingleCompany(
+            searchName,
             cleanedAddressData
           );
+          
+          console.log('Mastercard search result:', enrichmentData ? {
+            businessName: enrichmentData.businessName,
+            taxId: enrichmentData.taxId,
+            mccCode: enrichmentData.mccCode
+          } : 'No match found');
           
           if (enrichmentData) {
             mastercardEnrichment = {
@@ -1175,12 +1187,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 mccCode: enrichmentData.mccCode,
                 mccGroup: enrichmentData.mccGroup,
                 address: enrichmentData.address,
+                city: enrichmentData.city,
+                state: enrichmentData.state,
+                zipCode: enrichmentData.zipCode,
                 phone: enrichmentData.phone,
                 matchConfidence: enrichmentData.matchConfidence,
                 transactionRecency: enrichmentData.transactionRecency,
                 commercialHistory: enrichmentData.commercialHistory,
                 smallBusiness: enrichmentData.smallBusiness,
-                purchaseCardLevel: enrichmentData.purchaseCardLevel
+                purchaseCardLevel: enrichmentData.purchaseCardLevel,
+                source: enrichmentData.source
               },
               addressUsed: cleanedAddressData
             };

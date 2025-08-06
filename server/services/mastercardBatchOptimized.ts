@@ -135,17 +135,24 @@ export class MastercardBatchOptimizedService {
       console.log(`🔄 Processing batch ${batchIndex + 1} with ${batch.length} payees`);
       
       // Prepare searches for Mastercard API
-      const searches = batch.map(payee => ({
-        searchRequestId: payee.id.toString(),
-        businessName: payee.name,
-        businessAddress: {
-          addressLine1: payee.address || '',
-          townName: payee.city || '',
-          countrySubDivision: payee.state || '',
-          postCode: payee.zipCode || '',
-          country: 'USA'
-        }
-      }));
+      // Mastercard requires searchRequestId to be alphanumeric only
+      // We need to map the alphanumeric searchRequestId back to the original payee.id
+      const searchIdMapping = new Map<string, string>();
+      const searches = batch.map((payee, index) => {
+        const searchRequestId = `batch${batchIndex}idx${index}t${Date.now()}`;
+        searchIdMapping.set(searchRequestId, payee.id);
+        return {
+          searchRequestId,
+          businessName: payee.name,
+          businessAddress: {
+            addressLine1: payee.address || '',
+            townName: payee.city || '',
+            countrySubDivision: payee.state || '',
+            postCode: payee.zipCode || '',
+            country: 'USA'
+          }
+        };
+      });
       
       // Submit bulk search with MAX 1 match per search (BEST match only)
       const searchResponse = await mastercardApi.submitBulkSearch({
@@ -186,7 +193,12 @@ export class MastercardBatchOptimizedService {
       // Process results
       if (results && results.data && results.data.items) {
         for (const item of results.data.items) {
-          const payeeId = item.searchRequestId;
+          // Map the searchRequestId back to the original payee ID
+          const payeeId = searchIdMapping.get(item.searchRequestId);
+          if (!payeeId) {
+            console.warn(`Could not map searchRequestId ${item.searchRequestId} back to payee ID`);
+            continue;
+          }
           
           if (item.isMatched && item.searchResult) {
             // Extract the BEST match data

@@ -8,7 +8,9 @@ import { eq } from "drizzle-orm";
 
 // Monkey-patch the OAuth library to fix GET request issues
 // The library always includes body hash, but Mastercard rejects GET requests with body hash
+// @ts-ignore - Runtime patching
 const originalGetOAuthParams = oauth.getOAuthParams;
+// @ts-ignore - Runtime patching
 oauth.getOAuthParams = function(consumerKey: string, payload: string | undefined, method?: string) {
   const oauthParams = originalGetOAuthParams.call(this, consumerKey, payload);
   
@@ -30,7 +32,9 @@ oauth.getOAuthParams = function(consumerKey: string, payload: string | undefined
 const originalGetAuthorizationHeader = oauth.getAuthorizationHeader;
 oauth.getAuthorizationHeader = function(uri: string, method: string, payload: string | undefined, consumerKey: string, signingKey: string) {
   // Pass method to getOAuthParams
+  // @ts-ignore - Runtime patching
   const originalMethod = this.getOAuthParams;
+  // @ts-ignore - Runtime patching
   this.getOAuthParams = function(key: string, data: string | undefined) {
     return originalMethod.call(this, key, data, method);
   };
@@ -38,6 +42,7 @@ oauth.getAuthorizationHeader = function(uri: string, method: string, payload: st
   const result = originalGetAuthorizationHeader.call(this, uri, method, payload, consumerKey, signingKey);
   
   // Restore original method
+  // @ts-ignore - Runtime patching
   this.getOAuthParams = originalMethod;
   
   return result;
@@ -363,6 +368,99 @@ export class MastercardApiService {
   }
 
 
+
+  // Search for a single company in real-time
+  async searchSingleCompany(companyName: string, address?: any): Promise<any> {
+    if (!this.isConfigured) {
+      console.log('Mastercard API not configured, skipping search');
+      return null;
+    }
+
+    try {
+      // Generate alphanumeric-only search request ID (Mastercard requirement)
+      const searchRequestId = `single${Date.now()}${Math.random().toString(36).substr(2, 9)}`;
+      
+      const searchRequest: BulkSearchRequest = {
+        lookupType: 'SUPPLIERS' as const,
+        maximumMatches: 1,
+        minimumConfidenceThreshold: '0.1',
+        searches: [{
+          searchRequestId,
+          businessName: companyName,
+          businessAddress: address ? {
+            addressLine1: address.address || undefined,
+            townName: address.city || undefined,
+            countrySubDivision: address.state || undefined,
+            postCode: address.zipCode || undefined,
+            country: 'USA'
+          } : {
+            country: 'USA'
+          }
+        }]
+      };
+
+      console.log('=== MASTERCARD API REAL SEARCH ===');
+      console.log('Company name:', companyName);
+      console.log('Search request:', JSON.stringify(searchRequest, null, 2));
+      
+      // Submit the search
+      const submitResponse = await this.submitBulkSearch(searchRequest);
+      const searchId = submitResponse.bulkSearchId;
+      console.log('Search submitted with ID:', searchId);
+      
+      // Poll for results (Mastercard processes searches asynchronously)
+      let attempts = 0;
+      const maxAttempts = 10;
+      const pollInterval = 2000; // 2 seconds
+      
+      while (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        
+        try {
+          const results = await this.getSearchResults(searchId);
+          
+          if (results && results.results && results.results.length > 0) {
+            const firstResult = results.results[0];
+            
+            // Check if we have a match (EXACT_MATCH or PARTIAL_MATCH)
+            if (firstResult.matchStatus && firstResult.matchStatus !== 'NO_MATCH' && firstResult.merchantDetails) {
+              const merchant = firstResult.merchantDetails;
+              
+              return {
+                matchConfidence: firstResult.matchConfidence || firstResult.matchStatus,
+                businessName: merchant.businessName,
+                taxId: merchant.taxId || merchant.ein,
+                merchantIds: merchant.merchantId ? [merchant.merchantId] : [],
+                address: merchant.address?.street,
+                city: merchant.address?.city,
+                state: merchant.address?.state,
+                zipCode: merchant.address?.postalCode,
+                phone: merchant.phoneNumber,
+                mccCode: merchant.mccCode,
+                mccGroup: merchant.mccDescription,
+                transactionRecency: merchant.transactionData?.lastTransactionDate,
+                commercialHistory: merchant.businessYears,
+                smallBusiness: merchant.isSmallBusiness,
+                purchaseCardLevel: merchant.purchaseCardLevel,
+                source: 'Mastercard Track API'
+              };
+            }
+          }
+        } catch (error) {
+          console.log(`Attempt ${attempts + 1}/${maxAttempts} - Search still processing...`);
+        }
+        
+        attempts++;
+      }
+      
+      console.log('No Mastercard match found for:', companyName);
+      return null;
+      
+    } catch (error) {
+      console.error('Error searching Mastercard:', error);
+      return null;
+    }
+  }
 
   // Check search status by attempting to get results (no separate status endpoint)
   async getSearchStatus(searchId: string): Promise<SearchStatusResponse> {
