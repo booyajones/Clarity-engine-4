@@ -65,7 +65,10 @@ Preferred communication style: Simple, everyday language.
   - Response times improved from 30-45s to 1-2s (20-30x faster)
   - Smart AI thresholds: skip AI for low confidence (<70%) and single-word surnames
   - Database indexes on key columns for rapid lookups
-- **Processing Order**: Address validation/cleaning happens BEFORE Mastercard enrichment for better enrichment scores (implemented 8/1/2025)
+- **Processing Order**: Address validation/cleaning happens BEFORE Mastercard enrichment for better enrichment scores (implemented 8/1/2025, enhanced 8/6/2025)
+  - Mastercard now uses validated/normalized addresses from Google Address Validation when available
+  - Processing sequence: Finexio → OpenAI → Address Validation → Mastercard → Akkio
+  - Validated addresses provide better Mastercard matching accuracy
 - **Intelligent Address Enhancement**: Sophisticated OpenAI-powered address improvement system that intelligently decides when AI adds value:
   - **Smart Decision Strategies**: Google failure recovery, incomplete components, low precision, missing data, business context matching, international formats, typo correction
   - **Selective Enhancement**: Only uses OpenAI when it can meaningfully improve results (e.g., finding real HQ instead of generic PO Box)

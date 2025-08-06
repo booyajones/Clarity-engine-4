@@ -203,6 +203,11 @@ export class ProgressiveClassificationService {
           );
           if (validatedAddress.success) {
             job.result.googleAddressValidation = validatedAddress;
+            // Update the address with the validated/normalized version for better Mastercard matching
+            if (validatedAddress.normalizedAddress) {
+              job.result.address = validatedAddress.normalizedAddress;
+              console.log(`Job ${jobId}: Address updated with validated version for better matching`);
+            }
             job.updatedAt = Date.now();
           }
         } catch (error) {
@@ -222,6 +227,35 @@ export class ProgressiveClassificationService {
           
           // Check if the service is configured
           if (mastercardApi.isServiceConfigured()) {
+            // Use the best available address - prioritize validated address if available
+            let bestAddress = job.result.address;
+            let addressDetails: any = {
+              addressLine1: job.result.address,
+              country: 'USA'
+            };
+            
+            // If we have validated address from Google, use that for better matching
+            if (job.result.googleAddressValidation?.success && job.result.googleAddressValidation?.formattedAddress) {
+              bestAddress = job.result.googleAddressValidation.formattedAddress;
+              addressDetails = {
+                addressLine1: job.result.googleAddressValidation.formattedAddress,
+                country: 'USA'
+              };
+              
+              // Add city, state, zip if available from validation
+              if (job.result.googleAddressValidation.locality) {
+                addressDetails.city = job.result.googleAddressValidation.locality;
+              }
+              if (job.result.googleAddressValidation.administrativeArea) {
+                addressDetails.state = job.result.googleAddressValidation.administrativeArea;
+              }
+              if (job.result.googleAddressValidation.postalCode) {
+                addressDetails.postalCode = job.result.googleAddressValidation.postalCode;
+              }
+              
+              console.log(`Job ${jobId}: Using validated address for Mastercard search: ${bestAddress}`);
+            }
+            
             // Submit the search request to Mastercard
             const searchResponse = await mastercardApi.submitBulkSearch({
               lookupType: 'SUPPLIERS' as const,
@@ -230,12 +264,7 @@ export class ProgressiveClassificationService {
               searches: [{
                 searchRequestId: `prog_${jobId}_${Date.now()}`,
                 businessName: payeeName,
-                businessAddress: job.result.address ? {
-                  addressLine1: job.result.address,
-                  country: 'USA'
-                } : {
-                  country: 'USA'
-                }
+                businessAddress: bestAddress ? addressDetails : { country: 'USA' }
               }]
             });
             
@@ -248,7 +277,9 @@ export class ProgressiveClassificationService {
               requestPayload: {
                 payeeName,
                 jobId,
-                address: job.result.address
+                address: bestAddress,
+                addressSource: job.result.googleAddressValidation?.success ? 'validated' : 'original',
+                validationComplete: job.result.googleAddressValidation?.success || false
               },
               pollAttempts: 0,
               maxPollAttempts: 30
