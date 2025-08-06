@@ -4,9 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Brain, RefreshCw, Loader2, Calendar, Clock, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { Brain, RefreshCw, Loader2, Calendar, Clock, CheckCircle, XCircle, AlertCircle, ArrowLeft } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
+import { Link } from "wouter";
 
 interface AkkioModel {
   id: string;
@@ -83,13 +84,28 @@ export function AkkioModels() {
   return (
     <div className="container mx-auto p-6 max-w-6xl">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-          <Brain className="h-8 w-8 text-orange-600" />
-          Akkio Model Management
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-2">
-          Manage payment prediction models powered by Akkio
-        </p>
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <Link href="/">
+              <Button variant="ghost" size="icon">
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+            </Link>
+            <Brain className="h-8 w-8 text-orange-600" />
+            <div>
+              <h1 className="text-3xl font-bold">Akkio Model Management</h1>
+              <p className="text-gray-600 dark:text-gray-400">
+                Manage payment prediction models powered by Akkio
+              </p>
+            </div>
+          </div>
+          <Link href="/">
+            <Button variant="outline">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Home
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <Card className="mb-6">
