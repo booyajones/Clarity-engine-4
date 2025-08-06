@@ -18,6 +18,7 @@ import { generalLimiter, uploadLimiter, classificationLimiter, expensiveLimiter 
 import { db } from "./db";
 import { mastercardSearchRequests } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
+import { mastercardApi } from "./services/mastercardApi";
 
 // Global type for Mastercard results cache
 declare global {
@@ -646,6 +647,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error checking Mastercard status:", error);
       res.status(500).json({ error: "Failed to check Mastercard status" });
+    }
+  });
+
+  // Check Mastercard search status directly from API
+  app.get("/api/mastercard/search/:searchId/status", async (req, res) => {
+    try {
+      const { searchId } = req.params;
+      
+      if (!mastercardApi.isServiceConfigured()) {
+        return res.status(503).json({ 
+          error: "Mastercard service not configured",
+          status: "FAILED" 
+        });
+      }
+      
+      const status = await mastercardApi.getSearchStatus(searchId);
+      res.json(status);
+    } catch (error) {
+      console.error("Error checking Mastercard search status:", error);
+      res.status(500).json({ 
+        error: "Failed to check search status",
+        status: "FAILED"
+      });
+    }
+  });
+
+  // Get Mastercard search results directly from API
+  app.get("/api/mastercard/search/:searchId/results", async (req, res) => {
+    try {
+      const { searchId } = req.params;
+      
+      if (!mastercardApi.isServiceConfigured()) {
+        return res.status(503).json({ 
+          success: false,
+          error: "Mastercard service not configured" 
+        });
+      }
+      
+      // Get results with proper status polling (up to 120 attempts for 5-10 minute searches)
+      const results = await mastercardApi.getSearchResults(searchId, null, 120);
+      
+      if (results) {
+        res.json({
+          success: true,
+          data: results
+        });
+      } else {
+        res.json({
+          success: false,
+          message: "No results found or search failed"
+        });
+      }
+    } catch (error) {
+      console.error("Error getting Mastercard search results:", error);
+      res.status(500).json({ 
+        success: false,
+        error: "Failed to get search results" 
+      });
     }
   });
 

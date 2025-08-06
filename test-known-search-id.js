@@ -1,55 +1,83 @@
 #!/usr/bin/env node
 
-const fetch = require('node-fetch');
-const oauth = require('mastercard-oauth1-signer');
-const fs = require('fs');
+import fetch from 'node-fetch';
+import oauth from 'mastercard-oauth1-signer';
+import fs from 'fs';
 
 async function testKnownSearchId() {
-  console.log('Testing known working search ID: ac654a4c-55a7-4ed7-8485-1817a10e37bd\n');
+  console.log('Testing with KNOWN WORKING search ID: ac654a4c-55a7-4ed7-8485-1817a10e37bd\n');
 
   const consumerKey = process.env.MASTERCARD_CONSUMER_KEY;
   const privateKey = fs.readFileSync('./mastercard-private-key.pem', 'utf8');
   const clientId = consumerKey.split('!')[1];
 
-  // Test the known working search ID
-  const resultsUrl = `https://api.mastercard.com/track/search/bulk-searches/ac654a4c-55a7-4ed7-8485-1817a10e37bd/results?search_request_id=&offset=0&limit=25`;
-
-  const resultsAuthHeader = oauth.getAuthorizationHeader(
-    resultsUrl,
+  const searchId = 'ac654a4c-55a7-4ed7-8485-1817a10e37bd';
+  
+  // First check status
+  const statusUrl = `https://api.mastercard.com/track/search/bulk-searches/${searchId}`;
+  const statusAuthHeader = oauth.getAuthorizationHeader(
+    statusUrl,
     'GET',
     undefined,
     consumerKey,
     privateKey
   );
-
-  const resultsResponse = await fetch(resultsUrl, {
+  
+  console.log('1. Checking status...');
+  const statusResponse = await fetch(statusUrl, {
     method: 'GET',
     headers: {
-      'Authorization': resultsAuthHeader,
+      'Authorization': statusAuthHeader,
       'Accept': 'application/json',
       'X-Openapi-Clientid': clientId
     }
   });
-
-  console.log('Response Status:', resultsResponse.status);
   
-  if (resultsResponse.ok) {
-    const data = await resultsResponse.json();
-    console.log('\n✅ SUCCESS! Got merchant data:');
-    console.log('Total results:', data.data?.items?.length || 0);
-    
-    if (data.data?.items?.length > 0) {
-      console.log('\nFirst 3 merchants:');
-      data.data.items.slice(0, 3).forEach((item, i) => {
-        console.log(`\n${i + 1}. ${item.businessName || 'Unknown'}`);
-        console.log(`   Tax ID: ${item.taxId || 'N/A'}`);
-        console.log(`   MCC: ${item.mccCode || 'N/A'}`);
-        console.log(`   Address: ${item.businessAddress?.addressLine1 || 'N/A'}`);
-      });
+  const statusData = await statusResponse.json();
+  console.log('   Status:', statusData.status);
+  
+  if (statusData.status === 'COMPLETED') {
+    // Get results with EMPTY search_request_id parameter
+    const resultsUrl = `https://api.mastercard.com/track/search/bulk-searches/${searchId}/results?search_request_id=&offset=0&limit=5`;
+    const resultsAuthHeader = oauth.getAuthorizationHeader(
+      resultsUrl,
+      'GET',
+      undefined,
+      consumerKey,
+      privateKey
+    );
+
+    console.log('\n2. Getting results (first 5)...');
+    const resultsResponse = await fetch(resultsUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': resultsAuthHeader,
+        'Accept': 'application/json',
+        'X-Openapi-Clientid': clientId
+      }
+    });
+
+    if (resultsResponse.ok) {
+      const data = await resultsResponse.json();
+      console.log('   Total results:', data.data?.total || 0);
+      console.log('   Results in this page:', data.data?.items?.length || 0);
+      
+      if (data.data?.items && data.data.items.length > 0) {
+        console.log('\n3. Sample merchant data:');
+        data.data.items.slice(0, 3).forEach((item, index) => {
+          const details = item.searchResult?.entityDetails;
+          const cardData = item.searchResult?.cardProcessingHistory;
+          
+          console.log(`\n   Merchant ${index + 1}:`);
+          console.log(`   - Name: ${details?.businessName}`);
+          console.log(`   - Tax ID: ${details?.organisationIdentifications?.[0]?.identification}`);
+          console.log(`   - MCC: ${cardData?.mcc} (${cardData?.mccGroup})`);
+          console.log(`   - Confidence: ${item.confidence}`);
+        });
+      }
+    } else {
+      console.log('   Error getting results:', resultsResponse.status);
     }
-  } else {
-    const error = await resultsResponse.text();
-    console.log('Error:', error);
   }
 }
 
