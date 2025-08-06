@@ -555,7 +555,7 @@ export class MastercardApiService {
   // Get search results with patient retrying
   async getSearchResults(searchId: string, searchRequestId?: string, maxRetries = 30): Promise<SearchResultsResponse | null> {
     let retries = 0;
-    const baseDelay = 10000; // Start with 10 seconds
+    const baseDelay = 2000; // Start with 2 seconds for faster initial response
     
     while (retries < maxRetries) {
       try {
@@ -576,13 +576,36 @@ export class MastercardApiService {
 
         if (!response.ok) {
           const error = await response.text();
+          console.log(`Mastercard response for ${searchId}: Status ${response.status}, Body: ${error.substring(0, 500)}`);
           
-          // If results aren't ready yet, wait and retry
-          if ((response.status === 400 && error.includes('RESULTS_NOT_FOUND')) || 
-              response.status === 401 || 
-              response.status === 404) {
+          // Check if this is a "no results found" response (search complete but no matches)
+          if (response.status === 400 && error.includes('RESULTS_NOT_FOUND') && error.includes('"Recoverable" : false')) {
+            console.log(`Search ${searchId}: Completed with no results found`);
+            // Return empty results - the search is done
+            return {
+              bulkSearchId: searchId,
+              results: []
+            };
+          }
+          
+          // If results aren't ready yet (still processing), wait and retry
+          if (response.status === 401 || response.status === 404) {
             retries++;
-            const delay = Math.min(baseDelay * Math.floor((retries + 1) / 3), 30000); // Cap at 30 seconds
+            // Progressive delay: 2s, 2s, 2s, 4s, 4s, 6s, 8s, 10s, then 15s for remaining
+            let delay;
+            if (retries <= 3) {
+              delay = 2000; // First 3 attempts: 2 seconds
+            } else if (retries <= 5) {
+              delay = 4000; // Next 2 attempts: 4 seconds
+            } else if (retries <= 6) {
+              delay = 6000; // Next attempt: 6 seconds
+            } else if (retries <= 7) {
+              delay = 8000; // Next attempt: 8 seconds
+            } else if (retries <= 8) {
+              delay = 10000; // Next attempt: 10 seconds
+            } else {
+              delay = 15000; // Remaining attempts: 15 seconds
+            }
             console.log(`Search ${searchId}: Results not ready (attempt ${retries}/${maxRetries}), waiting ${delay/1000}s...`);
             await new Promise(resolve => setTimeout(resolve, delay));
             continue;

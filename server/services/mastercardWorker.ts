@@ -94,10 +94,11 @@ export class MastercardWorker {
         .where(eq(mastercardSearchRequests.id, search.id));
 
       // Try to get results - use searchId as the search_request_id
+      // Don't limit retries - let it poll properly for results
       const results = await this.mastercardService.getSearchResults(
         search.searchId, 
-        search.searchId,  // Use searchId as the search_request_id
-        1
+        search.searchId  // Use searchId as the search_request_id
+        // maxRetries defaults to 30, no need to override
       );
 
       if (results) {
