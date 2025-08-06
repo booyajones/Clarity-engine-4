@@ -59,35 +59,34 @@ export class ProgressiveClassificationService {
       stage: 'initial',
     };
     
-    // Stage 1: Quick Finexio matching WITHOUT AI (should be < 1 second)
+    // Stage 1: Quick Finexio matching (should be < 1 second with local cache)
     if (matchingOptions?.enableFinexio !== false) {
       try {
-        // Import the cache service directly for fast matching
-        const { supplierCacheService } = await import('./supplierCacheService');
+        const payeeData = {
+          id: -1,
+          cleanedName: payeeName.trim(),
+          originalName: payeeName.trim(),
+          address: address || null,
+        };
         
-        // Do a simple string match in the cache (no AI, no fuzzy matching)
-        const cachedSuppliers = await supplierCacheService.searchCachedSuppliers(payeeName.trim());
+        // Use the regular matching service but with AI disabled for speed
+        const quickMatchOptions = {
+          ...matchingOptions,
+          enableAI: false, // Disable AI fuzzy matching for speed
+          aiConfidenceThreshold: 0 // Don't use AI at all
+        };
         
-        if (cachedSuppliers.length > 0) {
-          // Just take the first match without AI scoring
-          const bestMatch = cachedSuppliers[0];
-          
-          result.bigQueryMatch = {
-            matched: true,
-            finexioSupplier: {
-              id: bestMatch.payeeId,
-              name: bestMatch.payeeName,
-              finexioMatchScore: 100, // Simple match
-              paymentType: bestMatch.paymentType || 'ACH',
-              matchReasoning: 'Quick cache match (no AI)',
-              matchType: 'cache_simple',
-              confidence: 1
-            }
-          };
+        const matchResult = await payeeMatchingService.matchPayeeWithBigQuery(
+          payeeData as any,
+          quickMatchOptions
+        );
+        
+        if (matchResult.matched) {
+          result.bigQueryMatch = matchResult;
           result.stage = 'finexio';
         }
       } catch (error) {
-        console.error('Quick Finexio matching error:', error);
+        console.error('Finexio matching error:', error);
       }
     }
     

@@ -92,22 +92,59 @@ export class PayeeMatchingService {
         return { matched: false };
       }
       
-      // Find the best match using our fuzzy matching algorithms
+      // Find the best match
       let bestMatch = null;
       let bestConfidence = 0;
       let bestMatchResult = null;
       
-      // Evaluate each candidate with our fuzzy matcher
-      for (const candidate of candidates) {
-        const fuzzyResult = await fuzzyMatcher.matchPayee(
-          classification.cleanedName,
-          candidate.payeeName
-        );
-        
-        if (fuzzyResult.confidence > bestConfidence) {
-          bestConfidence = fuzzyResult.confidence;
-          bestMatch = candidate;
-          bestMatchResult = fuzzyResult;
+      // Check if AI is disabled for quick matching
+      if (opts.enableAI === false) {
+        // Simple string matching without AI for speed
+        for (const candidate of candidates) {
+          const cleanedCandidateName = candidate.payeeName.toLowerCase().trim();
+          const cleanedSearchName = classification.cleanedName.toLowerCase().trim();
+          
+          // Exact match
+          if (cleanedCandidateName === cleanedSearchName) {
+            bestMatch = candidate;
+            bestConfidence = 1.0;
+            bestMatchResult = {
+              confidence: 1.0,
+              isMatch: true,
+              matchType: 'exact',
+              details: {}
+            };
+            break;
+          }
+          
+          // Contains match (e.g., "Microsoft" in "Microsoft Corporation")
+          if (cleanedCandidateName.includes(cleanedSearchName) || cleanedSearchName.includes(cleanedCandidateName)) {
+            const confidence = 0.8;
+            if (confidence > bestConfidence) {
+              bestConfidence = confidence;
+              bestMatch = candidate;
+              bestMatchResult = {
+                confidence: confidence,
+                isMatch: true,
+                matchType: 'partial',
+                details: {}
+              };
+            }
+          }
+        }
+      } else {
+        // Use fuzzy matcher with AI when enabled
+        for (const candidate of candidates) {
+          const fuzzyResult = await fuzzyMatcher.matchPayee(
+            classification.cleanedName,
+            candidate.payeeName
+          );
+          
+          if (fuzzyResult.confidence > bestConfidence) {
+            bestConfidence = fuzzyResult.confidence;
+            bestMatch = candidate;
+            bestMatchResult = fuzzyResult;
+          }
         }
       }
       
@@ -115,7 +152,7 @@ export class PayeeMatchingService {
         return { matched: false };
       }
       
-      // Use the fuzzy matcher's confidence and reasoning
+      // Use the matcher's confidence and reasoning
       let finalConfidence = bestMatchResult.confidence;
       let matchReasoning = bestMatchResult.matchType === 'ai_enhanced' 
         ? bestMatchResult.details.aiReasoning || 'AI-enhanced match'
