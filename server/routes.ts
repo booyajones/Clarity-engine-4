@@ -16,6 +16,15 @@ import akkioRoutes from "./routes/akkio";
 import { AppError, errorHandler, notFoundHandler, asyncHandler } from "./middleware/errorHandler";
 import { generalLimiter, uploadLimiter, classificationLimiter, expensiveLimiter } from "./middleware/rateLimiter";
 
+// Global type for Mastercard results cache
+declare global {
+  var mastercardResults: Record<string, {
+    timestamp: number;
+    status: string;
+    data: any;
+  }> | undefined;
+}
+
 // Financial-themed random batch names
 const FINANCIAL_ADJECTIVES = [
   "Bullish", "Bearish", "Liquid", "Volatile", "Stable", "Dynamic", "Secure", "Premium", 
@@ -601,6 +610,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Check Mastercard search status (for polling)
+  app.get("/api/mastercard/status/:searchId", async (req, res) => {
+    try {
+      const { searchId } = req.params;
+      
+      // Check if we have a cached result
+      if (global.mastercardResults && global.mastercardResults[searchId]) {
+        const result = global.mastercardResults[searchId];
+        
+        // Clean up old results (older than 5 minutes)
+        const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+        for (const key in global.mastercardResults) {
+          if (global.mastercardResults[key].timestamp < fiveMinutesAgo) {
+            delete global.mastercardResults[key];
+          }
+        }
+        
+        // Return the cached result
+        res.json({
+          completed: true,
+          ...result.data
+        });
+      } else {
+        // Still pending
+        res.json({
+          completed: false,
+          status: "pending",
+          message: "Mastercard enrichment still in progress..."
+        });
+      }
+    } catch (error) {
+      console.error("Error checking Mastercard status:", error);
+      res.status(500).json({ error: "Failed to check Mastercard status" });
+    }
+  });
+
   // Export classifications  
   app.get("/api/classifications/export/:id", async (req, res) => {
     try {
@@ -1150,72 +1195,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // NOW perform Mastercard enrichment with cleaned/validated address data
+      // NOW perform Mastercard enrichment with cleaned/validated address data - NON-BLOCKING!
       let mastercardEnrichment = null;
+      let mastercardSearchId = null;
+      
       if (matchingOptions?.enableMastercard) {
-        // Use the real Mastercard API to search for the company
+        // Start Mastercard search asynchronously for instant UI response
         const { mastercardApi } = await import('./services/mastercardApi');
         
         try {
           const searchName = cleanedName || payeeName.trim();
-          console.log('=== MASTERCARD SEARCH DEBUG ===');
+          console.log('=== STARTING ASYNC MASTERCARD SEARCH ===');
           console.log('Searching for company:', searchName);
           console.log('Address data:', cleanedAddressData);
-          console.log('Using real Mastercard API...');
           
-          // Search using the real Mastercard API
-          const enrichmentData = await mastercardApi.searchSingleCompany(
+          // Generate unique search ID for polling
+          mastercardSearchId = `single${Date.now()}${Math.random().toString(36).substr(2, 9)}`;
+          
+          // Start search in background (non-blocking) - DON'T AWAIT!
+          mastercardApi.searchSingleCompany(
             searchName,
             cleanedAddressData
-          );
-          
-          console.log('Mastercard search result:', enrichmentData ? {
-            businessName: enrichmentData.businessName,
-            taxId: enrichmentData.taxId,
-            mccCode: enrichmentData.mccCode
-          } : 'No match found');
-          
-          if (enrichmentData) {
-            mastercardEnrichment = {
-              enriched: true,
-              status: "success",
-              message: "Successfully enriched with Mastercard merchant data",
+          ).then(enrichmentData => {
+            // Store result for later retrieval
+            if (!global.mastercardResults) {
+              global.mastercardResults = {};
+            }
+            
+            if (enrichmentData) {
+              global.mastercardResults[mastercardSearchId] = {
+                timestamp: Date.now(),
+                status: 'success',
+                data: {
+                  enriched: true,
+                  status: "success",
+                  message: "Successfully enriched with Mastercard merchant data",
+                  data: {
+                    businessName: enrichmentData.businessName,
+                    taxId: enrichmentData.taxId,
+                    merchantIds: enrichmentData.merchantIds,
+                    mccCode: enrichmentData.mccCode,
+                    mccGroup: enrichmentData.mccGroup,
+                    address: enrichmentData.address,
+                    city: enrichmentData.city,
+                    state: enrichmentData.state,
+                    zipCode: enrichmentData.zipCode,
+                    phone: enrichmentData.phone,
+                    matchConfidence: enrichmentData.matchConfidence,
+                    transactionRecency: enrichmentData.transactionRecency,
+                    commercialHistory: enrichmentData.commercialHistory,
+                    smallBusiness: enrichmentData.smallBusiness,
+                    purchaseCardLevel: enrichmentData.purchaseCardLevel,
+                    source: enrichmentData.source
+                  },
+                  addressUsed: cleanedAddressData
+                }
+              };
+            } else {
+              global.mastercardResults[mastercardSearchId] = {
+                timestamp: Date.now(),
+                status: 'no_match',
+                data: {
+                  enriched: false,
+                  status: "no_match",
+                  message: "No matching merchant found in Mastercard network",
+                  data: null,
+                  addressUsed: cleanedAddressData
+                }
+              };
+            }
+            console.log(`✅ Mastercard result cached for ${mastercardSearchId}`);
+          }).catch(error => {
+            console.error('Mastercard enrichment error:', error);
+            if (!global.mastercardResults) {
+              global.mastercardResults = {};
+            }
+            global.mastercardResults[mastercardSearchId] = {
+              timestamp: Date.now(),
+              status: 'error',
               data: {
-                businessName: enrichmentData.businessName,
-                taxId: enrichmentData.taxId,
-                merchantIds: enrichmentData.merchantIds,
-                mccCode: enrichmentData.mccCode,
-                mccGroup: enrichmentData.mccGroup,
-                address: enrichmentData.address,
-                city: enrichmentData.city,
-                state: enrichmentData.state,
-                zipCode: enrichmentData.zipCode,
-                phone: enrichmentData.phone,
-                matchConfidence: enrichmentData.matchConfidence,
-                transactionRecency: enrichmentData.transactionRecency,
-                commercialHistory: enrichmentData.commercialHistory,
-                smallBusiness: enrichmentData.smallBusiness,
-                purchaseCardLevel: enrichmentData.purchaseCardLevel,
-                source: enrichmentData.source
-              },
-              addressUsed: cleanedAddressData
+                enriched: false,
+                status: "error",
+                message: `Mastercard enrichment failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                data: null,
+                addressUsed: cleanedAddressData
+              }
             };
-          } else {
-            // No match found in Mastercard data
-            mastercardEnrichment = {
-              enriched: false,
-              status: "no_match",
-              message: "No matching merchant found in Mastercard network",
-              data: null,
-              addressUsed: cleanedAddressData
-            };
-          }
+          });
+          
+          // Return immediately with pending status
+          mastercardEnrichment = {
+            enriched: false,
+            status: "pending",
+            message: "Mastercard enrichment in progress...",
+            searchId: mastercardSearchId,
+            data: null
+          };
+          
+          console.log('Mastercard search started in background, returning initial results immediately');
         } catch (error) {
-          console.error('Mastercard enrichment error:', error);
+          console.error('Error starting Mastercard search:', error);
           mastercardEnrichment = {
             enriched: false,
             status: "error",
-            message: `Mastercard enrichment failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            message: `Failed to start Mastercard search: ${error instanceof Error ? error.message : 'Unknown error'}`,
             data: null,
             addressUsed: cleanedAddressData
           };

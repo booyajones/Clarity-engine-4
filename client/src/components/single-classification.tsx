@@ -130,59 +130,34 @@ export function SingleClassification() {
   const [pendingMastercardSearchId, setPendingMastercardSearchId] = useState<string | null>(null);
 
   // Poll for Mastercard search results
-  const mastercardSearchQuery = useQuery<{
-    searchId: string;
-    status: string;
-    results?: any;
-    error?: string;
-  }>({
-    queryKey: [`/api/mastercard/search/${pendingMastercardSearchId}`],
+  const mastercardStatusQuery = useQuery<any>({
+    queryKey: [`/api/mastercard/status/${pendingMastercardSearchId}`],
     enabled: !!pendingMastercardSearchId,
     refetchInterval: (query) => {
-      // Poll every 2 seconds if still pending or polling, stop if completed/failed/timeout
-      const status = query.state.data?.status;
-      if (status === 'pending' || status === 'polling' || status === 'submitted') {
-        return 2000;
+      // Poll every 2 seconds if not completed
+      const completed = query.state.data?.completed;
+      if (!completed) {
+        return 2000; // Poll every 2 seconds
       }
-      return false;
+      return false; // Stop polling when completed
     },
   });
 
   // Update result when Mastercard search completes
   useEffect(() => {
-    if (mastercardSearchQuery.data && mastercardSearchQuery.data.status === 'completed' && result) {
-      const mastercardResults = mastercardSearchQuery.data.results;
-      if (mastercardResults && mastercardResults.length > 0) {
-        const firstResult = mastercardResults[0];
-        setResult({
-          ...result,
-          mastercardEnrichment: {
-            enriched: true,
-            status: 'completed',
-            message: 'Mastercard enrichment completed successfully',
-            data: {
-              merchantCategoryCode: firstResult.merchantDetails?.merchantCategoryCode,
-              merchantCategoryDescription: firstResult.merchantDetails?.merchantCategoryDescription,
-              acceptanceNetwork: firstResult.merchantDetails?.acceptanceNetwork?.join(', '),
-              lastTransactionDate: firstResult.merchantDetails?.lastTransactionDate,
-              dataQualityLevel: firstResult.merchantDetails?.dataQuality?.level,
-            }
-          }
-        });
-      } else {
-        setResult({
-          ...result,
-          mastercardEnrichment: {
-            enriched: false,
-            status: 'completed',
-            message: 'No matching merchant found in Mastercard database',
-            data: null
-          }
-        });
-      }
+    if (mastercardStatusQuery.data && mastercardStatusQuery.data.completed && result) {
+      console.log('Mastercard search completed:', mastercardStatusQuery.data);
+      
+      // Update the result with the Mastercard data
+      setResult({
+        ...result,
+        mastercardEnrichment: mastercardStatusQuery.data
+      });
+      
+      // Stop polling
       setPendingMastercardSearchId(null);
     }
-  }, [mastercardSearchQuery.data, result]);
+  }, [mastercardStatusQuery.data, result]);
 
   const classifyMutation = useMutation({
     mutationFn: async (name: string) => {
