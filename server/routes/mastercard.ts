@@ -79,13 +79,16 @@ router.post('/retry', async (req, res) => {
     
     // Submit a new search with the same parameters
     const searchRequest = {
+      lookupType: 'SUPPLIERS' as const,
+      maximumMatches: 1,
+      minimumConfidenceThreshold: '0.3',
       searches: [{
-        searchRequestId: `retry-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-        searchType: existingSearch.searchType,
-        merchantNameAndLocation: {
-          merchantName: requestPayload?.payeeName || '',
-          address: requestPayload?.address || {}
-        }
+        searchRequestId: `retry${Date.now()}${Math.random().toString(36).substring(2, 8)}`.replace(/[^a-zA-Z0-9]/g, '').substring(0, 64),
+        businessName: requestPayload?.payeeName || '',
+        businessAddress: requestPayload?.address ? {
+          addressLine1: requestPayload.address,
+          country: 'USA'
+        } : { country: 'USA' }
       }]
     };
 

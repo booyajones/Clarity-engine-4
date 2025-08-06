@@ -553,14 +553,16 @@ export class MastercardApiService {
   }
 
   // Get search results with patient retrying
-  async getSearchResults(searchId: string, maxRetries = 30): Promise<SearchResultsResponse | null> {
+  async getSearchResults(searchId: string, searchRequestId?: string, maxRetries = 30): Promise<SearchResultsResponse | null> {
     let retries = 0;
     const baseDelay = 10000; // Start with 10 seconds
     
     while (retries < maxRetries) {
       try {
         // Include query parameters as Mastercard requires them
-        const url = `${config.baseUrl}/bulk-searches/${searchId}/results?search_request_id=&offset=0&limit=25`;
+        // Use the searchRequestId if provided, otherwise use the searchId as fallback
+        const requestId = searchRequestId || searchId;
+        const url = `${config.baseUrl}/bulk-searches/${searchId}/results?search_request_id=${requestId}&offset=0&limit=25`;
         const authHeader = this.generateOAuthSignature('GET', url, {});
 
         const response = await fetch(url, {

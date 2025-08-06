@@ -63,7 +63,7 @@ export class MastercardWorker {
               isNull(mastercardSearchRequests.lastPolledAt),
               lt(
                 mastercardSearchRequests.lastPolledAt,
-                new Date(Date.now() - 5000) // Poll again after 5 seconds
+                new Date(Date.now() - 30000) // Poll again after 30 seconds to avoid rate limits
               )
             )
           )
@@ -93,8 +93,12 @@ export class MastercardWorker {
         })
         .where(eq(mastercardSearchRequests.id, search.id));
 
-      // Try to get results
-      const results = await this.mastercardService.getSearchResults(search.searchId, 1);
+      // Try to get results - use searchId as the search_request_id
+      const results = await this.mastercardService.getSearchResults(
+        search.searchId, 
+        search.searchId,  // Use searchId as the search_request_id
+        1
+      );
 
       if (results) {
         // Success! Update the search record with results

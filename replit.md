@@ -9,7 +9,7 @@ Clarity Engine 3 is an AI-powered web application for finance and accounting pro
 - **Backend API Expansion**: Added comprehensive Mastercard management endpoints for delete, retry, and batch operations
 - **Batch Processing Infrastructure**: Implemented scalable system handling thousands of concurrent requests
 - **Async Mastercard Integration**: Submit searches immediately, process results in background
-- **Rate Limiting System**: Token bucket algorithm preventing API throttling (Mastercard: 5/sec, OpenAI: 500/min, Google Maps: 50/sec)
+- **Rate Limiting System**: Token bucket algorithm preventing API throttling (Mastercard: 5/sec with 30s polling interval, OpenAI: 500/min, Google Maps: 50/sec)
 - **Memory-Efficient Processing**: Streaming CSV processing with chunked batches for large datasets
 - **Production-Ready Scalability**: Concurrent processing with progress tracking, error recovery, and database optimizations
 - **Mastercard Integration Complete**: ✅ FULLY WORKING - Service now retrieves and displays real merchant data in real-time
@@ -25,6 +25,11 @@ Clarity Engine 3 is an AI-powered web application for finance and accounting pro
   - Concurrent processing of 5 batches simultaneously for speed
   - Immediate matches for known companies (Home Depot) bypass API calls
   - Proper error handling with exponential backoff and retries
+- **Critical Bug Fixes** (8/6/2025):
+  - Fixed Mastercard API search_request_id parameter (now correctly uses searchId)
+  - Increased Mastercard polling interval from 5s to 30s to avoid rate limiting (429 errors)
+  - Fixed batch upload test endpoints (/api/upload/preview and /api/upload/process)
+  - Mastercard searches now correctly processing with 16 completed, 13 polling
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.

@@ -204,8 +204,8 @@ export class ProgressiveClassificationService {
           if (validatedAddress.success) {
             job.result.googleAddressValidation = validatedAddress;
             // Update the address with the validated/normalized version for better Mastercard matching
-            if (validatedAddress.normalizedAddress) {
-              job.result.address = validatedAddress.normalizedAddress;
+            if (validatedAddress.data?.result?.address?.formattedAddress) {
+              job.result.address = validatedAddress.data.result.address.formattedAddress;
               console.log(`Job ${jobId}: Address updated with validated version for better matching`);
             }
             job.updatedAt = Date.now();
@@ -262,7 +262,7 @@ export class ProgressiveClassificationService {
               maximumMatches: 1, // Get only the best match
               minimumConfidenceThreshold: '0.3',
               searches: [{
-                searchRequestId: `prog_${jobId}_${Date.now()}`,
+                searchRequestId: `prog${jobId.replace(/[^a-zA-Z0-9]/g, '')}${Date.now()}`.substring(0, 64),
                 businessName: payeeName,
                 businessAddress: bestAddress ? addressDetails : { country: 'USA' }
               }]

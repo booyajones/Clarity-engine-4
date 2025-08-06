@@ -194,21 +194,26 @@ export class BatchProcessor {
       
       // Submit Mastercard search if it's a business
       let mastercardSearchId = null;
-      if (payeeType === 'Business' && mastercardApi.isConfigured()) {
+      if (payeeType === 'Business' && mastercardApi.isServiceConfigured()) {
         await apiRateLimiters.mastercard.acquire();
         
         try {
-          const searchResult = await mastercardApi.submitBulkSearch([{
-            searchRequestId: `batch-${this.options.batchId}-${Date.now()}`,
-            businessName: record.payeeName,
-            businessAddress: record.address ? {
-              addressLine1: record.address,
-              townName: record.city,
-              countrySubDivision: record.state,
-              postCode: record.zipCode,
-              country: 'USA'
-            } : undefined
-          }]);
+          const searchResult = await mastercardApi.submitBulkSearch({
+            lookupType: 'SUPPLIERS' as const,
+            maximumMatches: 1,
+            minimumConfidenceThreshold: '0.3',
+            searches: [{
+              searchRequestId: `batch${this.options.batchId}${Date.now()}`.replace(/[^a-zA-Z0-9]/g, '').substring(0, 64),
+              businessName: record.payeeName,
+              businessAddress: record.address ? {
+                addressLine1: record.address,
+                townName: record.city,
+                countrySubDivision: record.state,
+                postCode: record.zipCode,
+                country: 'USA'
+              } : { country: 'USA' }
+            }]
+          });
           
           if (searchResult.bulkSearchId) {
             mastercardSearchId = searchResult.bulkSearchId;
@@ -300,7 +305,6 @@ export class BatchProcessor {
     this.metrics.estimatedTimeRemaining = estimatedTimeRemaining;
 
     await storage.updateUploadBatch(this.options.batchId, {
-      progress,
       processedRecords: this.metrics.processedRecords,
       skippedRecords: this.metrics.failedRecords
     });
