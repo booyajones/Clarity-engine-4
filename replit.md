@@ -30,17 +30,17 @@ Clarity Engine 3 is an AI-powered web application for finance and accounting pro
   - Increased Mastercard polling interval from 5s to 30s to avoid rate limiting (429 errors)
   - Fixed batch upload test endpoints (/api/upload/preview and /api/upload/process)
   - Fixed Mastercard "RESULTS_NOT_FOUND" handling - now correctly returns empty results instead of infinite polling
-  - **Mastercard Integration Status** (8/6/2025 - 8:00 PM):
+  - **Mastercard Integration Status** (8/6/2025 - 10:40 PM):
     - ✅ API authentication and OAuth working correctly  
     - ✅ Status endpoint working - properly checks search status (PENDING/COMPLETED/FAILED)
     - ✅ Results endpoint working - can retrieve data when search is COMPLETED
     - ✅ Known search ID `ac654a4c-55a7-4ed7-8485-1817a10e37bd` returns 1000 real merchant results
-    - ⚠️ **Issue**: New searches stay in "PENDING" status indefinitely
-      - Tested companies: Microsoft, Home Depot, Walmart, Starbucks
-      - All searches remain PENDING and never transition to COMPLETED
-      - Searches are being submitted successfully but not processed by Mastercard
-      - Likely cause: Search parameters don't match Mastercard's expected format or database entries
-      - May need different search criteria (exact merchant names, addresses, or identifiers)
+    - ✅ **BREAKTHROUGH**: Home Depot search COMPLETED successfully!
+      - Search took ~5-10 minutes to complete (not seconds as expected)
+      - Returned match: "HOME DEPOT" with HIGH confidence, MCC 5812
+      - Key finding: Mastercard searches take MINUTES not seconds to process
+      - Need to increase polling timeout from 30 attempts to 60+ attempts
+      - Current polling intervals may be too aggressive for Mastercard's processing time
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.

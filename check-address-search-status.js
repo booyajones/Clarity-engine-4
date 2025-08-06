@@ -4,15 +4,12 @@ import fetch from 'node-fetch';
 import oauth from 'mastercard-oauth1-signer';
 import fs from 'fs';
 
-async function checkHomeDepotSearch() {
-  console.log('Checking Home Depot search that was polling earlier\n');
-
+async function checkSearchStatus() {
   const consumerKey = process.env.MASTERCARD_CONSUMER_KEY;
   const privateKey = fs.readFileSync('./mastercard-private-key.pem', 'utf8');
   const clientId = consumerKey.split('!')[1];
 
-  // The Home Depot search from earlier
-  const searchId = 'cdc904cc-cdac-48e8-994a-1aa8e7145330';
+  const searchId = '8960fef2-2925-41eb-9ca6-255708828dcc';
   
   // Check status
   const statusUrl = `https://api.mastercard.com/track/search/bulk-searches/${searchId}`;
@@ -35,10 +32,10 @@ async function checkHomeDepotSearch() {
   
   if (statusResponse.ok) {
     const statusData = await statusResponse.json();
-    console.log('Home Depot Search Status:', statusData.status);
+    console.log('Search Status after 30 seconds:', statusData.status);
     
     if (statusData.status === 'COMPLETED') {
-      console.log('\n🎉 Search COMPLETED! Getting results...\n');
+      console.log('\n✅ Search COMPLETED! Getting results...\n');
       
       const resultsUrl = `https://api.mastercard.com/track/search/bulk-searches/${searchId}/results?search_request_id=&offset=0&limit=25`;
       const resultsAuthHeader = oauth.getAuthorizationHeader(
@@ -61,25 +58,10 @@ async function checkHomeDepotSearch() {
       if (resultsResponse.ok) {
         const data = await resultsResponse.json();
         console.log('Total results:', data.data?.total || 0);
-        
         if (data.data?.items && data.data.items.length > 0) {
-          console.log('\n✅ FOUND MATCHES FOR HOME DEPOT!\n');
+          console.log('\nMatches found:');
           data.data.items.forEach(item => {
-            const details = item.searchResult?.entityDetails;
-            const cardData = item.searchResult?.cardProcessingHistory;
-            
-            console.log('Match Details:');
-            console.log('- Business Name:', details?.businessName);
-            console.log('- Tax ID:', details?.organisationIdentifications?.[0]?.identification);
-            console.log('- MCC Code:', cardData?.mcc);
-            console.log('- MCC Group:', cardData?.mccGroup);
-            console.log('- Confidence:', item.confidence);
-            console.log('- Address:', details?.businessAddress?.addressLine1 + ', ' + 
-                       details?.businessAddress?.townName + ', ' + 
-                       details?.businessAddress?.countrySubDivision + ' ' + 
-                       details?.businessAddress?.postCode);
-            console.log('- Phone:', details?.phoneNumber);
-            console.log('---');
+            console.log(`- ${item.searchResult?.entityDetails?.businessName || 'Unknown'} (${item.confidence})`);
           });
         }
       } else {
@@ -90,4 +72,4 @@ async function checkHomeDepotSearch() {
   }
 }
 
-checkHomeDepotSearch().catch(console.error);
+checkSearchStatus().catch(console.error);

@@ -549,7 +549,7 @@ export class MastercardApiService {
           status: 'FAILED',
           totalSearches: 1,
           completedSearches: 0,
-          error: 'Search failed'
+          message: 'Search failed'
         };
       } else {
         // PENDING or any other status
@@ -572,10 +572,10 @@ export class MastercardApiService {
     }
   }
 
-  // Get search results with patient retrying
-  async getSearchResults(searchId: string, searchRequestId?: string, maxRetries = 30): Promise<SearchResultsResponse | null> {
+  // Get search results with patient retrying - Mastercard searches take 5-10 MINUTES to complete
+  async getSearchResults(searchId: string, searchRequestId?: string, maxRetries = 120): Promise<SearchResultsResponse | null> {
     let retries = 0;
-    const baseDelay = 2000; // Start with 2 seconds for faster initial response
+    const baseDelay = 5000; // Start with 5 seconds since searches take minutes
     
     while (retries < maxRetries) {
       try {
@@ -590,22 +590,28 @@ export class MastercardApiService {
         if (status.status !== 'COMPLETED') {
           // Still processing, wait and retry
           retries++;
-          // Progressive delay: 2s, 2s, 2s, 4s, 4s, 6s, 8s, 10s, then 15s for remaining
+          // Progressive delay optimized for 5-10 minute completion time
+          // First minute: check every 5 seconds (12 checks)
+          // Minutes 2-5: check every 10 seconds (24 checks)
+          // Minutes 5-10: check every 15 seconds (20 checks)
+          // After 10 minutes: check every 30 seconds
           let delay;
-          if (retries <= 3) {
-            delay = 2000; // First 3 attempts: 2 seconds
-          } else if (retries <= 5) {
-            delay = 4000; // Next 2 attempts: 4 seconds
-          } else if (retries <= 6) {
-            delay = 6000; // Next attempt: 6 seconds
-          } else if (retries <= 7) {
-            delay = 8000; // Next attempt: 8 seconds
-          } else if (retries <= 8) {
-            delay = 10000; // Next attempt: 10 seconds
+          if (retries <= 12) {
+            delay = 5000; // First minute: 5 seconds
+          } else if (retries <= 36) {
+            delay = 10000; // Minutes 2-5: 10 seconds
+          } else if (retries <= 56) {
+            delay = 15000; // Minutes 5-10: 15 seconds
           } else {
-            delay = 15000; // Remaining attempts: 15 seconds
+            delay = 30000; // After 10 minutes: 30 seconds
           }
-          console.log(`Search ${searchId} still ${status.status}, waiting ${delay/1000}s (attempt ${retries}/${maxRetries})`);
+          
+          // Log progress every 10 attempts
+          if (retries % 10 === 0 || retries <= 3) {
+            const minutesWaited = Math.floor((retries * 7500) / 60000); // Rough estimate
+            console.log(`Search ${searchId} still ${status.status}, waiting ${delay/1000}s (attempt ${retries}/${maxRetries}, ~${minutesWaited} minutes elapsed)`);
+          }
+          
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
