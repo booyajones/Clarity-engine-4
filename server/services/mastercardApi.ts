@@ -157,6 +157,9 @@ export class MastercardApiService {
   private activeSearches = new Map<string, SearchStatusResponse>();
   private isConfigured: boolean;
   private privateKey: string | null = null;
+  // Super-optimized result cache with TTL
+  private resultCache = new Map<string, { timestamp: number; data: any }>();
+  private readonly CACHE_TTL = 3600000; // 1 hour cache
 
   constructor() {
     // Check if we have the necessary credentials and extract private key
@@ -377,6 +380,15 @@ export class MastercardApiService {
     }
 
     try {
+      // Check cache first for super-fast response
+      const cacheKey = `mc_${companyName.toLowerCase().replace(/\s+/g, '_')}`;
+      const cached = this.resultCache.get(cacheKey);
+      
+      if (cached && (Date.now() - cached.timestamp) < this.CACHE_TTL) {
+        console.log(`⚡ Cache hit for ${companyName} - returning instantly!`);
+        return cached.data;
+      }
+      
       // Generate alphanumeric-only search request ID (Mastercard requirement)
       const searchRequestId = `single${Date.now()}${Math.random().toString(36).substr(2, 9)}`;
       
@@ -408,13 +420,32 @@ export class MastercardApiService {
       const searchId = submitResponse.bulkSearchId;
       console.log('Search submitted with ID:', searchId);
       
-      // Poll for results (Mastercard processes searches asynchronously)
+      // Super optimized adaptive polling with intelligent intervals
       let attempts = 0;
-      const maxAttempts = 10;
-      const pollInterval = 2000; // 2 seconds
+      const maxAttempts = 30; // Increased for better reliability
+      let pollInterval = 100; // Start ultra-fast (0.1s)
+      
+      console.log(`⚡ Starting super-optimized polling for ${companyName}`);
       
       while (attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        attempts++;
+        
+        // Ultra-optimized adaptive intervals
+        if (attempts <= 5) {
+          pollInterval = 100; // First 5: blazing fast 0.1s checks
+        } else if (attempts <= 10) {
+          pollInterval = 500; // Next 5: still fast 0.5s
+        } else if (attempts <= 15) {
+          pollInterval = 1000; // Next 5: 1s intervals
+        } else if (attempts <= 20) {
+          pollInterval = 2000; // Next 5: 2s intervals
+        } else {
+          pollInterval = 5000; // Final attempts: 5s intervals
+        }
+        
+        // Add tiny jitter to prevent API throttling
+        const jitter = Math.random() * 50; // 0-50ms jitter
+        await new Promise(resolve => setTimeout(resolve, pollInterval + jitter));
         
         try {
           const results = await this.getSearchResults(searchId);
@@ -426,7 +457,10 @@ export class MastercardApiService {
             if (firstResult.matchStatus && firstResult.matchStatus !== 'NO_MATCH' && firstResult.merchantDetails) {
               const merchant = firstResult.merchantDetails;
               
-              return {
+              const totalTime = ((Date.now() - parseInt(searchRequestId.match(/\d{10,}/)?.[0] || '0')) / 1000).toFixed(1);
+              console.log(`✅ Match found in ${totalTime}s after ${attempts} attempts!`);
+              
+              const result = {
                 matchConfidence: firstResult.matchConfidence || firstResult.matchStatus,
                 businessName: merchant.businessName,
                 taxId: merchant.taxId || merchant.ein,
@@ -444,13 +478,22 @@ export class MastercardApiService {
                 purchaseCardLevel: merchant.purchaseCardLevel,
                 source: 'Mastercard Track API'
               };
+              
+              // Save to cache for instant future responses
+              this.resultCache.set(cacheKey, {
+                timestamp: Date.now(),
+                data: result
+              });
+              
+              return result;
             }
           }
         } catch (error) {
-          console.log(`Attempt ${attempts + 1}/${maxAttempts} - Search still processing...`);
+          // Reduce log noise - only log every 5th attempt
+          if (attempts % 5 === 0) {
+            console.log(`⏳ Attempt ${attempts}/${maxAttempts} - Still processing...`);
+          }
         }
-        
-        attempts++;
       }
       
       console.log('No Mastercard match found for:', companyName);

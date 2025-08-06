@@ -165,17 +165,33 @@ export class MastercardBatchOptimizedService {
       const searchId = searchResponse.bulkSearchId;
       console.log(`📨 Submitted Mastercard search ${searchId} for batch ${batchIndex + 1}`);
       
-      // Wait for processing with exponential backoff
+      // Super-optimized adaptive polling for batch results
       let results = null;
       let attempts = 0;
-      const maxAttempts = 10;
+      const maxAttempts = 30; // Increased for reliability
+      let pollInterval = 100; // Start ultra-fast
+      
+      console.log(`⚡ Starting super-optimized batch polling for batch ${batchIndex + 1}`);
       
       while (!results && attempts < maxAttempts) {
         attempts++;
-        const waitTime = Math.min(5000 * Math.pow(1.5, attempts - 1), 30000); // Max 30s wait
         
-        console.log(`⏳ Waiting ${(waitTime / 1000).toFixed(1)}s before checking results (attempt ${attempts}/${maxAttempts})`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
+        // Ultra-optimized adaptive intervals for batches
+        if (attempts <= 5) {
+          pollInterval = 200; // First 5: 0.2s (slightly slower for batches)
+        } else if (attempts <= 10) {
+          pollInterval = 500; // Next 5: 0.5s
+        } else if (attempts <= 15) {
+          pollInterval = 1000; // Next 5: 1s
+        } else if (attempts <= 20) {
+          pollInterval = 3000; // Next 5: 3s
+        } else {
+          pollInterval = 5000; // Final attempts: 5s
+        }
+        
+        // Add jitter to prevent thundering herd
+        const jitter = Math.random() * 100; // 0-100ms jitter
+        await new Promise(resolve => setTimeout(resolve, pollInterval + jitter));
         
         try {
           const searchResults = await mastercardApi.getSearchResults(searchId);
@@ -183,10 +199,14 @@ export class MastercardBatchOptimizedService {
           // Check if we have actual results
           if (searchResults && searchResults.data && searchResults.data.items && searchResults.data.items.length > 0) {
             results = searchResults;
-            console.log(`✅ Received results for batch ${batchIndex + 1}`);
+            const totalTime = (attempts * pollInterval / 1000).toFixed(1);
+            console.log(`✅ Batch ${batchIndex + 1} results ready in ~${totalTime}s after ${attempts} attempts!`);
           }
         } catch (error) {
-          console.log(`Attempt ${attempts} failed, will retry...`);
+          // Only log every 5th error to reduce noise
+          if (attempts % 5 === 0) {
+            console.log(`⏳ Batch ${batchIndex + 1}: attempt ${attempts}/${maxAttempts}`);
+          }
         }
       }
       
