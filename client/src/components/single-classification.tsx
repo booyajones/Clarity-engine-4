@@ -591,10 +591,10 @@ export function SingleClassification() {
                     <Badge className="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100">
                       Disabled
                     </Badge>
-                  ) : result.mastercardEnrichment.status === "pending" ? (
+                  ) : result.mastercardEnrichment.status === "pending" || result.mastercardEnrichment.status === "processing" ? (
                     <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100 flex items-center gap-1">
                       <Loader2 className="h-3 w-3 animate-spin" />
-                      Processing
+                      In Progress
                     </Badge>
                   ) : (
                     <Badge className="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100">
