@@ -5,6 +5,8 @@ Clarity Engine 3 is an AI-powered web application for finance and accounting pro
 
 ## Recent Changes (8/6/2025)
 - **Optimized Processing Order**: Mastercard enrichment now processes AFTER address validation when both are selected, using validated addresses for improved matching accuracy
+- **Enhanced Mastercard Monitor**: Complete job management system with navigation, search/filter, pagination, viewing details, deleting records, and retrying failed searches
+- **Backend API Expansion**: Added comprehensive Mastercard management endpoints for delete, retry, and batch operations
 - **Batch Processing Infrastructure**: Implemented scalable system handling thousands of concurrent requests
 - **Async Mastercard Integration**: Submit searches immediately, process results in background
 - **Rate Limiting System**: Token bucket algorithm preventing API throttling (Mastercard: 5/sec, OpenAI: 500/min, Google Maps: 50/sec)

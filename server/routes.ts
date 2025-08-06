@@ -1433,6 +1433,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const { default: bigqueryRouter } = await import('./routes/bigquery');
   app.use('/api/bigquery', bigqueryRouter);
   
+  // Mastercard routes
+  const { default: mastercardRouter } = await import('./routes/mastercard');
+  app.use('/api/mastercard', mastercardRouter);
+  
   // Check Mastercard search status endpoint
   app.get("/api/mastercard/search/:searchId", async (req, res) => {
     try {
