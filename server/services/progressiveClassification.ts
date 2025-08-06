@@ -215,9 +215,9 @@ export class ProgressiveClassificationService {
         }
       }
       
-      // Stage 4: Mastercard enrichment - TEMPORARILY DISABLED
       // Stage 4: Mastercard enrichment (async, polls in background)
-      if (options.enableMastercard) {
+      // Always enabled - Mastercard enrichment is required for all classifications
+      if (true) { // Always run Mastercard enrichment
         job.stage = 'mastercard';
         job.updatedAt = Date.now();
         console.log(`Job ${jobId}: Starting Mastercard search...`);

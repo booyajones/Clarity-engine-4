@@ -120,7 +120,6 @@ export function SingleClassification() {
   const [payeeName, setPayeeName] = useState("");
   const [result, setResult] = useState<ClassificationResult | null>(null);
   const [enableFinexioMatching, setEnableFinexioMatching] = useState(true);
-  const [enableMastercardMatching, setEnableMastercardMatching] = useState(true);
   const [enableAddressValidation, setEnableAddressValidation] = useState(false);
   const [enableAkkioMatching, setEnableAkkioMatching] = useState(false);
   const [address, setAddress] = useState("");
@@ -242,7 +241,7 @@ export function SingleClassification() {
         payeeName: name,
         matchingOptions: {
           enableFinexio: enableFinexioMatching,
-          enableMastercard: enableMastercardMatching,
+          enableMastercard: true, // Always enabled - Mastercard enrichment is required
           enableGoogleAddressValidation: enableAddressValidation,
           enableOpenAI: true, // Enable intelligent enhancement by default when address validation is on
           enableAkkio: enableAkkioMatching
@@ -376,16 +375,11 @@ export function SingleClassification() {
                 />
               </div>
               
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 opacity-70">
                 <Globe className="h-4 w-4 text-blue-600" />
-                <Label htmlFor="mastercard-toggle" className="text-sm font-normal cursor-pointer">
-                  Mastercard Enrichment
-                </Label>
-                <Switch
-                  id="mastercard-toggle"
-                  checked={enableMastercardMatching}
-                  onCheckedChange={setEnableMastercardMatching}
-                />
+                <span className="text-sm">
+                  Mastercard Enrichment <span className="text-xs text-muted-foreground">(Always Enabled)</span>
+                </span>
               </div>
               
               <div className="flex items-center gap-2">
