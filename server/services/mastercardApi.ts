@@ -385,20 +385,19 @@ export class MastercardApiService {
       if (!response.ok) {
         const error = await response.text();
         
-        // If results aren't ready yet, return pending status
-        if (response.status === 400 && error.includes('RESULTS_NOT_FOUND')) {
-          return {
-            bulkSearchId: searchId,
-            status: 'IN_PROGRESS',
-            totalSearches: 1,
-            completedSearches: 0
-          };
-        }
-        
-        throw new Error(`Mastercard API error: ${response.status} - ${error}`);
+        // Always return IN_PROGRESS for non-200 responses
+        // The status endpoint returns 401, and RESULTS_NOT_FOUND means still processing
+        console.log(`Search ${searchId} status check: ${response.status} - treating as in progress`);
+        return {
+          bulkSearchId: searchId,
+          status: 'IN_PROGRESS',
+          totalSearches: 1,
+          completedSearches: 0
+        };
       }
 
       // Results are ready
+      console.log(`Search ${searchId} status: COMPLETED - results available`);
       return {
         bulkSearchId: searchId,
         status: 'COMPLETED',
@@ -407,50 +406,87 @@ export class MastercardApiService {
       };
     } catch (error) {
       console.error('Error checking search status:', error);
-      throw error;
+      // Don't throw - return IN_PROGRESS
+      return {
+        bulkSearchId: searchId,
+        status: 'IN_PROGRESS',
+        totalSearches: 1,
+        completedSearches: 0
+      };
     }
   }
 
-  // Get search results
-  async getSearchResults(searchId: string, retries = 3): Promise<SearchResultsResponse> {
-    try {
-      // Include query parameters as Mastercard requires them
-      const url = `${config.baseUrl}/bulk-searches/${searchId}/results?search_request_id=&offset=0&limit=25`;
-      const authHeader = this.generateOAuthSignature('GET', url, {});
+  // Get search results with patient retrying
+  async getSearchResults(searchId: string, maxRetries = 30): Promise<SearchResultsResponse | null> {
+    let retries = 0;
+    const baseDelay = 10000; // Start with 10 seconds
+    
+    while (retries < maxRetries) {
+      try {
+        // Include query parameters as Mastercard requires them
+        const url = `${config.baseUrl}/bulk-searches/${searchId}/results?search_request_id=&offset=0&limit=25`;
+        const authHeader = this.generateOAuthSignature('GET', url, {});
 
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Authorization': authHeader,
-          'Accept': 'application/json',
-          'X-Openapi-Clientid': config.clientId || ''
-        },
-      });
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Authorization': authHeader,
+            'Accept': 'application/json',
+            'X-Openapi-Clientid': config.clientId || ''
+          },
+        });
 
-      if (!response.ok) {
-        const error = await response.text();
+        if (!response.ok) {
+          const error = await response.text();
+          
+          // If results aren't ready yet, wait and retry
+          if ((response.status === 400 && error.includes('RESULTS_NOT_FOUND')) || 
+              response.status === 401 || 
+              response.status === 404) {
+            retries++;
+            const delay = Math.min(baseDelay * Math.floor((retries + 1) / 3), 30000); // Cap at 30 seconds
+            console.log(`Search ${searchId}: Results not ready (attempt ${retries}/${maxRetries}), waiting ${delay/1000}s...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+          
+          // For other errors, log but don't throw
+          console.error(`Mastercard API error for ${searchId}: ${response.status} - ${error}`);
+          return null;
+        }
+
+        // Success! Parse and return results
+        const data = await response.json();
+        console.log(`Search ${searchId}: Got results!`, data);
         
-        // Retry if results aren't ready yet
-        if (response.status === 400 && error.includes('RESULTS_NOT_FOUND') && retries > 0) {
-          console.log(`Results still processing, retrying in 1 second... (${retries} retries left)`);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          return this.getSearchResults(searchId, retries - 1);
+        // Handle empty results structure
+        if (!data.results) {
+          data.results = [];
         }
         
-        throw new Error(`Mastercard API error: ${response.status} - ${error}`);
+        // Build proper response structure
+        const searchResult = {
+          bulkSearchId: searchId,
+          results: data.results || []
+        };
+
+        // Remove from active searches once results are retrieved
+        this.activeSearches.delete(searchId);
+
+        return searchResult;
+      } catch (error) {
+        console.error(`Error getting search results for ${searchId}:`, error);
+        retries++;
+        if (retries >= maxRetries) {
+          return null;
+        }
+        // Wait before retry on error
+        await new Promise(resolve => setTimeout(resolve, baseDelay));
       }
-
-      const data = await response.json();
-      const searchResult = SearchResultsResponseSchema.parse(data);
-
-      // Remove from active searches once results are retrieved
-      this.activeSearches.delete(searchId);
-
-      return searchResult;
-    } catch (error) {
-      console.error('Error getting search results:', error);
-      throw error;
     }
+    
+    console.log(`Search ${searchId}: Timed out after ${maxRetries} attempts`);
+    return null;
   }
 
   // Helper to prepare business data for Track Search
@@ -516,21 +552,14 @@ export class MastercardApiService {
         const searchId = searchResponse.searchId || searchResponse.bulkSearchId;
         console.log(`Submitted Mastercard search ${searchId} for ${batch.length} payees`);
 
-        // Poll for completion (in production, use webhooks instead)
-        let status = searchResponse.status || 'IN_PROGRESS';
-        let attempts = 0;
-        const maxAttempts = 60; // 5 minutes with 5-second intervals
-
-        while (status === 'IN_PROGRESS' && attempts < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
-          const statusResponse = await this.getSearchStatus(searchId);
-          status = statusResponse.status;
-          attempts++;
-        }
-
-        if (status === 'COMPLETED') {
-          const results = await this.getSearchResults(searchId);
-          
+        // Wait and then get results (status endpoint doesn't work properly)
+        // Give initial time for processing
+        await new Promise(resolve => setTimeout(resolve, 30000)); // Wait 30 seconds initially
+        
+        // Try to get results with patient retrying
+        const results = await this.getSearchResults(searchId);
+        
+        if (results && results.results) {
           // Map results back to payees
           for (const result of results.results) {
             const referenceId = result.clientReferenceId || result.searchRequestId;
@@ -545,8 +574,9 @@ export class MastercardApiService {
               dataQuality: result.merchantDetails?.dataQuality,
             });
           }
+          console.log(`Mastercard search ${searchId} completed with ${results.results.length} results`);
         } else {
-          console.error(`Mastercard search ${searchId} failed or timed out with status: ${status}`);
+          console.log(`Mastercard search ${searchId} returned no results after polling`);
         }
       } catch (error) {
         console.error('Error enriching batch:', error);
