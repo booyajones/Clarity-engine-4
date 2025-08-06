@@ -133,14 +133,14 @@ export class ProgressiveClassificationService {
             const bestMatch = cachedSuppliers[0];
             job.result.bigQueryMatch = {
               matched: true,
-              matchedPayee: {
-                payeeId: bestMatch.payeeId,
-                payeeName: bestMatch.payeeName,
+              finexioSupplier: {
+                id: bestMatch.payeeId,
+                name: bestMatch.payeeName,
                 confidence: bestMatch.confidence || 1.0,
                 finexioMatchScore: 100,
                 paymentType: bestMatch.paymentType,
                 matchType: 'cached',
-                matchReasoning: 'Cached supplier match',
+                matchReasoning: 'Cached supplier match from Finexio network',
                 matchDetails: {
                   city: bestMatch.city,
                   state: bestMatch.state
@@ -149,6 +149,22 @@ export class ProgressiveClassificationService {
             };
             job.updatedAt = Date.now();
             console.log(`Job ${jobId}: Finexio match found - ${bestMatch.payeeName}`);
+          } else {
+            // No match found
+            job.result.bigQueryMatch = {
+              matched: false,
+              finexioSupplier: {
+                id: null,
+                name: null,
+                confidence: 0,
+                finexioMatchScore: 0,
+                paymentType: null,
+                matchType: 'no_match',
+                matchReasoning: 'No matching supplier found in Finexio network',
+                matchDetails: null
+              }
+            };
+            console.log(`Job ${jobId}: No Finexio match found for "${payeeName}"`);
           }
         } catch (error) {
           console.error(`Job ${jobId}: Finexio error:`, error);
