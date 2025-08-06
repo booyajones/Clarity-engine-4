@@ -925,28 +925,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }).optional(),
   });
   
-  // Single payee classification endpoint
+  // Single payee classification endpoint - NOW WITH PROGRESSIVE RESULTS
   app.post("/api/classify-single", classificationLimiter, validateRequestBody(classifySingleSchema), async (req, res) => {
     console.log('Single classification request received:', JSON.stringify(req.body, null, 2));
     try {
       const { payeeName, address, city, state, zipCode, matchingOptions } = req.body;
 
-      const { OptimizedClassificationService } = await import("./services/classificationV2");
-      const classificationService = new OptimizedClassificationService();
+      // Use progressive classification for immediate response
+      const { progressiveClassificationService } = await import("./services/progressiveClassification");
       
-      // Create a payee data object with address fields
-      const payeeData = {
-        originalName: payeeName.trim(),
-        address: address || "",
-        city: city || "",
-        state: state || "",
-        zipCode: zipCode || "",
-        originalData: {}
-      };
-
-      // Classify the single payee
-      const result = await classificationService.classifyPayee(payeeData);
+      // Start the classification job (returns immediately)
+      const { jobId, status } = await progressiveClassificationService.startClassification(
+        payeeName.trim(),
+        {
+          enableFinexio: matchingOptions?.enableFinexio !== false,
+          enableMastercard: matchingOptions?.enableMastercard || false,
+          enableGoogleAddressValidation: matchingOptions?.enableGoogleAddressValidation || false,
+          enableOpenAI: matchingOptions?.enableOpenAI !== false,
+          enableAkkio: matchingOptions?.enableAkkio || false
+        }
+      );
       
+      // Return immediate response with job ID for polling
+      console.log(`Progressive classification started with job ID: ${jobId}`);
+      res.json({
+        jobId,
+        status: 'processing',
+        payeeName: payeeName.trim(),
+        payeeType: 'Processing',
+        confidence: 0,
+        flagForReview: false,
+        progressiveMode: true,
+        message: 'Classification in progress, poll /api/classify-status/:jobId for updates'
+      });
+      
+    } catch (error) {
+      console.error("Single classification error:", error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+  
+  // New endpoint to check classification job status
+  app.get("/api/classify-status/:jobId", async (req, res) => {
+    try {
+      const { jobId } = req.params;
+      const { progressiveClassificationService } = await import("./services/progressiveClassification");
+      
+      const job = progressiveClassificationService.getJobStatus(jobId);
+      
+      if (!job) {
+        res.status(404).json({ error: 'Job not found' });
+        return;
+      }
+      
+      res.json({
+        jobId,
+        status: job.status,
+        stage: job.stage,
+        result: job.result,
+        error: job.error
+      });
+    } catch (error) {
+      console.error("Status check error:", error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+  
+  /* LEGACY CODE BELOW - TO BE REMOVED AFTER TESTING
       // Extract the corrected name from the result
       let cleanedName = payeeName.trim();
       
@@ -1326,6 +1371,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+  */
 
   // BigQuery routes
   const { default: bigqueryRouter } = await import('./routes/bigquery');

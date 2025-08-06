@@ -128,13 +128,48 @@ export function SingleClassification() {
   const [state, setState] = useState("");
   const [zipCode, setZipCode] = useState("");
   const [pendingMastercardSearchId, setPendingMastercardSearchId] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [progressiveStatus, setProgressiveStatus] = useState<string>('');
 
-  // Poll for Mastercard search results
+  // Poll for progressive classification results
+  const progressiveQuery = useQuery<any>({
+    queryKey: [`/api/classify-status/${jobId}`],
+    enabled: !!jobId,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (status === 'completed' || status === 'failed') {
+        return false; // Stop polling when done
+      }
+      return 1000; // Poll every second while processing
+    },
+  });
+
+  // Update result when progressive classification completes
+  useEffect(() => {
+    if (progressiveQuery.data) {
+      const { status, stage, result: progressiveResult, error } = progressiveQuery.data;
+      
+      if (status === 'completed' && progressiveResult) {
+        console.log('Progressive classification completed:', progressiveResult);
+        setResult(progressiveResult);
+        setJobId(null); // Stop polling
+        setProgressiveStatus('');
+      } else if (status === 'failed') {
+        console.error('Progressive classification failed:', error);
+        alert(`Classification failed: ${error}`);
+        setJobId(null);
+        setProgressiveStatus('');
+      } else if (status === 'processing') {
+        setProgressiveStatus(`Processing: ${stage || 'initializing'}...`);
+      }
+    }
+  }, [progressiveQuery.data]);
+
+  // Poll for Mastercard search results (legacy support)
   const mastercardStatusQuery = useQuery<any>({
     queryKey: [`/api/mastercard/status/${pendingMastercardSearchId}`],
-    enabled: !!pendingMastercardSearchId,
+    enabled: !!pendingMastercardSearchId && !jobId, // Only use if not using progressive mode
     refetchInterval: (query) => {
-      // Poll every 2 seconds if not completed
       const completed = query.state.data?.completed;
       if (!completed) {
         return 2000; // Poll every 2 seconds
@@ -143,21 +178,17 @@ export function SingleClassification() {
     },
   });
 
-  // Update result when Mastercard search completes
+  // Update result when Mastercard search completes (legacy support)
   useEffect(() => {
-    if (mastercardStatusQuery.data && mastercardStatusQuery.data.completed && result) {
+    if (mastercardStatusQuery.data && mastercardStatusQuery.data.completed && result && !jobId) {
       console.log('Mastercard search completed:', mastercardStatusQuery.data);
-      
-      // Update the result with the Mastercard data
       setResult({
         ...result,
         mastercardEnrichment: mastercardStatusQuery.data
       });
-      
-      // Stop polling
       setPendingMastercardSearchId(null);
     }
-  }, [mastercardStatusQuery.data, result]);
+  }, [mastercardStatusQuery.data, result, jobId]);
 
   const classifyMutation = useMutation({
     mutationFn: async (name: string) => {
@@ -198,12 +229,22 @@ export function SingleClassification() {
       }
     },
     onSuccess: (data) => {
-      console.log('Classification successful:', data);
-      setResult(data);
+      console.log('Classification response:', data);
       
-      // Check if Mastercard search is pending
-      if (data.mastercardEnrichment?.searchId && data.mastercardEnrichment?.status === 'pending') {
-        setPendingMastercardSearchId(data.mastercardEnrichment.searchId);
+      // Check if this is a progressive response
+      if (data.progressiveMode && data.jobId) {
+        console.log('Progressive classification started with job ID:', data.jobId);
+        setJobId(data.jobId);
+        setResult(null); // Clear previous results
+        setProgressiveStatus('Initializing classification...');
+      } else {
+        // Legacy response - set result directly
+        setResult(data);
+        
+        // Check if Mastercard search is pending (legacy)
+        if (data.mastercardEnrichment?.searchId && data.mastercardEnrichment?.status === 'pending') {
+          setPendingMastercardSearchId(data.mastercardEnrichment.searchId);
+        }
       }
     },
     onError: (error) => {
@@ -266,6 +307,14 @@ export function SingleClassification() {
                 )}
               </Button>
             </div>
+            
+            {/* Show progressive status */}
+            {progressiveStatus && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground bg-secondary/20 px-3 py-2 rounded-md">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {progressiveStatus}
+              </div>
+            )}
             
             {/* Toggles for matching services */}
             <div className="flex flex-wrap items-center gap-6 text-sm">

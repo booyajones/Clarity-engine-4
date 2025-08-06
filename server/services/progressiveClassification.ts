@@ -1,0 +1,291 @@
+import { nanoid } from 'nanoid';
+import { classificationService } from './classification';
+import { supplierCacheService } from './supplierCacheService';
+import { mastercardBatchOptimizedService } from './mastercardBatchOptimized';
+import { addressValidationService } from './addressValidationService';
+import { akkioService } from './akkioService';
+import { payeeMatchingService } from './payeeMatchingService';
+
+// Define ClassificationResult type
+interface ClassificationResult {
+  payeeName: string;
+  payeeType: 'Individual' | 'Business' | 'Government';
+  confidence: number;
+  sicCode?: string;
+  sicDescription?: string;
+  reasoning?: string;
+  flagForReview?: boolean;
+  address?: string;
+  bigQueryMatch?: any;
+  mastercardEnrichment?: any;
+  googleAddressValidation?: any;
+  akkioPrediction?: any;
+  timedOut?: boolean;
+}
+
+// Global in-memory store for classification jobs
+interface ClassificationJob {
+  id: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  stage: 'initial' | 'finexio' | 'openai' | 'address' | 'mastercard' | 'akkio' | 'complete';
+  result: Partial<ClassificationResult>;
+  error?: string;
+  startedAt: number;
+  updatedAt: number;
+  options: {
+    enableFinexio: boolean;
+    enableMastercard: boolean;
+    enableGoogleAddressValidation: boolean;
+    enableOpenAI: boolean;
+    enableAkkio: boolean;
+  };
+}
+
+// Store jobs in memory (in production, use Redis or database)
+const jobs = new Map<string, ClassificationJob>();
+
+// Clean up old jobs after 10 minutes
+setInterval(() => {
+  const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
+  const entries = Array.from(jobs.entries());
+  for (const [id, job] of entries) {
+    if (job.updatedAt < tenMinutesAgo) {
+      jobs.delete(id);
+    }
+  }
+}, 60 * 1000); // Run every minute
+
+export class ProgressiveClassificationService {
+  /**
+   * Start a new classification job and return immediately
+   */
+  async startClassification(
+    payeeName: string,
+    options: ClassificationJob['options']
+  ): Promise<{ jobId: string; status: string }> {
+    const jobId = `job_${nanoid()}`;
+    
+    // Create the job
+    const job: ClassificationJob = {
+      id: jobId,
+      status: 'pending',
+      stage: 'initial',
+      result: {
+        payeeName,
+        payeeType: 'Processing' as any,
+        confidence: 0,
+        flagForReview: false,
+      },
+      startedAt: Date.now(),
+      updatedAt: Date.now(),
+      options
+    };
+    
+    jobs.set(jobId, job);
+    
+    // Start processing in the background (non-blocking)
+    this.processClassification(jobId, payeeName, options).catch(error => {
+      console.error(`Job ${jobId} failed:`, error);
+      const job = jobs.get(jobId);
+      if (job) {
+        job.status = 'failed';
+        job.error = error.message;
+        job.updatedAt = Date.now();
+      }
+    });
+    
+    return { jobId, status: 'started' };
+  }
+  
+  /**
+   * Get the current status of a classification job
+   */
+  getJobStatus(jobId: string): ClassificationJob | null {
+    return jobs.get(jobId) || null;
+  }
+  
+  /**
+   * Process classification in stages (runs in background)
+   */
+  private async processClassification(
+    jobId: string,
+    payeeName: string,
+    options: ClassificationJob['options']
+  ): Promise<void> {
+    const job = jobs.get(jobId);
+    if (!job) return;
+    
+    try {
+      // Update status
+      job.status = 'processing';
+      job.stage = 'finexio';
+      job.updatedAt = Date.now();
+      
+      // Stage 1: Finexio matching (fast, < 1 second)
+      if (options.enableFinexio) {
+        console.log(`Job ${jobId}: Starting Finexio search...`);
+        try {
+          const cachedSuppliers = await supplierCacheService.searchCachedSuppliers(payeeName, 5);
+          if (cachedSuppliers && cachedSuppliers.length > 0) {
+            const bestMatch = cachedSuppliers[0];
+            job.result.bigQueryMatch = {
+              matched: true,
+              matchedPayee: {
+                payeeId: bestMatch.payeeId,
+                payeeName: bestMatch.payeeName,
+                confidence: bestMatch.confidence || 1.0,
+                finexioMatchScore: 100,
+                paymentType: bestMatch.paymentType,
+                matchType: 'cached',
+                matchReasoning: 'Cached supplier match',
+                matchDetails: {
+                  city: bestMatch.city,
+                  state: bestMatch.state
+                }
+              }
+            };
+            job.updatedAt = Date.now();
+            console.log(`Job ${jobId}: Finexio match found - ${bestMatch.payeeName}`);
+          }
+        } catch (error) {
+          console.error(`Job ${jobId}: Finexio error:`, error);
+        }
+      }
+      
+      // Stage 2: OpenAI classification (can be slow, 5-45 seconds)
+      if (options.enableOpenAI) {
+        job.stage = 'openai';
+        job.updatedAt = Date.now();
+        console.log(`Job ${jobId}: Starting OpenAI classification...`);
+        
+        try {
+          const classificationResult = await classificationService.classifyPayee(payeeName);
+          job.result = {
+            ...job.result,
+            ...classificationResult,
+            payeeName // Preserve original name
+          };
+          job.updatedAt = Date.now();
+          console.log(`Job ${jobId}: OpenAI classification complete`);
+        } catch (error) {
+          console.error(`Job ${jobId}: OpenAI error:`, error);
+          // Set default values if OpenAI fails
+          job.result.payeeType = 'Business';
+          job.result.confidence = 0.5;
+          job.result.flagForReview = true;
+        }
+      } else {
+        // If OpenAI is disabled, set defaults
+        job.result.payeeType = 'Business';
+        job.result.confidence = 0.8;
+      }
+      
+      // Stage 3: Address validation (if enabled)
+      if (options.enableGoogleAddressValidation && job.result.address) {
+        job.stage = 'address';
+        job.updatedAt = Date.now();
+        console.log(`Job ${jobId}: Starting address validation...`);
+        
+        try {
+          const validatedAddress = await addressValidationService.validateAddress(
+            job.result.address,
+            null, // city
+            null, // state
+            null, // zipCode
+            {
+              enableGoogleValidation: true,
+              payeeName,
+              payeeType: job.result.payeeType
+            }
+          );
+          if (validatedAddress.success) {
+            job.result.googleAddressValidation = validatedAddress;
+            job.updatedAt = Date.now();
+          }
+        } catch (error) {
+          console.error(`Job ${jobId}: Address validation error:`, error);
+        }
+      }
+      
+      // Stage 4: Mastercard enrichment - TEMPORARILY DISABLED
+      // TODO: Fix Mastercard integration with proper async search
+      if (options.enableMastercard) {
+        job.stage = 'mastercard';
+        job.updatedAt = Date.now();
+        console.log(`Job ${jobId}: Mastercard search temporarily disabled in progressive mode`);
+        
+        job.result.mastercardEnrichment = {
+          enriched: false,
+          status: 'pending',
+          searchId: `pending_${jobId}`,
+          message: 'Mastercard search will be processed separately'
+        };
+      }
+      
+      // Stage 5: Akkio prediction - TEMPORARILY DISABLED
+      // TODO: Fix Akkio integration with proper async predictions
+      if (options.enableAkkio && job.result.payeeType) {
+        job.stage = 'akkio';
+        job.updatedAt = Date.now();
+        console.log(`Job ${jobId}: Akkio prediction temporarily disabled in progressive mode`);
+        
+        job.result.akkioPrediction = {
+          success: false,
+          message: 'Akkio predictions will be processed separately'
+        };
+      }
+      
+      // Mark as complete
+      job.status = 'completed';
+      job.stage = 'complete';
+      job.updatedAt = Date.now();
+      console.log(`Job ${jobId}: Classification complete`);
+      
+    } catch (error) {
+      console.error(`Job ${jobId}: Fatal error:`, error);
+      job.status = 'failed';
+      job.error = (error as Error).message;
+      job.updatedAt = Date.now();
+    }
+  }
+  
+  /**
+   * Get classification result (waits for completion or timeout)
+   */
+  async waitForResult(jobId: string, timeoutMs = 60000): Promise<ClassificationResult> {
+    const startTime = Date.now();
+    
+    while (Date.now() - startTime < timeoutMs) {
+      const job = jobs.get(jobId);
+      
+      if (!job) {
+        throw new Error('Job not found');
+      }
+      
+      if (job.status === 'completed') {
+        return job.result as ClassificationResult;
+      }
+      
+      if (job.status === 'failed') {
+        throw new Error(job.error || 'Classification failed');
+      }
+      
+      // Wait 100ms before checking again
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    // Return partial result on timeout
+    const job = jobs.get(jobId);
+    if (job && job.result) {
+      return {
+        ...job.result,
+        flagForReview: true,
+        timedOut: true
+      } as ClassificationResult;
+    }
+    
+    throw new Error('Classification timed out');
+  }
+}
+
+export const progressiveClassificationService = new ProgressiveClassificationService();
