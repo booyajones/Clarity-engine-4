@@ -317,7 +317,11 @@ export default function MastercardMonitor() {
               </TableHeader>
               <TableBody>
                 {activeSearches.map((search) => (
-                  <TableRow key={search.id}>
+                  <TableRow 
+                    key={search.id} 
+                    className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
+                    onClick={() => setSelectedSearch(search)}
+                  >
                     <TableCell className="font-mono text-xs">
                       {search.searchId.substring(0, 8)}...
                     </TableCell>
@@ -335,7 +339,10 @@ export default function MastercardMonitor() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => setSelectedSearch(search)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedSearch(search);
+                          }}
                           title="View Details"
                         >
                           <Eye className="h-4 w-4" />
@@ -343,7 +350,10 @@ export default function MastercardMonitor() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => cancelMutation.mutate(search.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            cancelMutation.mutate(search.id);
+                          }}
                           disabled={cancelMutation.isPending}
                           title="Cancel Search"
                           className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
@@ -353,7 +363,10 @@ export default function MastercardMonitor() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => setDeleteSearchId(search.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteSearchId(search.id);
+                          }}
                           title="Delete Search"
                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
                         >
@@ -399,7 +412,11 @@ export default function MastercardMonitor() {
               </TableHeader>
               <TableBody>
                 {paginatedSearches.map((search) => (
-                  <TableRow key={search.id}>
+                  <TableRow 
+                    key={search.id}
+                    className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
+                    onClick={() => setSelectedSearch(search)}
+                  >
                     <TableCell className="font-mono text-xs">
                       {search.searchId.substring(0, 8)}...
                     </TableCell>
@@ -437,7 +454,10 @@ export default function MastercardMonitor() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => setSelectedSearch(search)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedSearch(search);
+                          }}
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
@@ -445,7 +465,10 @@ export default function MastercardMonitor() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => retryMutation.mutate(search)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              retryMutation.mutate(search);
+                            }}
                             disabled={retryMutation.isPending}
                           >
                             <RotateCcw className="h-4 w-4" />
@@ -454,7 +477,10 @@ export default function MastercardMonitor() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => setDeleteSearchId(search.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteSearchId(search.id);
+                          }}
                         >
                           <Trash2 className="h-4 w-4 text-red-500" />
                         </Button>
