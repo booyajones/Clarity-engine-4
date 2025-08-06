@@ -216,8 +216,8 @@ export class ProgressiveClassificationService {
       }
       
       // Stage 4: Mastercard enrichment (async, polls in background)
-      // Always enabled - Mastercard enrichment is required for all classifications
-      if (true) { // Always run Mastercard enrichment
+      // When address validation is enabled, Mastercard runs after it to use the validated address
+      if (options.enableMastercard) {
         job.stage = 'mastercard';
         job.updatedAt = Date.now();
         console.log(`Job ${jobId}: Starting Mastercard search...`);

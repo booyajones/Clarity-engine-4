@@ -4,7 +4,7 @@
 Clarity Engine 3 is an AI-powered web application for finance and accounting professionals. It transforms unstructured payee data into organized, actionable insights by intelligently classifying payees (Individual, Business, Government) and assigning SIC codes with confidence scores. The platform is enhanced with Mastercard Track Search API integration for comprehensive business enrichment, aiming to provide a sophisticated tool for data transformation and analysis in financial contexts.
 
 ## Recent Changes (8/6/2025)
-- **Mastercard Always Enabled**: Updated system to ensure Mastercard enrichment always runs and cannot be disabled by users - provides essential data for all classifications
+- **Optimized Processing Order**: Mastercard enrichment now processes AFTER address validation when both are selected, using validated addresses for improved matching accuracy
 - **Batch Processing Infrastructure**: Implemented scalable system handling thousands of concurrent requests
 - **Async Mastercard Integration**: Submit searches immediately, process results in background
 - **Rate Limiting System**: Token bucket algorithm preventing API throttling (Mastercard: 5/sec, OpenAI: 500/min, Google Maps: 50/sec)

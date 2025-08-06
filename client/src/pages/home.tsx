@@ -73,7 +73,7 @@ export default function Home() {
   const [currentView, setCurrentView] = useState<"upload" | "keywords" | "single">("upload");
   const [matchingOptions, setMatchingOptions] = useState({
     enableFinexio: true,
-    enableMastercard: true, // Always enabled - cannot be changed
+    enableMastercard: true,
     enableGoogleAddressValidation: false,
     enableAddressNormalization: true,
   });
@@ -628,11 +628,20 @@ export default function Home() {
                                 }
                               />
                             </div>
-                            <div className="flex items-center justify-between opacity-70">
-                              <Label className="text-sm">
+                            <div className="flex items-center justify-between">
+                              <Label htmlFor="mastercard-toggle" className="text-sm">
                                 Mastercard Enrichment
+                                {matchingOptions.enableGoogleAddressValidation && (
+                                  <span className="text-xs text-muted-foreground ml-1">(After Address Validation)</span>
+                                )}
                               </Label>
-                              <span className="text-xs text-muted-foreground">Always Enabled</span>
+                              <Switch
+                                id="mastercard-toggle"
+                                checked={matchingOptions.enableMastercard}
+                                onCheckedChange={(checked) =>
+                                  setMatchingOptions((prev) => ({ ...prev, enableMastercard: checked }))
+                                }
+                              />
                             </div>
                             <div className="flex items-center justify-between">
                               <Label htmlFor="google-address-toggle" className="text-sm">
