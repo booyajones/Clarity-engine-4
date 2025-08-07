@@ -64,7 +64,13 @@ export class ProgressiveClassificationService {
    */
   async startClassification(
     payeeName: string,
-    options: ClassificationJob['options']
+    options: ClassificationJob['options'],
+    addressData?: {
+      address?: string;
+      city?: string;
+      state?: string;
+      zipCode?: string;
+    }
   ): Promise<{ jobId: string; status: string }> {
     const jobId = `job_${nanoid()}`;
     
@@ -78,6 +84,11 @@ export class ProgressiveClassificationService {
         payeeType: 'Processing' as any,
         confidence: 0,
         flagForReview: false,
+        // Include address fields if provided
+        ...(addressData?.address && { address: addressData.address }),
+        ...(addressData?.city && { city: addressData.city }),
+        ...(addressData?.state && { state: addressData.state }),
+        ...(addressData?.zipCode && { zipCode: addressData.zipCode }),
       },
       startedAt: Date.now(),
       updatedAt: Date.now(),
@@ -87,7 +98,7 @@ export class ProgressiveClassificationService {
     jobs.set(jobId, job);
     
     // Start processing in the background (non-blocking)
-    this.processClassification(jobId, payeeName, options).catch(error => {
+    this.processClassification(jobId, payeeName, options, addressData).catch(error => {
       console.error(`Job ${jobId} failed:`, error);
       const job = jobs.get(jobId);
       if (job) {
@@ -113,7 +124,13 @@ export class ProgressiveClassificationService {
   private async processClassification(
     jobId: string,
     payeeName: string,
-    options: ClassificationJob['options']
+    options: ClassificationJob['options'],
+    addressData?: {
+      address?: string;
+      city?: string;
+      state?: string;
+      zipCode?: string;
+    }
   ): Promise<void> {
     const job = jobs.get(jobId);
     if (!job) return;

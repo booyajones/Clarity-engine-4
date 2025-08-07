@@ -4,6 +4,12 @@
 Clarity Engine 3 is an AI-powered web application for finance and accounting professionals. It transforms unstructured payee data into organized, actionable insights by intelligently classifying payees (Individual, Business, Government) and assigning SIC codes with confidence scores. The platform is enhanced with Mastercard Track Search API integration for comprehensive business enrichment, aiming to provide a sophisticated tool for data transformation and analysis in financial contexts.
 
 ## Recent Changes (8/7/2025)
+- **Fixed Address Validation**: 
+  - **Issue**: Address validation wasn't working for single classification requests
+  - **Root Cause**: API endpoint wasn't passing address fields (address, city, state, zipCode) to progressive classification service
+  - **Solution**: Updated routes.ts and progressiveClassification.ts to accept and process address fields
+  - **Result**: Address validation now working perfectly with Google Maps API
+  - **Test**: Successfully validated Home Depot HQ address with PREMISE granularity (highest accuracy)
 - **Updated Mastercard API Credentials**: Successfully integrated new Mastercard API credentials issued 08/07/2025, valid until 08/2026
 - **Disabled Mastercard Caching**: Per user request, removed all Mastercard result caching - every search now performs a fresh API call
 - **Fixed Critical Finexio Matching Issues**: 

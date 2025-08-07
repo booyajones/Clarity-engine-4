@@ -1,162 +1,113 @@
 #!/usr/bin/env node
-import fs from 'fs';
-import path from 'path';
 
-// Create a test CSV file with address data
-const testData = `Payee Name,Address,City,State,Zip Code,Amount
-John Smith,123 Main St,New York,NY,10001,500.00
-Apple Inc,1 Infinite Loop,Cupertino,CA,95014,1200.00
-City of Austin,301 W 2nd Street,Austin,TX,78701,750.00
-Jane Doe,456 Oak Ave Apt 5B,Chicago,IL,60601,300.00
-Microsoft Corporation,One Microsoft Way,Redmond,WA,98052,2500.00
-State of California,1303 10th Street,Sacramento,CA,95814,1000.00
-Chase Bank,270 Park Avenue,New York,NY,10017,50.00
-Walmart Inc,702 SW 8th Street,Bentonville,AR,72716,800.00
-Robert Johnson,789 Elm Blvd Suite 200,Miami,FL,33101,425.00
-Internal Transfer - Branch 123,,,,100.00`;
+import fetch from 'node-fetch';
 
-// Write test file
-const filename = 'test-address-validation.csv';
-fs.writeFileSync(filename, testData);
-console.log(`Created test file: ${filename}`);
-
-// Test single classification with address validation
-async function testSingleClassification() {
+async function testAddressValidation() {
+  console.log('🔍 Testing Address Validation with Home Depot HQ\n');
+  console.log('=' .repeat(50));
+  
+  // Test with a real address - Home Depot headquarters
+  const testData = {
+    payeeName: 'HOME DEPOT',
+    address: '2455 Paces Ferry Road',
+    city: 'Atlanta', 
+    state: 'GA',
+    zipCode: '30339',
+    matchingOptions: {
+      enableFinexio: true,
+      enableMastercard: false,
+      enableGoogleAddressValidation: true,
+      enableOpenAI: false,
+      enableAkkio: false
+    }
+  };
+  
+  console.log('Testing with address:');
+  console.log(`  Name: ${testData.payeeName}`);
+  console.log(`  Address: ${testData.address}`);
+  console.log(`  City: ${testData.city}`);
+  console.log(`  State: ${testData.state}`);
+  console.log(`  Zip: ${testData.zipCode}`);
+  console.log('\nSending request...\n');
+  
   try {
-    console.log('\n=== Testing Single Classification with Address Validation ===');
-    
     const response = await fetch('http://localhost:5000/api/classify-single', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        payeeName: 'John Smith',
-        address: '123 Main St',
-        city: 'New York',
-        state: 'NY',
-        zipCode: '10001',
-        matchingOptions: {
-          enableFinexio: true,
-          enableMastercard: false,
-          enableGoogleAddressValidation: true
-        }
-      })
-    });
-
-    const result = await response.json();
-    console.log('Classification Result:', JSON.stringify(result, null, 2));
-    
-    if (result.addressValidation) {
-      console.log('\nAddress Validation Details:');
-      console.log('- Status:', result.addressValidation.status);
-      console.log('- Formatted Address:', result.addressValidation.formattedAddress);
-      console.log('- Confidence:', result.addressValidation.confidence);
-      console.log('- Components:', result.addressValidation.components);
-    }
-  } catch (error) {
-    console.error('Single classification test failed:', error);
-  }
-}
-
-// Test batch upload with address validation
-async function testBatchUpload() {
-  try {
-    console.log('\n=== Testing Batch Upload with Address Validation ===');
-    
-    // First, upload the file
-    const formData = new FormData();
-    formData.append('file', new Blob([testData], { type: 'text/csv' }), filename);
-    
-    const uploadResponse = await fetch('http://localhost:5000/api/upload', {
-      method: 'POST',
-      body: formData
+      body: JSON.stringify(testData)
     });
     
-    const uploadResult = await uploadResponse.json();
-    console.log('Upload result:', uploadResult);
+    const data = await response.json();
     
-    // Preview the file to get headers
-    const previewResponse = await fetch('http://localhost:5000/api/upload/preview', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tempFileName: uploadResult.tempFileName
-      })
-    });
-    
-    const previewResult = await previewResponse.json();
-    console.log('Preview headers:', previewResult.headers);
-    
-    // Process the file with address column mapping
-    const processResponse = await fetch('http://localhost:5000/api/upload/process', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tempFileName: uploadResult.tempFileName,
-        originalFilename: filename,
-        payeeColumn: 'Payee Name',
-        matchingOptions: {
-          enableFinexio: true,
-          enableMastercard: false,
-          enableGoogleAddressValidation: true
-        },
-        addressColumns: {
-          address: 'Address',
-          city: 'City',
-          state: 'State',
-          zipCode: 'Zip Code'
-        }
-      })
-    });
-    
-    const processResult = await processResponse.json();
-    console.log('Process result:', processResult);
-    
-    // Wait a bit for processing
-    console.log('\nWaiting for batch processing...');
-    await new Promise(resolve => setTimeout(resolve, 10000));
-    
-    // Check batch status
-    const statusResponse = await fetch(`http://localhost:5000/api/upload/batches/${processResult.batchId}`);
-    const batchStatus = await statusResponse.json();
-    console.log('\nBatch status:', batchStatus);
-    
-    // Get classifications with address validation results
-    if (batchStatus.status === 'completed') {
-      const classificationsResponse = await fetch(`http://localhost:5000/api/classifications/${processResult.batchId}?limit=5`);
-      const classifications = await classificationsResponse.json();
+    if (data.jobId) {
+      console.log(`Job created: ${data.jobId}`);
+      console.log('Polling for results...\n');
       
-      console.log('\nSample classifications with address validation:');
-      classifications.classifications.slice(0, 3).forEach((c, i) => {
-        console.log(`\n${i + 1}. ${c.originalName}`);
-        console.log(`   Type: ${c.payeeType} (${c.confidence * 100}%)`);
-        if (c.googleFormattedAddress) {
-          console.log(`   Google Validated Address: ${c.googleFormattedAddress}`);
-          console.log(`   Validation Status: ${c.googleAddressValidationStatus}`);
-          console.log(`   Address Confidence: ${c.googleAddressConfidence}`);
+      // Poll for completion
+      let retries = 20;
+      while (retries > 0) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        const statusResponse = await fetch(`http://localhost:5000/api/classify-status/${data.jobId}`);
+        const statusData = await statusResponse.json();
+        
+        if (statusData.status === 'completed') {
+          console.log('✅ Classification completed!\n');
+          console.log('=' .repeat(50));
+          
+          // Check Finexio match
+          if (statusData.result?.bigQueryMatch?.matched) {
+            console.log('📦 Finexio Match:');
+            console.log(`  - Supplier: ${statusData.result.bigQueryMatch.finexioSupplier.name}`);
+            console.log(`  - Score: ${statusData.result.bigQueryMatch.finexioSupplier.finexioMatchScore}%`);
+          }
+          
+          // Check address validation
+          if (statusData.result?.googleAddressValidation) {
+            const validation = statusData.result.googleAddressValidation;
+            console.log('\n📍 Address Validation Results:');
+            
+            if (validation.success) {
+              console.log('  ✅ Address validation successful!');
+              
+              if (validation.data?.result?.address?.formattedAddress) {
+                console.log(`  - Formatted: ${validation.data.result.address.formattedAddress}`);
+              }
+              
+              if (validation.data?.result?.verdict) {
+                const verdict = validation.data.result.verdict;
+                console.log(`  - Complete: ${verdict.addressComplete ? 'Yes' : 'No'}`);
+                console.log(`  - Granularity: ${verdict.validationGranularity || 'N/A'}`);
+              }
+              
+              if (validation.data?.result?.geocode?.location) {
+                const loc = validation.data.result.geocode.location;
+                console.log(`  - Coordinates: ${loc.latitude}, ${loc.longitude}`);
+              }
+            } else {
+              console.log('  ❌ Address validation failed');
+              console.log(`  - Error: ${validation.error || validation.message || 'Unknown error'}`);
+            }
+          } else {
+            console.log('\n❌ No address validation data returned');
+          }
+          
+          break;
+        } else if (statusData.status === 'failed') {
+          console.log('❌ Classification failed:', statusData.error);
+          break;
         }
-      });
+        
+        retries--;
+      }
+      
+      if (retries === 0) {
+        console.log('⏱️ Timeout waiting for results');
+      }
     }
   } catch (error) {
-    console.error('Batch upload test failed:', error);
+    console.error('❌ Error:', error.message);
   }
 }
 
-// Run tests
-async function runTests() {
-  console.log('Starting address validation tests...\n');
-  
-  // Test single classification first
-  await testSingleClassification();
-  
-  // Then test batch upload
-  await testBatchUpload();
-  
-  console.log('\n=== Tests Complete ===');
-  
-  // Clean up
-  fs.unlinkSync(filename);
-  console.log('Cleaned up test file');
-}
-
-// Run the tests
-runTests().catch(console.error);
+testAddressValidation().catch(console.error);

@@ -1005,6 +1005,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           enableGoogleAddressValidation: matchingOptions?.enableGoogleAddressValidation || false,
           enableOpenAI: matchingOptions?.enableOpenAI !== false,
           enableAkkio: matchingOptions?.enableAkkio || false
+        },
+        {
+          address,
+          city,
+          state,
+          zipCode
         }
       );
       
