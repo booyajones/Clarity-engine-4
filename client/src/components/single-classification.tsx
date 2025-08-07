@@ -130,6 +130,7 @@ export function SingleClassification() {
   const [pendingMastercardSearchId, setPendingMastercardSearchId] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [progressiveStatus, setProgressiveStatus] = useState<string>('');
+  const [isProcessing, setIsProcessing] = useState(false); // Track processing state persistently
 
   // Poll for progressive classification results
   const progressiveQuery = useQuery<any>({
@@ -165,6 +166,7 @@ export function SingleClassification() {
         };
         
         setResult(mappedResult);
+        setIsProcessing(false); // Clear processing state when done
         
         // Check if Mastercard search is still processing
         if (progressiveResult.mastercardEnrichment?.status === 'processing' && 
@@ -179,8 +181,10 @@ export function SingleClassification() {
         alert(`Classification failed: ${error}`);
         setJobId(null);
         setProgressiveStatus('');
+        setIsProcessing(false); // Clear processing state on failure
       } else if (status === 'processing') {
         setProgressiveStatus(`Processing: ${stage || 'initializing'}...`);
+        setIsProcessing(true); // Keep processing state active
       }
     }
   }, [progressiveQuery.data]);
@@ -223,9 +227,18 @@ export function SingleClassification() {
             enriched: !!mastercardData && mastercardData.matchStatus !== 'NO_MATCH',
             status: 'completed',
             data: mastercardData ? {
-              businessName: mastercardData.merchantDetails?.merchantName,
-              merchantCategoryCode: mastercardData.merchantDetails?.merchantCategoryCode,
-              merchantCategoryDescription: mastercardData.merchantDetails?.merchantCategoryDescription,
+              businessName: mastercardData.merchantDetails?.merchantName || mastercardData.requestedCompanyName,
+              taxId: mastercardData.matchedCompany?.taxId,
+              mccCode: mastercardData.merchantDetails?.merchantCategoryCode,
+              mccGroup: mastercardData.merchantDetails?.merchantCategoryDescription,
+              address: mastercardData.matchedCompany?.businessAddress ? {
+                addressLine1: mastercardData.matchedCompany.businessAddress.addressLine1,
+                townName: mastercardData.matchedCompany.businessAddress.city,
+                countrySubDivision: mastercardData.matchedCompany.businessAddress.state,
+                postCode: mastercardData.matchedCompany.businessAddress.zip,
+                country: mastercardData.matchedCompany.businessAddress.countryCode
+              } : undefined,
+              phone: mastercardData.matchedCompany?.businessPhone,
               matchConfidence: mastercardData.matchConfidence,
               acceptanceNetwork: mastercardData.merchantDetails?.acceptanceNetwork,
               lastTransactionDate: mastercardData.merchantDetails?.lastTransactionDate,
@@ -235,6 +248,7 @@ export function SingleClassification() {
           }
         });
         setPendingMastercardSearchId(null);
+        setIsProcessing(false); // Clear processing state when Mastercard completes
       } else if (status === 'failed' || status === 'timeout') {
         console.error('Mastercard search failed:', error);
         setResult({
@@ -247,6 +261,7 @@ export function SingleClassification() {
           }
         });
         setPendingMastercardSearchId(null);
+        setIsProcessing(false); // Clear processing state on failure
       }
     }
   }, [mastercardStatusQuery.data]);
@@ -298,19 +313,23 @@ export function SingleClassification() {
         setJobId(data.jobId);
         setResult(null); // Clear previous results
         setProgressiveStatus('Initializing classification...');
+        setIsProcessing(true); // Set processing state
       } else {
         // Legacy response - set result directly
         setResult(data);
+        setIsProcessing(false);
         
         // Check if Mastercard search is pending (legacy)
         if (data.mastercardEnrichment?.searchId && data.mastercardEnrichment?.status === 'pending') {
           setPendingMastercardSearchId(data.mastercardEnrichment.searchId);
+          setIsProcessing(true); // Keep processing state for Mastercard
         }
       }
     },
     onError: (error) => {
       console.error("Classification failed:", error);
       alert(`Classification failed: ${error.message}`);
+      setIsProcessing(false); // Clear processing state on error
     }
   });
 
@@ -355,10 +374,10 @@ export function SingleClassification() {
                 disabled={!payeeName.trim() || classifyMutation.isPending}
                 className="min-w-[100px]"
               >
-                {classifyMutation.isPending ? (
+                {classifyMutation.isPending || isProcessing ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Analyzing
+                    {isProcessing && !classifyMutation.isPending ? 'Processing' : 'Analyzing'}
                   </>
                 ) : (
                   <>
@@ -370,10 +389,18 @@ export function SingleClassification() {
             </div>
             
             {/* Show progressive status */}
-            {progressiveStatus && (
+            {(progressiveStatus || (isProcessing && !result)) && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground bg-secondary/20 px-3 py-2 rounded-md">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                {progressiveStatus}
+                {progressiveStatus || 'Processing classification...'}
+              </div>
+            )}
+            
+            {/* Show Mastercard polling status */}
+            {pendingMastercardSearchId && !progressiveStatus && (
+              <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 rounded-md">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Mastercard enrichment in progress (this can take 5-10 minutes)...
               </div>
             )}
             

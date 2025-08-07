@@ -4,6 +4,22 @@
 Clarity Engine 3 is an AI-powered web application for finance and accounting professionals. It transforms unstructured payee data into organized, actionable insights by intelligently classifying payees (Individual, Business, Government) and assigning SIC codes with confidence scores. The platform is enhanced with Mastercard Track Search API integration for comprehensive business enrichment, aiming to provide a sophisticated tool for data transformation and analysis in financial contexts.
 
 ## Recent Changes (8/7/2025)
+- **Fixed State Persistence Issues**:
+  - **Issue**: Quick Payee Classification was losing state when user tabbed away from browser
+  - **Solution**: Added persistent `isProcessing` state that maintains across tab switches
+  - **Result**: Classification continues processing in background even when user navigates away
+- **Improved Processing Indicators**:
+  - Clear status messages for both classification and Mastercard enrichment phases
+  - Separate visual indicators for progressive classification vs Mastercard polling
+  - Persistent display even when tabbing away from browser
+- **Fixed Disabled State Logic**:
+  - **Issue**: Inputs were incorrectly disabled during background processing
+  - **Solution**: Only disable inputs during actual submission, not while processing results
+  - **Result**: Better UX - users can start new classifications while previous ones process
+- **Enhanced Mastercard Data Mapping**:
+  - **Fixed**: Better extraction of tax IDs, addresses, phone numbers from API responses
+  - **Added**: Proper field mapping for business addresses and merchant details
+  - **Result**: Mastercard enrichment data now displays correctly with all available fields
 - **Fixed Address Validation**: 
   - **Issue**: Address validation wasn't working for single classification requests
   - **Root Cause**: API endpoint wasn't passing address fields (address, city, state, zipCode) to progressive classification service
