@@ -126,11 +126,15 @@ export class ProgressiveClassificationService {
       
       // Stage 1: Finexio matching (fast, < 1 second)
       if (options.enableFinexio) {
-        console.log(`Job ${jobId}: Starting Finexio search...`);
+        console.log(`Job ${jobId}: Starting Finexio search for "${payeeName}"...`);
         try {
+          console.log(`Job ${jobId}: Calling searchCachedSuppliers with: "${payeeName}"`);
           const cachedSuppliers = await supplierCacheService.searchCachedSuppliers(payeeName, 5);
+          console.log(`Job ${jobId}: searchCachedSuppliers returned ${cachedSuppliers ? cachedSuppliers.length : 0} results`);
+          
           if (cachedSuppliers && cachedSuppliers.length > 0) {
             const bestMatch = cachedSuppliers[0];
+            console.log(`Job ${jobId}: Best match: ${bestMatch.payeeName} (${bestMatch.payeeId})`);
             job.result.bigQueryMatch = {
               matched: true,
               finexioSupplier: {
@@ -151,6 +155,7 @@ export class ProgressiveClassificationService {
             console.log(`Job ${jobId}: Finexio match found - ${bestMatch.payeeName}`);
           } else {
             // No match found
+            console.log(`Job ${jobId}: No results from searchCachedSuppliers, setting no match`);
             job.result.bigQueryMatch = {
               matched: false,
               finexioSupplier: {
@@ -168,6 +173,21 @@ export class ProgressiveClassificationService {
           }
         } catch (error) {
           console.error(`Job ${jobId}: Finexio error:`, error);
+          console.error(`Job ${jobId}: Error stack:`, error.stack);
+          // Set no match on error
+          job.result.bigQueryMatch = {
+            matched: false,
+            finexioSupplier: {
+              id: null,
+              name: null,
+              confidence: 0,
+              finexioMatchScore: 0,
+              paymentType: null,
+              matchType: 'no_match',
+              matchReasoning: `Error searching Finexio: ${error.message}`,
+              matchDetails: null
+            }
+          };
         }
       }
       
