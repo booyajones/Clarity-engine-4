@@ -380,14 +380,16 @@ export class MastercardApiService {
     }
 
     try {
-      // Check cache first for super-fast response
-      const cacheKey = `mc_${companyName.toLowerCase().replace(/\s+/g, '_')}`;
-      const cached = this.resultCache.get(cacheKey);
+      // CACHE DISABLED - Always perform new searches per user request
+      // const cacheKey = `mc_${companyName.toLowerCase().replace(/\s+/g, '_')}`;
+      // const cached = this.resultCache.get(cacheKey);
+      // 
+      // if (cached && (Date.now() - cached.timestamp) < this.CACHE_TTL) {
+      //   console.log(`⚡ Cache hit for ${companyName} - returning instantly!`);
+      //   return cached.data;
+      // }
       
-      if (cached && (Date.now() - cached.timestamp) < this.CACHE_TTL) {
-        console.log(`⚡ Cache hit for ${companyName} - returning instantly!`);
-        return cached.data;
-      }
+      console.log(`🔍 Performing new Mastercard search for ${companyName} (cache disabled)`)
       
       // Generate alphanumeric-only search request ID (Mastercard requirement)
       const searchRequestId = `single${Date.now()}${Math.random().toString(36).substr(2, 9)}`;
@@ -474,11 +476,11 @@ export class MastercardApiService {
                 source: 'Mastercard Track API'
               };
               
-              // Save to cache for instant future responses
-              this.resultCache.set(cacheKey, {
-                timestamp: Date.now(),
-                data: result
-              });
+              // CACHE DISABLED - Not storing results per user request
+              // this.resultCache.set(cacheKey, {
+              //   timestamp: Date.now(),
+              //   data: result
+              // });
               
               return result;
             }
