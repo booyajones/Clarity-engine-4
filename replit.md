@@ -4,14 +4,20 @@
 Clarity Engine 3 is an AI-powered web application for finance and accounting professionals. It transforms unstructured payee data into organized, actionable insights by intelligently classifying payees (Individual, Business, Government) and assigning SIC codes with confidence scores. The platform is enhanced with Mastercard Track Search API integration for comprehensive business enrichment, aiming to provide a sophisticated tool for data transformation and analysis in financial contexts.
 
 ## Recent Changes (8/7/2025)
-- **Fixed State Persistence Issues**:
+- **Fixed State Persistence Issues** (Completed 3:47 PM):
   - **Issue**: Quick Payee Classification was losing state when user tabbed away from browser
-  - **Solution**: Added persistent `isProcessing` state that maintains across tab switches
-  - **Result**: Classification continues processing in background even when user navigates away
+  - **Solution**: Added comprehensive localStorage persistence for all processing states (isProcessing, jobId, mastercardId, status, payeeName)
+  - **Result**: Classification state fully persists across tab switches, polling resumes automatically when returning to tab
+  - **Implementation**: State saved to localStorage on every change, restored on component mount
+- **Added Clear/Stop Functionality**:
+  - **New Feature**: Added Clear/Stop button to control ongoing classifications
+  - **Behavior**: Shows "Stop" during processing to cancel operations, "Clear" when showing results
+  - **Actions**: Clears all processing states, removes localStorage entries, resets form, stops all polling
+  - **UI**: Button appears dynamically next to Classify button when needed
 - **Improved Processing Indicators**:
   - Clear status messages for both classification and Mastercard enrichment phases
   - Separate visual indicators for progressive classification vs Mastercard polling
-  - Persistent display even when tabbing away from browser
+  - Persistent display maintained through localStorage even when tabbing away from browser
 - **Fixed Disabled State Logic**:
   - **Issue**: Inputs were incorrectly disabled during background processing
   - **Solution**: Only disable inputs during actual submission, not while processing results

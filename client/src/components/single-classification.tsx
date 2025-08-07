@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Loader2, Search, Building2, User, Landmark, Shield, CreditCard, ArrowRightLeft, HelpCircle, Database, Globe, MapPin, Brain } from "lucide-react";
+import { Loader2, Search, Building2, User, Landmark, Shield, CreditCard, ArrowRightLeft, HelpCircle, Database, Globe, MapPin, Brain, X } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
 interface ClassificationResult {
@@ -130,7 +130,36 @@ export function SingleClassification() {
   const [pendingMastercardSearchId, setPendingMastercardSearchId] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [progressiveStatus, setProgressiveStatus] = useState<string>('');
-  const [isProcessing, setIsProcessing] = useState(false); // Track processing state persistently
+  
+  // Initialize isProcessing from localStorage and persist changes
+  const [isProcessing, setIsProcessingState] = useState(() => {
+    const stored = localStorage.getItem('singleClassification_isProcessing');
+    return stored === 'true';
+  });
+  
+  const setIsProcessing = (value: boolean) => {
+    setIsProcessingState(value);
+    localStorage.setItem('singleClassification_isProcessing', value.toString());
+  };
+  
+  // Restore active classification state on mount
+  useEffect(() => {
+    const storedJobId = localStorage.getItem('singleClassification_jobId');
+    const storedMastercardId = localStorage.getItem('singleClassification_mastercardId');
+    const storedPayeeName = localStorage.getItem('singleClassification_payeeName');
+    const storedStatus = localStorage.getItem('singleClassification_status');
+    
+    if (storedJobId) {
+      setJobId(storedJobId);
+      setProgressiveStatus(storedStatus || 'Resuming classification...');
+    }
+    if (storedMastercardId) {
+      setPendingMastercardSearchId(storedMastercardId);
+    }
+    if (storedPayeeName) {
+      setPayeeName(storedPayeeName);
+    }
+  }, []);
 
   // Poll for progressive classification results
   const progressiveQuery = useQuery<any>({
@@ -144,6 +173,42 @@ export function SingleClassification() {
       return 1000; // Poll every second while processing
     },
   });
+
+  // Persist jobId changes to localStorage
+  useEffect(() => {
+    if (jobId) {
+      localStorage.setItem('singleClassification_jobId', jobId);
+    } else {
+      localStorage.removeItem('singleClassification_jobId');
+    }
+  }, [jobId]);
+  
+  // Persist mastercardId changes to localStorage
+  useEffect(() => {
+    if (pendingMastercardSearchId) {
+      localStorage.setItem('singleClassification_mastercardId', pendingMastercardSearchId);
+    } else {
+      localStorage.removeItem('singleClassification_mastercardId');
+    }
+  }, [pendingMastercardSearchId]);
+  
+  // Persist status changes to localStorage
+  useEffect(() => {
+    if (progressiveStatus) {
+      localStorage.setItem('singleClassification_status', progressiveStatus);
+    } else {
+      localStorage.removeItem('singleClassification_status');
+    }
+  }, [progressiveStatus]);
+  
+  // Persist payeeName to localStorage when processing
+  useEffect(() => {
+    if (isProcessing && payeeName) {
+      localStorage.setItem('singleClassification_payeeName', payeeName);
+    } else if (!isProcessing) {
+      localStorage.removeItem('singleClassification_payeeName');
+    }
+  }, [isProcessing, payeeName]);
 
   // Update result when progressive classification completes
   useEffect(() => {
@@ -345,6 +410,32 @@ export function SingleClassification() {
       handleSubmit(e);
     }
   };
+  
+  // Function to clear/stop ongoing classification
+  const handleClearClassification = () => {
+    // Clear all processing states
+    setIsProcessing(false);
+    setJobId(null);
+    setPendingMastercardSearchId(null);
+    setProgressiveStatus('');
+    setResult(null);
+    
+    // Clear localStorage
+    localStorage.removeItem('singleClassification_isProcessing');
+    localStorage.removeItem('singleClassification_jobId');
+    localStorage.removeItem('singleClassification_mastercardId');
+    localStorage.removeItem('singleClassification_status');
+    localStorage.removeItem('singleClassification_payeeName');
+    
+    // Reset form
+    setPayeeName('');
+    setAddress('');
+    setCity('');
+    setState('');
+    setZipCode('');
+    
+    console.log('Classification cleared/stopped');
+  };
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -386,6 +477,17 @@ export function SingleClassification() {
                   </>
                 )}
               </Button>
+              {(isProcessing || result || pendingMastercardSearchId || jobId) && (
+                <Button 
+                  type="button"
+                  onClick={handleClearClassification}
+                  variant="outline"
+                  className="min-w-[100px]"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  {isProcessing || pendingMastercardSearchId || jobId ? 'Stop' : 'Clear'}
+                </Button>
+              )}
             </div>
             
             {/* Show progressive status */}
