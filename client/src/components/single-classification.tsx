@@ -151,7 +151,20 @@ export function SingleClassification() {
       
       if (status === 'completed' && progressiveResult) {
         console.log('Progressive classification completed:', progressiveResult);
-        setResult(progressiveResult);
+        
+        // Map googleAddressValidation to addressValidation for the UI
+        const mappedResult = {
+          ...progressiveResult,
+          addressValidation: progressiveResult.googleAddressValidation ? {
+            status: progressiveResult.googleAddressValidation.success ? 'validated' : 'failed',
+            formattedAddress: progressiveResult.googleAddressValidation.data?.result?.address?.formattedAddress || progressiveResult.address,
+            confidence: progressiveResult.googleAddressValidation.data?.result?.verdict?.validationGranularity === 'PREMISE' ? 1.0 : 
+                       progressiveResult.googleAddressValidation.data?.result?.verdict?.validationGranularity === 'ROUTE' ? 0.8 : 0.5,
+            intelligentEnhancement: progressiveResult.googleAddressValidation.intelligentEnhancement
+          } : undefined
+        };
+        
+        setResult(mappedResult);
         
         // Check if Mastercard search is still processing
         if (progressiveResult.mastercardEnrichment?.status === 'processing' && 
