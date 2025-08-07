@@ -774,280 +774,101 @@ export function SingleClassification() {
                 )}
                 
                 {result.mastercardEnrichment.enriched && result.mastercardEnrichment.data && (
-                  <div className="space-y-4">
-                    {/* Primary Business Information */}
-                    <div className="bg-amber-50/50 dark:bg-amber-900/10 p-3 rounded-lg space-y-3">
-                      <h4 className="text-xs font-semibold text-amber-800 dark:text-amber-200 uppercase tracking-wider">Business Information</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                        {result.mastercardEnrichment.data.businessName && (
-                          <div className="md:col-span-2">
-                            <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Legal Business Name</label>
-                            <p className="text-amber-900 dark:text-amber-100 font-medium text-base">
-                              {result.mastercardEnrichment.data.businessName}
-                            </p>
-                          </div>
-                        )}
-                        
-                        {result.mastercardEnrichment.data.tradeName && (
-                          <div className="md:col-span-2">
-                            <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Trade Name (DBA)</label>
-                            <p className="text-amber-900 dark:text-amber-100">
-                              {result.mastercardEnrichment.data.tradeName}
-                            </p>
-                          </div>
-                        )}
-                        
-                        {result.mastercardEnrichment.data.taxId && (
-                          <div>
-                            <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Federal Tax ID (EIN)</label>
-                            <p className="text-amber-900 dark:text-amber-100 font-mono text-base">
-                              {result.mastercardEnrichment.data.taxId}
-                            </p>
-                          </div>
-                        )}
-                        
-                        {result.mastercardEnrichment.data.dunsNumber && (
-                          <div>
-                            <label className="text-xs font-medium text-amber-700 dark:text-amber-300">DUNS Number</label>
-                            <p className="text-amber-900 dark:text-amber-100 font-mono">
-                              {result.mastercardEnrichment.data.dunsNumber}
-                            </p>
-                          </div>
-                        )}
-                        
-                        {result.mastercardEnrichment.data.phone && (
-                          <div>
-                            <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Primary Phone</label>
-                            <p className="text-amber-900 dark:text-amber-100">
-                              {result.mastercardEnrichment.data.phone}
-                            </p>
-                          </div>
-                        )}
-                        
-                        {result.mastercardEnrichment.data.website && (
-                          <div>
-                            <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Website</label>
-                            <p className="text-amber-900 dark:text-amber-100">
-                              {result.mastercardEnrichment.data.website}
-                            </p>
-                          </div>
-                        )}
-                      </div>
+                  <div className="space-y-3">
+                    {/* Match Status and Confidence */}
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      {result.mastercardEnrichment.data.matchStatus && (
+                        <div>
+                          <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Match Status</label>
+                          <p className="text-amber-900 dark:text-amber-100 font-medium">
+                            {result.mastercardEnrichment.data.matchStatus}
+                          </p>
+                        </div>
+                      )}
+                      {result.mastercardEnrichment.data.matchConfidence && (
+                        <div>
+                          <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Match Confidence</label>
+                          <p className="text-amber-900 dark:text-amber-100 font-medium">
+                            {result.mastercardEnrichment.data.matchConfidence}
+                          </p>
+                        </div>
+                      )}
                     </div>
                     
-                    {/* Address Information */}
-                    {result.mastercardEnrichment.data.address && (
-                      <div className="bg-amber-50/50 dark:bg-amber-900/10 p-3 rounded-lg space-y-2">
-                        <h4 className="text-xs font-semibold text-amber-800 dark:text-amber-200 uppercase tracking-wider">Headquarters Address</h4>
+                    {/* Phone Number */}
+                    {(result.mastercardEnrichment.data.phoneNumber || result.mastercardEnrichment.data.phone) && (
+                      <div>
+                        <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Phone Number</label>
+                        <p className="text-amber-900 dark:text-amber-100">
+                          {result.mastercardEnrichment.data.phoneNumber || result.mastercardEnrichment.data.phone}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* Business Address */}
+                    {(result.mastercardEnrichment.data.businessAddress || result.mastercardEnrichment.data.address) && (
+                      <div>
+                        <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Business Address</label>
                         <div className="text-sm text-amber-900 dark:text-amber-100">
-                          <p className="font-medium">
-                            {result.mastercardEnrichment.data.address.addressLine1}
-                          </p>
-                          {result.mastercardEnrichment.data.address.addressLine2 && (
-                            <p>{result.mastercardEnrichment.data.address.addressLine2}</p>
-                          )}
-                          <p>
-                            {[
-                              result.mastercardEnrichment.data.address.townName,
-                              result.mastercardEnrichment.data.address.countrySubDivision,
-                              result.mastercardEnrichment.data.address.postCode
-                            ].filter(Boolean).join(', ')}
-                          </p>
-                          {result.mastercardEnrichment.data.address.countryCode && (
-                            <p className="text-xs mt-1 text-amber-700 dark:text-amber-300">
-                              Country: {result.mastercardEnrichment.data.address.countryCode}
-                            </p>
-                          )}
+                          {(() => {
+                            const addr = result.mastercardEnrichment.data.businessAddress || result.mastercardEnrichment.data.address;
+                            return (
+                              <>
+                                {addr.addressLine1 && <p>{addr.addressLine1}</p>}
+                                {addr.addressLine2 && <p>{addr.addressLine2}</p>}
+                                {addr.townName && <p>{addr.townName}, {addr.countrySubDivision} {addr.postCode}</p>}
+                                {addr.country && <p>{addr.country}</p>}
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
                     )}
                     
-                    {/* Merchant Classification */}
-                    <div className="bg-amber-50/50 dark:bg-amber-900/10 p-3 rounded-lg space-y-3">
-                      <h4 className="text-xs font-semibold text-amber-800 dark:text-amber-200 uppercase tracking-wider">Merchant Classification</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                        {(result.mastercardEnrichment.data.mccCode || result.mastercardEnrichment.data.merchantCategoryCode) && (
-                          <div className="md:col-span-2">
-                            <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Merchant Category Code (MCC)</label>
-                            <p className="text-amber-900 dark:text-amber-100 font-mono text-base">
-                              {result.mastercardEnrichment.data.mccCode || result.mastercardEnrichment.data.merchantCategoryCode}
-                            </p>
-                            {(result.mastercardEnrichment.data.mccGroup || result.mastercardEnrichment.data.merchantCategoryDescription) && (
-                              <p className="text-xs mt-1">
-                                {result.mastercardEnrichment.data.mccGroup || result.mastercardEnrichment.data.merchantCategoryDescription}
-                              </p>
-                            )}
-                          </div>
-                        )}
-                        
-                        {result.mastercardEnrichment.data.naicsCode && (
-                          <div>
-                            <label className="text-xs font-medium text-amber-700 dark:text-amber-300">NAICS Code</label>
-                            <p className="text-amber-900 dark:text-amber-100 font-mono">
-                              {result.mastercardEnrichment.data.naicsCode}
-                            </p>
-                          </div>
-                        )}
-                        
-                        {result.mastercardEnrichment.data.sicCode && (
-                          <div>
-                            <label className="text-xs font-medium text-amber-700 dark:text-amber-300">SIC Code</label>
-                            <p className="text-amber-900 dark:text-amber-100 font-mono">
-                              {result.mastercardEnrichment.data.sicCode}
-                            </p>
-                          </div>
-                        )}
-                        
-                        {result.mastercardEnrichment.data.purchaseCardLevel && (
-                          <div>
-                            <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Purchase Card Data Level</label>
-                            <p className="text-amber-900 dark:text-amber-100">
-                              Level {result.mastercardEnrichment.data.purchaseCardLevel}
-                              {result.mastercardEnrichment.data.purchaseCardLevel === '3' && ' (Enhanced Data)'}
-                              {result.mastercardEnrichment.data.purchaseCardLevel === '2' && ' (Standard Data)'}
-                              {result.mastercardEnrichment.data.purchaseCardLevel === '1' && ' (Basic Data)'}
-                            </p>
-                          </div>
-                        )}
-                        
-                        {result.mastercardEnrichment.data.merchantType && (
-                          <div>
-                            <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Merchant Type</label>
-                            <p className="text-amber-900 dark:text-amber-100">
-                              {result.mastercardEnrichment.data.merchantType}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Business Attributes */}
-                    <div className="bg-amber-50/50 dark:bg-amber-900/10 p-3 rounded-lg space-y-3">
-                      <h4 className="text-xs font-semibold text-amber-800 dark:text-amber-200 uppercase tracking-wider">Business Attributes</h4>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                        {result.mastercardEnrichment.data.transactionRecency && (
-                          <div>
-                            <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Activity Status</label>
-                            <p className="text-amber-900 dark:text-amber-100">
-                              {result.mastercardEnrichment.data.transactionRecency === 'ACTIVE' ? '✓ Active' : 
-                               result.mastercardEnrichment.data.transactionRecency === 'RECENT' ? '✓ Recent' :
-                               result.mastercardEnrichment.data.transactionRecency}
-                            </p>
-                          </div>
-                        )}
-                        
-                        {result.mastercardEnrichment.data.commercialHistory && (
-                          <div>
-                            <label className="text-xs font-medium text-amber-700 dark:text-amber-300">B2B History</label>
-                            <p className="text-amber-900 dark:text-amber-100">
-                              {result.mastercardEnrichment.data.commercialHistory === 'Y' ? '✓ Yes' : '✗ No'}
-                            </p>
-                          </div>
-                        )}
-                        
-                        {result.mastercardEnrichment.data.smallBusiness !== undefined && (
-                          <div>
-                            <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Small Business</label>
-                            <p className="text-amber-900 dark:text-amber-100">
-                              {result.mastercardEnrichment.data.smallBusiness === 'Y' ? '✓ Yes' : '✗ No'}
-                            </p>
-                          </div>
-                        )}
-                        
-                        {result.mastercardEnrichment.data.minorityOwned !== undefined && (
-                          <div>
-                            <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Minority Owned</label>
-                            <p className="text-amber-900 dark:text-amber-100">
-                              {result.mastercardEnrichment.data.minorityOwned === 'Y' ? '✓ Yes' : '✗ No'}
-                            </p>
-                          </div>
-                        )}
-                        
-                        {result.mastercardEnrichment.data.womanOwned !== undefined && (
-                          <div>
-                            <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Woman Owned</label>
-                            <p className="text-amber-900 dark:text-amber-100">
-                              {result.mastercardEnrichment.data.womanOwned === 'Y' ? '✓ Yes' : '✗ No'}
-                            </p>
-                          </div>
-                        )}
-                        
-                        {result.mastercardEnrichment.data.veteranOwned !== undefined && (
-                          <div>
-                            <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Veteran Owned</label>
-                            <p className="text-amber-900 dark:text-amber-100">
-                              {result.mastercardEnrichment.data.veteranOwned === 'Y' ? '✓ Yes' : '✗ No'}
-                            </p>
-                          </div>
-                        )}
-                        
-                        {result.mastercardEnrichment.data.employeeCount && (
-                          <div>
-                            <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Employees</label>
-                            <p className="text-amber-900 dark:text-amber-100">
-                              {result.mastercardEnrichment.data.employeeCount.toLocaleString()}
-                            </p>
-                          </div>
-                        )}
-                        
-                        {result.mastercardEnrichment.data.annualRevenue && (
-                          <div>
-                            <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Annual Revenue</label>
-                            <p className="text-amber-900 dark:text-amber-100">
-                              ${(result.mastercardEnrichment.data.annualRevenue / 1000000).toFixed(1)}M
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Match Quality Information */}
-                    {(result.mastercardEnrichment.data.matchConfidence || result.mastercardEnrichment.data.matchScore) && (
-                      <div className="bg-amber-50/50 dark:bg-amber-900/10 p-3 rounded-lg space-y-2">
-                        <h4 className="text-xs font-semibold text-amber-800 dark:text-amber-200 uppercase tracking-wider">Match Quality</h4>
-                        <div className="grid grid-cols-2 gap-3 text-sm">
-                          {result.mastercardEnrichment.data.matchConfidence && (
-                            <div>
-                              <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Confidence Level</label>
-                              <p className="text-amber-900 dark:text-amber-100 font-medium">
-                                {result.mastercardEnrichment.data.matchConfidence}
-                              </p>
-                            </div>
-                          )}
-                          {result.mastercardEnrichment.data.matchScore && (
-                            <div>
-                              <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Match Score</label>
-                              <p className="text-amber-900 dark:text-amber-100 font-medium">
-                                {result.mastercardEnrichment.data.matchScore}%
-                              </p>
-                            </div>
-                          )}
-                        </div>
+                    {/* Acceptance Network */}
+                    {result.mastercardEnrichment.data.acceptanceNetwork !== undefined && (
+                      <div>
+                        <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Acceptance Network</label>
+                        <p className="text-amber-900 dark:text-amber-100">
+                          {Array.isArray(result.mastercardEnrichment.data.acceptanceNetwork) 
+                            ? result.mastercardEnrichment.data.acceptanceNetwork.length > 0 
+                              ? result.mastercardEnrichment.data.acceptanceNetwork.join(', ')
+                              : 'None'
+                            : result.mastercardEnrichment.data.acceptanceNetwork || 'None'}
+                        </p>
                       </div>
                     )}
                     
-                    {/* Additional Identifiers */}
-                    {(result.mastercardEnrichment.data.merchantId || result.mastercardEnrichment.data.corporateName) && (
-                      <div className="bg-amber-50/50 dark:bg-amber-900/10 p-3 rounded-lg space-y-2">
-                        <h4 className="text-xs font-semibold text-amber-800 dark:text-amber-200 uppercase tracking-wider">Additional Information</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                          {result.mastercardEnrichment.data.merchantId && (
-                            <div>
-                              <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Merchant ID</label>
-                              <p className="text-amber-900 dark:text-amber-100 font-mono text-xs">
-                                {result.mastercardEnrichment.data.merchantId}
-                              </p>
-                            </div>
+                    {/* Transaction Volume */}
+                    {result.mastercardEnrichment.data.transactionVolume && (
+                      <div>
+                        <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Transaction Volume</label>
+                        <p className="text-amber-900 dark:text-amber-100">
+                          {result.mastercardEnrichment.data.transactionVolume}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* Last Transaction Date */}
+                    {result.mastercardEnrichment.data.lastTransactionDate && (
+                      <div>
+                        <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Last Transaction Date</label>
+                        <p className="text-amber-900 dark:text-amber-100">
+                          {result.mastercardEnrichment.data.lastTransactionDate}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* MCC Code and Description */}
+                    {(result.mastercardEnrichment.data.merchantCategoryCode || result.mastercardEnrichment.data.mccCode) && (
+                      <div>
+                        <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Merchant Category Code (MCC)</label>
+                        <p className="text-amber-900 dark:text-amber-100">
+                          <span className="font-mono">{result.mastercardEnrichment.data.merchantCategoryCode || result.mastercardEnrichment.data.mccCode}</span>
+                          {(result.mastercardEnrichment.data.merchantCategoryDescription || result.mastercardEnrichment.data.mccGroup) && (
+                            <span className="ml-2">- {result.mastercardEnrichment.data.merchantCategoryDescription || result.mastercardEnrichment.data.mccGroup}</span>
                           )}
-                          {result.mastercardEnrichment.data.corporateName && (
-                            <div>
-                              <label className="text-xs font-medium text-amber-700 dark:text-amber-300">Corporate Name</label>
-                              <p className="text-amber-900 dark:text-amber-100">
-                                {result.mastercardEnrichment.data.corporateName}
-                              </p>
-                            </div>
-                          )}
-                        </div>
+                        </p>
                       </div>
                     )}
                     
