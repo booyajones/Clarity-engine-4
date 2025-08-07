@@ -298,7 +298,7 @@ export class ProgressiveClassificationService {
                 validationComplete: job.result.googleAddressValidation?.success || false
               },
               pollAttempts: 0,
-              maxPollAttempts: 30
+              maxPollAttempts: 120 // Increased to 20 minutes (120 * 10 seconds) for Mastercard searches
             });
             
             console.log(`Job ${jobId}: Mastercard search submitted with ID ${searchResponse.bulkSearchId}`);

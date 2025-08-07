@@ -172,7 +172,7 @@ export function SingleClassification() {
     }
   }, [progressiveQuery.data]);
 
-  // Poll for Mastercard search results
+  // Poll for Mastercard search results (can take 5-10 minutes)
   const mastercardStatusQuery = useQuery<any>({
     queryKey: [`/api/mastercard/search-status/${pendingMastercardSearchId}`],
     enabled: !!pendingMastercardSearchId,
@@ -184,11 +184,13 @@ export function SingleClassification() {
       }
       // Adaptive polling intervals based on attempts
       const attempts = query.state.data?.pollAttempts || 0;
-      if (attempts < 5) return 1000; // First 5 attempts: 1 second
-      if (attempts < 10) return 2000; // Next 5: 2 seconds
-      if (attempts < 20) return 5000; // Next 10: 5 seconds
-      return 10000; // After that: 10 seconds
+      if (attempts < 10) return 2000; // First 10 attempts: 2 seconds
+      if (attempts < 30) return 5000; // Next 20 attempts: 5 seconds  
+      if (attempts < 60) return 10000; // Next 30 attempts: 10 seconds
+      return 15000; // After that: 15 seconds (up to 20 minutes total)
     },
+    staleTime: 1000, // Keep data fresh
+    gcTime: 1200000, // Keep in cache for 20 minutes
   });
 
   // Update result when Mastercard search completes
@@ -594,7 +596,7 @@ export function SingleClassification() {
                   ) : result.mastercardEnrichment.status === "pending" || result.mastercardEnrichment.status === "processing" ? (
                     <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100 flex items-center gap-1">
                       <Loader2 className="h-3 w-3 animate-spin" />
-                      In Progress
+                      Processing (5-10 min)
                     </Badge>
                   ) : (
                     <Badge className="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100">
