@@ -168,10 +168,59 @@ export class MastercardWorker {
     try {
       const updateData: any = {
         mastercardMatchStatus: result.matchStatus,
-        mastercardMatchConfidence: parseFloat(result.matchConfidence || "0"),
+        mastercardMatchConfidence: result.matchConfidence, // Store as text now (HIGH, MEDIUM, LOW)
         mastercardEnrichmentDate: new Date(),
       };
 
+      // Extract business information
+      if (result.businessName) {
+        updateData.mastercardBusinessName = result.businessName;
+      }
+      if (result.taxId || result.ein) {
+        updateData.mastercardTaxId = result.taxId || result.ein;
+      }
+      if (result.merchantIds) {
+        updateData.mastercardMerchantIds = Array.isArray(result.merchantIds) ? result.merchantIds : [result.merchantIds];
+      }
+
+      // Extract address information
+      if (result.businessAddress || result.address) {
+        const address = result.businessAddress || result.address;
+        if (typeof address === 'string') {
+          updateData.mastercardAddress = address;
+        } else if (address && typeof address === 'object') {
+          updateData.mastercardAddress = [
+            address.addressLine1,
+            address.addressLine2,
+            address.addressLine3
+          ].filter(Boolean).join(', ');
+          if (address.city) updateData.mastercardCity = address.city;
+          if (address.state) updateData.mastercardState = address.state;
+          if (address.zipCode || address.postalCode) updateData.mastercardZipCode = address.zipCode || address.postalCode;
+          if (address.country) updateData.mastercardCountry = address.country;
+        }
+      }
+      if (result.city && !updateData.mastercardCity) updateData.mastercardCity = result.city;
+      if (result.state && !updateData.mastercardState) updateData.mastercardState = result.state;
+      if ((result.zipCode || result.postalCode) && !updateData.mastercardZipCode) {
+        updateData.mastercardZipCode = result.zipCode || result.postalCode;
+      }
+      if (result.country && !updateData.mastercardCountry) updateData.mastercardCountry = result.country;
+
+      // Extract contact information
+      if (result.phoneNumber || result.phone) {
+        updateData.mastercardPhone = result.phoneNumber || result.phone;
+      }
+
+      // Extract merchant category codes
+      if (result.mccCode) {
+        updateData.mastercardMccCode = result.mccCode;
+      }
+      if (result.mccGroup) {
+        updateData.mastercardMccGroup = result.mccGroup;
+      }
+
+      // Extract merchant details
       if (result.merchantDetails) {
         const details = result.merchantDetails;
         if (details.merchantCategoryCode) {
@@ -189,6 +238,45 @@ export class MastercardWorker {
         if (details.dataQualityLevel) {
           updateData.mastercardDataQualityLevel = details.dataQualityLevel;
         }
+        if (details.transactionVolume) {
+          updateData.mastercardTransactionVolume = details.transactionVolume;
+        }
+      }
+
+      // Extract business attributes
+      if (result.transactionRecency) {
+        updateData.mastercardTransactionRecency = result.transactionRecency;
+      }
+      if (result.commercialHistory !== undefined) {
+        updateData.mastercardCommercialHistory = result.commercialHistory;
+      }
+      if (result.smallBusiness !== undefined) {
+        updateData.mastercardSmallBusiness = result.smallBusiness;
+      }
+      if (result.purchaseCardLevel !== undefined) {
+        updateData.mastercardPurchaseCardLevel = result.purchaseCardLevel;
+      }
+
+      // Handle acceptanceNetwork at root level
+      if (result.acceptanceNetwork && !updateData.mastercardAcceptanceNetwork) {
+        updateData.mastercardAcceptanceNetwork = Array.isArray(result.acceptanceNetwork) 
+          ? result.acceptanceNetwork 
+          : [result.acceptanceNetwork];
+      }
+
+      // Handle transactionVolume at root level
+      if (result.transactionVolume && !updateData.mastercardTransactionVolume) {
+        updateData.mastercardTransactionVolume = result.transactionVolume;
+      }
+
+      // Handle lastTransactionDate at root level
+      if (result.lastTransactionDate && !updateData.mastercardLastTransactionDate) {
+        updateData.mastercardLastTransactionDate = result.lastTransactionDate;
+      }
+
+      // Store the source of the data
+      if (result.source) {
+        updateData.mastercardSource = result.source;
       }
 
       await db

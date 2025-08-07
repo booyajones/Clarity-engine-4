@@ -54,14 +54,31 @@ export const payeeClassifications = pgTable("payee_classifications", {
   isExcluded: boolean("is_excluded").default(false),
   exclusionKeyword: text("exclusion_keyword"),
   // Mastercard enrichment fields
-  mastercardMatchStatus: text("mastercard_match_status"), // MATCH, NO_MATCH, MULTIPLE_MATCHES
-  mastercardMatchConfidence: real("mastercard_match_confidence"),
+  mastercardMatchStatus: text("mastercard_match_status"), // MATCH, NO_MATCH, MULTIPLE_MATCHES, EXACT_MATCH
+  mastercardMatchConfidence: real("mastercard_match_confidence"), // Confidence score 0-100
+  mastercardBusinessName: text("mastercard_business_name"),
+  mastercardTaxId: text("mastercard_tax_id"),
+  mastercardMerchantIds: text("mastercard_merchant_ids").array(),
+  mastercardMccCode: text("mastercard_mcc_code"),
+  mastercardMccGroup: text("mastercard_mcc_group"),
+  mastercardAddress: text("mastercard_address"),
+  mastercardCity: text("mastercard_city"),
+  mastercardState: text("mastercard_state"),
+  mastercardZipCode: text("mastercard_zip_code"),
+  mastercardCountry: text("mastercard_country"),
+  mastercardPhone: text("mastercard_phone"),
+  mastercardTransactionRecency: text("mastercard_transaction_recency"),
+  mastercardCommercialHistory: text("mastercard_commercial_history"),
+  mastercardSmallBusiness: text("mastercard_small_business"),
+  mastercardPurchaseCardLevel: integer("mastercard_purchase_card_level"),
   mastercardMerchantCategoryCode: text("mastercard_merchant_category_code"),
   mastercardMerchantCategoryDescription: text("mastercard_merchant_category_description"),
   mastercardAcceptanceNetwork: text("mastercard_acceptance_network").array(),
+  mastercardTransactionVolume: text("mastercard_transaction_volume"),
   mastercardLastTransactionDate: text("mastercard_last_transaction_date"),
   mastercardDataQualityLevel: text("mastercard_data_quality_level"), // HIGH, MEDIUM, LOW
   mastercardEnrichmentDate: timestamp("mastercard_enrichment_date"),
+  mastercardSource: text("mastercard_source"),
   // Enrichment status tracking
   enrichmentStatus: text("enrichment_status").default("pending"), // pending, in_progress, completed, failed
   enrichmentStartedAt: timestamp("enrichment_started_at"),
