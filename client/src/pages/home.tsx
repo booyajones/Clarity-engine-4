@@ -118,7 +118,7 @@ export default function Home() {
       setIsUploading(false);
       // Try to auto-select payee column
       const possibleColumns = ["payee", "payee_name", "name", "vendor", "customer_name", "company"];
-      const found = data.headers.find(h => 
+      const found = data.headers.find((h: string) => 
         possibleColumns.some(col => h.toLowerCase().includes(col))
       );
       if (found) {
@@ -268,7 +268,6 @@ export default function Home() {
       originalFilename: previewData.filename,
       payeeColumn: selectedColumn,
       matchingOptions,
-      addressColumns: matchingOptions.enableGoogleAddressValidation ? addressColumns : undefined,
     });
   };
 
@@ -294,35 +293,35 @@ export default function Home() {
     switch (status) {
       case "completed":
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r from-green-50 to-emerald-50 text-green-800 border border-green-200 animate-fade-in">
+          <span className="badge-enhanced status-completed border animate-fade-in-up">
             <CheckCircle2 className="h-3 w-3 mr-1" />
             Completed
           </span>
         );
       case "processing":
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-800 border border-blue-200">
+          <span className="badge-enhanced status-processing border pulse-gentle">
             <Loader2 className="h-3 w-3 mr-1 animate-spin" />
             Processing
           </span>
         );
       case "failed":
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r from-red-50 to-rose-50 text-red-800 border border-red-200">
+          <span className="badge-enhanced status-failed border">
             <XCircle className="h-3 w-3 mr-1" />
             Failed
           </span>
         );
       case "cancelled":
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r from-gray-50 to-slate-50 text-gray-800 border border-gray-200">
+          <span className="badge-enhanced status-pending border">
             <X className="h-3 w-3 mr-1" />
             Cancelled
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r from-gray-50 to-slate-50 text-gray-600 border border-gray-200">
+          <span className="badge-enhanced status-pending border">
             <Clock className="h-3 w-3 mr-1" />
             Pending
           </span>
@@ -453,21 +452,21 @@ export default function Home() {
       <div className="bg-white border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-8 py-8">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-light text-gray-900 tracking-wide">
-                <span className="font-normal">CLARITY ENGINE</span>
+            <div className="animate-fade-in-up">
+              <h1 className="text-4xl font-light text-gray-900 dark:text-gray-100 tracking-wide">
+                <span className="font-normal gradient-text">CLARITY ENGINE</span>
               </h1>
-              <p className="text-sm text-gray-500 mt-2 tracking-wide uppercase">Intelligent Payee Classification</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 tracking-wide uppercase">Intelligent Payee Classification</p>
             </div>
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-6 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
               <div className="text-right">
-                <p className="text-2xl font-light text-gray-900">95%</p>
-                <p className="text-xs text-gray-500 uppercase tracking-wide">Accuracy Target</p>
+                <p className="text-2xl font-light text-gray-900 dark:text-gray-100">95%</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Accuracy Target</p>
               </div>
-              <div className="h-12 w-px bg-gray-200"></div>
+              <div className="h-12 w-px bg-gray-200 dark:bg-gray-600"></div>
               <div className="text-right">
-                <p className="text-2xl font-light text-gray-900">6</p>
-                <p className="text-xs text-gray-500 uppercase tracking-wide">Categories</p>
+                <p className="text-2xl font-light text-gray-900 dark:text-gray-100">6</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Categories</p>
               </div>
             </div>
           </div>
@@ -485,7 +484,7 @@ export default function Home() {
               </Button>
               <Button
                 variant={currentView === "single" ? "default" : "outline"}
-                onClick={() => setCurrentView("single")}
+                onClick={() => setCurrentView("single" as any)}
                 className={`flex items-center gap-2 transition-all ${currentView === "single" ? "shadow-lg" : "hover:shadow-md hover:border-purple-300"}`}
               >
                 <Sparkles className="h-4 w-4" />
@@ -493,7 +492,7 @@ export default function Home() {
               </Button>
               <Button
                 variant={currentView === "keywords" ? "default" : "outline"}
-                onClick={() => setCurrentView("keywords")}
+                onClick={() => setCurrentView("keywords" as any)}
                 className={`flex items-center gap-2 transition-all ${currentView === "keywords" ? "shadow-lg" : "hover:shadow-md hover:border-amber-300"}`}
               >
                 <ClipboardList className="h-4 w-4" />
@@ -524,12 +523,12 @@ export default function Home() {
       <div className="flex-1 p-8 max-w-7xl mx-auto">
 
       {/* Upload Section */}
-      <Card className="mb-8 border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200">
+      <Card className="mb-8 animate-fade-in-up">
         <CardHeader>
-          <CardTitle className="text-xl font-semibold text-gray-900">
+          <CardTitle className="section-header">
             Upload New File
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="section-subtitle">
             Upload a CSV or Excel file containing payee data for AI classification
           </CardDescription>
         </CardHeader>

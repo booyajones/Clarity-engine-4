@@ -1,0 +1,282 @@
+/* Comprehensive UX Enhancements for Clarity Engine 3 */
+
+/* ========================================
+   1. CONSISTENT COLOR SYSTEM
+   ======================================== */
+
+/* Status Colors - Unified across all components */
+.status-pending {
+  @apply bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700;
+}
+
+.status-processing {
+  @apply bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800;
+}
+
+.status-completed {
+  @apply bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800;
+}
+
+.status-failed {
+  @apply bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800;
+}
+
+.status-warning {
+  @apply bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800;
+}
+
+/* ========================================
+   2. ENHANCED ANIMATIONS & TRANSITIONS
+   ======================================== */
+
+/* Smooth hover effects for all interactive elements */
+.interactive-element {
+  @apply transition-all duration-200 ease-out;
+  @apply hover:shadow-md hover:-translate-y-0.5;
+  @apply active:translate-y-0 active:shadow-sm;
+}
+
+/* Premium card hover effect */
+.card-premium {
+  @apply transition-all duration-300 ease-out;
+  @apply hover:shadow-xl hover:border-blue-200;
+  @apply dark:hover:shadow-2xl dark:hover:border-blue-700;
+}
+
+/* Subtle pulse for active/processing items */
+@keyframes gentle-pulse {
+  0%, 100% { 
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% { 
+    opacity: 0.9;
+    transform: scale(1.01);
+  }
+}
+
+.pulse-gentle {
+  animation: gentle-pulse 3s ease-in-out infinite;
+}
+
+/* ========================================
+   3. CONSISTENT LOADING STATES
+   ======================================== */
+
+/* Skeleton loading with shimmer effect */
+.skeleton-loader {
+  @apply relative overflow-hidden bg-gray-200 dark:bg-gray-700;
+  background: linear-gradient(
+    90deg,
+    rgba(0,0,0,0.05) 25%,
+    rgba(0,0,0,0.1) 50%,
+    rgba(0,0,0,0.05) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Spinner with brand colors */
+.spinner-brand {
+  @apply animate-spin rounded-full border-2 border-gray-300;
+  @apply border-t-primary dark:border-gray-600 dark:border-t-primary;
+}
+
+/* ========================================
+   4. ENHANCED TYPOGRAPHY
+   ======================================== */
+
+/* Section headers with consistent styling */
+.section-header {
+  @apply text-2xl font-semibold text-gray-900 dark:text-gray-100;
+  @apply mb-2 tracking-tight;
+}
+
+.section-subtitle {
+  @apply text-sm text-gray-600 dark:text-gray-400;
+  @apply font-normal tracking-wide;
+}
+
+/* Data labels with hierarchy */
+.data-label {
+  @apply text-xs font-medium text-gray-500 dark:text-gray-400;
+  @apply uppercase tracking-wider mb-1;
+}
+
+.data-value {
+  @apply text-base font-semibold text-gray-900 dark:text-gray-100;
+}
+
+/* ========================================
+   5. IMPROVED FORM ELEMENTS
+   ======================================== */
+
+/* Consistent input styling */
+.input-enhanced {
+  @apply w-full px-4 py-2.5 rounded-lg border;
+  @apply bg-white dark:bg-gray-800;
+  @apply border-gray-300 dark:border-gray-600;
+  @apply focus:border-blue-500 focus:ring-2 focus:ring-blue-200;
+  @apply transition-all duration-200;
+  @apply placeholder:text-gray-400 dark:placeholder:text-gray-500;
+}
+
+/* Enhanced button states */
+.btn-primary-enhanced {
+  @apply bg-primary text-white font-medium;
+  @apply hover:bg-primary-600 active:bg-primary-700;
+  @apply transition-all duration-200;
+  @apply shadow-sm hover:shadow-md active:shadow-sm;
+  @apply disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+/* ========================================
+   6. CONSISTENT SPACING SYSTEM
+   ======================================== */
+
+/* Section spacing */
+.section-spacing {
+  @apply py-8 px-6 lg:py-12 lg:px-8;
+}
+
+/* Card content spacing */
+.card-spacing {
+  @apply p-6 lg:p-8;
+}
+
+/* List item spacing */
+.list-spacing {
+  @apply space-y-3;
+}
+
+/* ========================================
+   7. IMPROVED DATA VISUALIZATION
+   ======================================== */
+
+/* Progress bars with brand colors */
+.progress-bar-brand {
+  @apply h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden;
+}
+
+.progress-bar-fill {
+  @apply h-full bg-gradient-to-r from-blue-500 to-blue-600;
+  @apply transition-all duration-500 ease-out;
+}
+
+/* Data badges with consistent styling */
+.badge-enhanced {
+  @apply inline-flex items-center px-2.5 py-1 rounded-full;
+  @apply text-xs font-medium;
+  @apply transition-all duration-200;
+}
+
+/* ========================================
+   8. RESPONSIVE DESIGN IMPROVEMENTS
+   ======================================== */
+
+/* Mobile-first responsive utilities */
+@media (max-width: 640px) {
+  .mobile-full-width {
+    @apply w-full;
+  }
+  
+  .mobile-stack {
+    @apply flex-col space-y-2;
+  }
+}
+
+/* ========================================
+   9. ACCESSIBILITY ENHANCEMENTS
+   ======================================== */
+
+/* Focus visible styles */
+.focus-enhanced {
+  @apply focus-visible:outline-none focus-visible:ring-2;
+  @apply focus-visible:ring-primary focus-visible:ring-offset-2;
+  @apply dark:focus-visible:ring-offset-gray-900;
+}
+
+/* Screen reader only text */
+.sr-only-enhanced {
+  @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
+}
+
+/* ========================================
+   10. PREMIUM VISUAL EFFECTS
+   ======================================== */
+
+/* Glassmorphism effect */
+.glass-effect {
+  @apply bg-white/80 dark:bg-gray-900/80;
+  @apply backdrop-blur-lg backdrop-saturate-150;
+  @apply border border-white/20 dark:border-gray-700/50;
+}
+
+/* Gradient text effect */
+.gradient-text {
+  @apply bg-gradient-to-r from-blue-500 to-blue-600;
+  @apply bg-clip-text text-transparent;
+}
+
+/* Soft shadow for depth */
+.shadow-soft {
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.05),
+    0 2px 4px -1px rgba(0, 0, 0, 0.03);
+}
+
+.shadow-soft-lg {
+  box-shadow: 
+    0 10px 15px -3px rgba(0, 0, 0, 0.05),
+    0 4px 6px -2px rgba(0, 0, 0, 0.03);
+}
+
+/* Smooth fade-in animation */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.4s ease-out;
+}
+
+/* Enhanced dividers */
+.divider-enhanced {
+  @apply border-t border-gray-200 dark:border-gray-700;
+  @apply my-6;
+}
+
+/* Premium tooltip styling */
+.tooltip-enhanced {
+  @apply absolute z-50 px-3 py-2;
+  @apply bg-gray-900 dark:bg-gray-100;
+  @apply text-white dark:text-gray-900;
+  @apply text-sm rounded-lg shadow-lg;
+  @apply pointer-events-none;
+}
+
+/* Data grid enhancements */
+.data-grid-enhanced {
+  @apply grid gap-4;
+  @apply grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4;
+}
+
+/* Notification styling */
+.notification-enhanced {
+  @apply fixed top-4 right-4 z-50;
+  @apply p-4 rounded-lg shadow-lg;
+  @apply animate-fade-in-up;
+  @apply max-w-sm;
+}

@@ -354,20 +354,24 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
   // Confirm or reject a match
   const handleMatchConfirmation = async (matchId: number, isCorrect: boolean) => {
     try {
-      const response = await apiRequest(`/api/bigquery/matches/${matchId}/confirm`, {
+      const response = await fetch(`/api/bigquery/matches/${matchId}/confirm`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isCorrect }),
       });
       
-      if (response.success) {
-        toast({
-          title: isCorrect ? "Match Confirmed" : "Match Rejected",
-          description: `The match has been ${isCorrect ? 'confirmed' : 'rejected'} successfully.`,
-        });
-        
-        // Refresh matches
-        if (selectedClassification) {
-          await fetchPayeeMatches(selectedClassification.id);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          toast({
+            title: isCorrect ? "Match Confirmed" : "Match Rejected",
+            description: `The match has been ${isCorrect ? 'confirmed' : 'rejected'} successfully.`,
+          });
+          
+          // Refresh matches
+          if (selectedClassification) {
+            await fetchPayeeMatches(selectedClassification.id);
+          }
         }
       }
     } catch (error) {
@@ -466,21 +470,21 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
   const getTypeColor = (type: string) => {
     switch (type) {
       case "Business":
-        return "bg-blue-100 text-blue-800";
+        return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
       case "Individual":
-        return "bg-green-100 text-green-800";
+        return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
       case "Government":
-        return "bg-purple-100 text-purple-800";
+        return "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300";
       case "Insurance":
-        return "bg-orange-100 text-orange-800";
+        return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300";
       case "Banking":
-        return "bg-yellow-100 text-yellow-800";
+        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300";
       case "Internal Transfer":
-        return "bg-indigo-100 text-indigo-800";
+        return "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300";
       case "Unknown":
-        return "bg-gray-100 text-gray-800";
+        return "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300";
       default:
-        return "bg-gray-100 text-gray-800";
+        return "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300";
     }
   };
 
@@ -1452,17 +1456,18 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                     </Button>
                     
                     <div className="flex items-center gap-1">
-                      {Array.from({ length: Math.min(5, data.pagination.totalPages) }, (_, i) => {
+                      {Array.from({ length: Math.min(5, data.pagination?.totalPages || 1) }, (_, i) => {
                         let page;
-                        if (data.pagination.totalPages <= 5) {
+                        const totalPages = data.pagination?.totalPages || 1;
+                        if (totalPages <= 5) {
                           // For 5 or fewer pages, show all of them
                           page = i + 1;
                         } else {
                           // For more than 5 pages, show pages around current page
                           if (currentPage <= 3) {
                             page = i + 1;
-                          } else if (currentPage >= data.pagination.totalPages - 2) {
-                            page = data.pagination.totalPages - 4 + i;
+                          } else if (currentPage >= totalPages - 2) {
+                            page = totalPages - 4 + i;
                           } else {
                             page = currentPage - 2 + i;
                           }
@@ -1484,8 +1489,8 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setCurrentPage(Math.min(data.pagination.totalPages, currentPage + 1))}
-                      disabled={currentPage === data.pagination.totalPages}
+                      onClick={() => setCurrentPage(Math.min(data.pagination?.totalPages || 1, currentPage + 1))}
+                      disabled={currentPage === data.pagination?.totalPages}
                     >
                       <ArrowRight className="h-4 w-4" />
                     </Button>

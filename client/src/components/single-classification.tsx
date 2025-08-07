@@ -50,8 +50,12 @@ interface ClassificationResult {
         country?: string;
       };
       phone?: string;
+      phoneNumber?: string;
+      businessAddress?: string;
+      matchStatus?: string;
       matchConfidence?: string;
       transactionRecency?: string;
+      transactionVolume?: string;
       commercialHistory?: string;
       smallBusiness?: string;
       purchaseCardLevel?: number;

@@ -1,3 +1,6 @@
+/* Import UX enhancements first */
+@import './styles/ux-enhancements.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
