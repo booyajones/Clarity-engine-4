@@ -144,9 +144,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUploadBatch(id: number, updates: Partial<UploadBatch>): Promise<UploadBatch> {
+    // Filter out undefined values and createdAt to avoid SQL errors
+    const cleanUpdates = Object.entries(updates).reduce((acc, [key, value]) => {
+      if (value !== undefined && key !== 'createdAt') {
+        acc[key] = value;
+      }
+      return acc;
+    }, {} as any);
+    
     const [batch] = await db
       .update(uploadBatches)
-      .set({ ...updates, createdAt: undefined })
+      .set(cleanUpdates)
       .where(eq(uploadBatches.id, id))
       .returning();
     return batch;

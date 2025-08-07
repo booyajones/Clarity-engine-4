@@ -316,29 +316,38 @@ export class OptimizedClassificationService {
       const addressColumns = batch?.addressColumns as any;
       const hasAddressData = addressColumns && (addressColumns.address || addressColumns.city || addressColumns.state || addressColumns.zipCode);
       
-      if (hasAddressData) {
+      console.log(`📍 Checking address validation for batch ${batchId}:`, {
+        hasAddressData,
+        addressColumns,
+        matchingOptions: this.matchingOptions
+      });
+      
+      if (hasAddressData && this.matchingOptions?.enableGoogleAddressValidation) {
+        console.log(`🗺️ Starting address validation for batch ${batchId}`);
         const addressValidationPromise = this.startAddressValidation(batchId)
           .then(() => {
             // After address validation completes, start Mastercard enrichment
-            console.log(`Address validation completed for batch ${batchId}, starting Mastercard enrichment`);
+            console.log(`✅ Address validation completed for batch ${batchId}, now starting Mastercard enrichment`);
             return this.startEnrichmentProcess(batchId).catch(error => {
-              console.error('Error starting Mastercard enrichment:', error);
+              console.error('Error starting Mastercard enrichment after address validation:', error);
             });
           })
           .catch(error => {
             console.error('Error starting address validation:', error);
             // Even if address validation fails, try Mastercard enrichment
+            console.log(`⚠️ Address validation failed for batch ${batchId}, trying Mastercard enrichment anyway`);
             return this.startEnrichmentProcess(batchId).catch(error => {
-              console.error('Error starting Mastercard enrichment:', error);
+              console.error('Error starting Mastercard enrichment after failed address validation:', error);
             });
           });
         
         enrichmentPromises.push(addressValidationPromise);
       } else {
-        // No address data, so run Mastercard enrichment directly
+        // No address validation needed, so run Mastercard enrichment directly
+        console.log(`🎯 No address validation needed for batch ${batchId}, starting Mastercard enrichment directly`);
         enrichmentPromises.push(
           this.startEnrichmentProcess(batchId).catch(error => {
-            console.error('Error starting Mastercard enrichment:', error);
+            console.error('Error starting Mastercard enrichment directly:', error);
           })
         );
       }
@@ -974,9 +983,16 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
   // Start asynchronous enrichment process
   private async startEnrichmentProcess(batchId: number): Promise<void> {
     try {
-      // Check if Mastercard enrichment is disabled
-      if (this.matchingOptions.enableMastercard === false) {
-        console.log(`Mastercard enrichment disabled for batch ${batchId}`);
+      console.log(`🔍 Checking Mastercard enrichment for batch ${batchId}`);
+      console.log(`Matching options:`, this.matchingOptions);
+      console.log(`Enable Mastercard value:`, this.matchingOptions?.enableMastercard);
+      
+      // Check if Mastercard enrichment is explicitly disabled
+      // Default to true if not specified (to match frontend default)
+      const mastercardEnabled = this.matchingOptions?.enableMastercard !== false;
+      
+      if (!mastercardEnabled) {
+        console.log(`❌ Mastercard enrichment explicitly disabled for batch ${batchId}`);
         await storage.updateUploadBatch(batchId, {
           mastercardEnrichmentStatus: "skipped",
           mastercardEnrichmentCompletedAt: new Date()
@@ -984,15 +1000,23 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
         return;
       }
       
+      console.log(`✅ Mastercard enrichment enabled for batch ${batchId}`);
+      
+      
       // Only proceed if Mastercard API is configured
-      if (!process.env.MASTERCARD_CONSUMER_KEY || !process.env.MASTERCARD_PRIVATE_KEY) {
-        console.log('Mastercard API not configured, skipping enrichment');
+      // Import mastercardApi to check if service is configured
+      const { mastercardApi } = await import('./mastercardApi');
+      
+      if (!mastercardApi.isServiceConfigured()) {
+        console.log('❌ Mastercard API not configured, skipping enrichment');
         await storage.updateUploadBatch(batchId, {
           mastercardEnrichmentStatus: "skipped",
           mastercardEnrichmentCompletedAt: new Date()
         });
         return;
       }
+      
+      console.log('✅ Mastercard API is configured, proceeding with enrichment');
 
       // Get business classifications that haven't been enriched yet
       const businessClassifications = await storage.getBusinessClassificationsForEnrichment(batchId);
