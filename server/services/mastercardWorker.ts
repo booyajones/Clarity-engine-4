@@ -93,12 +93,12 @@ export class MastercardWorker {
         })
         .where(eq(mastercardSearchRequests.id, search.id));
 
-      // Try to get results - use searchId as the search_request_id
-      // Don't limit retries - let it poll properly for results
+      // Try to get results - but with no internal retries since we're already polling
+      // We'll call with maxRetries=1 to just check once per poll cycle
       const results = await this.mastercardService.getSearchResults(
         search.searchId, 
-        search.searchId  // Use searchId as the search_request_id
-        // maxRetries defaults to 30, no need to override
+        search.searchId,  // Use searchId as the search_request_id
+        1  // Only try once per poll cycle - the worker handles retrying
       );
 
       if (results) {

@@ -4,6 +4,12 @@
 Clarity Engine 3 is an AI-powered web application for finance and accounting professionals. It transforms unstructured payee data into organized, actionable insights by intelligently classifying payees (Individual, Business, Government) and assigning SIC codes with confidence scores. The platform is enhanced with Mastercard Track Search API integration for comprehensive business enrichment, aiming to provide a sophisticated tool for data transformation and analysis in financial contexts.
 
 ## Recent Changes (8/7/2025)
+- **Fixed Mastercard Polling Issues** (Completed 3:54 PM):
+  - **Issue**: Searches were stuck in "polling" status with incorrect attempt counts
+  - **Root Cause**: Nested polling loops - mastercardWorker was calling getSearchResults which did its own 120 internal retries
+  - **Solution**: Modified worker to call getSearchResults with maxRetries=1, letting the worker manage all polling
+  - **Result**: Poll attempts now correctly increment in database, stuck searches properly timeout
+  - **Example**: Microsoft search correctly marked as timeout after 30/30 attempts, Home Depot search polling normally
 - **Fixed State Persistence Issues** (Completed 3:47 PM):
   - **Issue**: Quick Payee Classification was losing state when user tabbed away from browser
   - **Solution**: Added comprehensive localStorage persistence for all processing states (isProcessing, jobId, mastercardId, status, payeeName)
