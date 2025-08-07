@@ -329,32 +329,69 @@ export default function Home() {
     }
   };
 
+  const [downloadingBatchId, setDownloadingBatchId] = useState<number | null>(null);
+  
   const handleDownload = async (batchId: number, filename: string) => {
     try {
+      setDownloadingBatchId(batchId);
+      
+      // Show initial toast
+      toast({
+        title: "Preparing Download",
+        description: "Generating your CSV file...",
+      });
+      
       const response = await fetch(`/api/classifications/export/${batchId}`);
-      if (!response.ok) throw new Error('Download failed');
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || 'Download failed');
+      }
+      
+      // Get file size for progress tracking
+      const contentLength = response.headers.get('content-length');
+      const total = contentLength ? parseInt(contentLength, 10) : 0;
       
       const blob = await response.blob();
+      
+      // Validate blob size
+      if (blob.size === 0) {
+        throw new Error('Downloaded file is empty');
+      }
+      
+      // Create download link
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.style.display = 'none';
       a.href = url;
-      a.download = `classified_${filename}`;
+      
+      // Generate timestamp for unique filename
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
+      a.download = `classified_${filename.replace(/\.[^/.]+$/, '')}_${timestamp}.csv`;
+      
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      
+      // Cleanup
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }, 100);
       
       toast({
-        title: "Downloaded",
-        description: "Classification results downloaded successfully.",
+        title: "✓ Download Complete",
+        description: `Successfully downloaded ${filename} with classification results.`,
+        className: "bg-green-50 border-green-200",
       });
     } catch (error) {
+      console.error('Download error:', error);
       toast({
         title: "Download Failed",
-        description: "Could not download the file. Please try again.",
+        description: error instanceof Error ? error.message : "Could not download the file. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setDownloadingBatchId(null);
     }
   };
 
@@ -969,10 +1006,15 @@ export default function Home() {
                               size="sm"
                               variant="outline"
                               onClick={() => handleDownload(batch.id, batch.originalFilename)}
+                              disabled={downloadingBatchId === batch.id}
                               title="Download CSV"
-                              className="hover:bg-green-50 hover:text-green-600 transition-colors"
+                              className="hover:bg-green-50 hover:text-green-600 transition-all hover:shadow-md active:scale-95"
                             >
-                              <Download className="h-4 w-4" />
+                              {downloadingBatchId === batch.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Download className="h-4 w-4" />
+                              )}
                             </Button>
                           </>
                         )}

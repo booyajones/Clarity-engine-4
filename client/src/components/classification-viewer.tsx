@@ -55,6 +55,7 @@ import {
   ChevronDown,
   ChevronsUpDown,
   Settings,
+  Loader2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -218,34 +219,68 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
     },
   });
 
+  const [isDownloading, setIsDownloading] = useState(false);
+  
   const handleDownload = async (filtered = false) => {
     try {
+      setIsDownloading(true);
+      
+      // Show preparing toast
+      toast({
+        title: "Preparing Export",
+        description: `Generating ${filtered ? 'filtered ' : ''}CSV file with all enrichment data...`,
+      });
+      
       const response = await fetch(`/api/classifications/export/${batchId}`);
-      if (!response.ok) throw new Error('Download failed');
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || 'Download failed');
+      }
       
       const blob = await response.blob();
+      
+      // Validate blob
+      if (blob.size === 0) {
+        throw new Error('The exported file is empty. Please check if there are classifications to export.');
+      }
+      
+      // Create download link with timestamp
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.style.display = 'none';
       a.href = url;
-      a.download = `classified_${data?.batch.originalFilename}`;
+      
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
+      const baseFilename = data?.batch.originalFilename?.replace(/\.[^/.]+$/, '') || 'export';
+      a.download = `classified_${baseFilename}_${timestamp}.csv`;
+      
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
       
+      // Cleanup after download
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }, 100);
+      
+      // Success notification
       toast({
-        title: "Downloaded",
+        title: "✓ Export Complete",
         description: filtered 
-          ? "Filtered classification results downloaded successfully."
-          : "Classification results downloaded successfully.",
+          ? `Successfully exported ${filteredAndSortedClassifications.length} filtered results with all enrichment data.`
+          : `Successfully exported all ${data?.summary.total || 0} classification results.`,
+        className: "bg-green-50 border-green-200",
       });
     } catch (error) {
+      console.error('Export error:', error);
       toast({
-        title: "Download Failed",
-        description: "Could not download the file. Please try again.",
+        title: "Export Failed",
+        description: error instanceof Error ? error.message : "Could not export the file. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -558,9 +593,22 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                 </p>
               </div>
               <div className="flex gap-4 mt-4">
-                <Button onClick={() => handleDownload()} className="bg-primary-500 hover:bg-primary-600">
-                  <Download className="h-4 w-4 mr-2" />
-                  Download Full Results
+                <Button 
+                  onClick={() => handleDownload()} 
+                  disabled={isDownloading}
+                  className="transition-all hover:shadow-md active:scale-95"
+                >
+                  {isDownloading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Exporting...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4 mr-2" />
+                      Download Full Results
+                    </>
+                  )}
                 </Button>
                 <Button 
                   variant="outline" 
@@ -622,9 +670,22 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
               </div>
             </div>
             <div className="flex gap-2">
-              <Button onClick={() => handleDownload()} className="bg-primary-500 hover:bg-primary-600">
-                <Download className="h-4 w-4 mr-2" />
-                Download All
+              <Button 
+                onClick={() => handleDownload()} 
+                disabled={isDownloading}
+                className="transition-all hover:shadow-md active:scale-95"
+              >
+                {isDownloading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Exporting...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4 mr-2" />
+                    Download All
+                  </>
+                )}
               </Button>
               {filteredAndSortedClassifications.length < data.summary.total && (
                 <Button onClick={generateFilteredCSV} variant="outline">
