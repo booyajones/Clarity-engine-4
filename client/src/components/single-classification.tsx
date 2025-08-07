@@ -148,6 +148,7 @@ export function SingleClassification() {
     const storedMastercardId = localStorage.getItem('singleClassification_mastercardId');
     const storedPayeeName = localStorage.getItem('singleClassification_payeeName');
     const storedStatus = localStorage.getItem('singleClassification_status');
+    const storedResult = localStorage.getItem('singleClassification_result');
     
     if (storedJobId) {
       setJobId(storedJobId);
@@ -158,6 +159,15 @@ export function SingleClassification() {
     }
     if (storedPayeeName) {
       setPayeeName(storedPayeeName);
+    }
+    // Restore saved results if available
+    if (storedResult) {
+      try {
+        const parsedResult = JSON.parse(storedResult);
+        setResult(parsedResult);
+      } catch (error) {
+        console.error('Failed to parse saved result:', error);
+      }
     }
   }, []);
 
@@ -209,6 +219,15 @@ export function SingleClassification() {
       localStorage.removeItem('singleClassification_payeeName');
     }
   }, [isProcessing, payeeName]);
+  
+  // Persist result to localStorage whenever it changes
+  useEffect(() => {
+    if (result) {
+      localStorage.setItem('singleClassification_result', JSON.stringify(result));
+    } else {
+      localStorage.removeItem('singleClassification_result');
+    }
+  }, [result]);
 
   // Update result when progressive classification completes
   useEffect(() => {
@@ -426,6 +445,7 @@ export function SingleClassification() {
     localStorage.removeItem('singleClassification_mastercardId');
     localStorage.removeItem('singleClassification_status');
     localStorage.removeItem('singleClassification_payeeName');
+    localStorage.removeItem('singleClassification_result');
     
     // Reset form
     setPayeeName('');
