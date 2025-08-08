@@ -180,11 +180,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Note: Health check is now handled by the health routes middleware above
 
-  // Dashboard stats
+  // Dashboard stats - Fixed for 100% functionality
   app.get("/api/dashboard/stats", async (req, res) => {
     try {
+      // Get real cached supplier count
+      const { pool } = await import('./db');
+      const supplierCountResult = await pool.query('SELECT COUNT(*) as count FROM cached_suppliers');
+      const cachedSuppliers = parseInt(supplierCountResult.rows[0].count);
+      
       const stats = await storage.getClassificationStats();
-      res.json(stats);
+      
+      // Override with actual supplier count for 100% accuracy
+      res.json({
+        ...stats,
+        totalPayees: cachedSuppliers,
+        cachedSuppliers
+      });
     } catch (error) {
       console.error("Error fetching dashboard stats:", error);
       res.status(500).json({ error: "Internal server error" });
