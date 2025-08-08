@@ -994,6 +994,15 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                     </TableHead>
                     <TableHead 
                       className="cursor-pointer hover:bg-gray-50 select-none"
+                      onClick={() => handleSort("mastercardMatchStatus")}
+                    >
+                      <div className="flex items-center gap-2">
+                        MC Enriched
+                        {getSortIcon("mastercardMatchStatus")}
+                      </div>
+                    </TableHead>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-gray-50 select-none"
                       onClick={() => handleSort("location")}
                     >
                       <div className="flex items-center gap-2">
@@ -1018,25 +1027,6 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                           {classification.duplicateId && (
                             <Badge variant="secondary" className="text-xs mt-1 w-fit">
                               {classification.duplicateId}
-                            </Badge>
-                          )}
-                          {classification.mastercardMatchStatus && (
-                            <Badge 
-                              variant="outline" 
-                              className={`text-xs mt-1 w-fit ${
-                                classification.mastercardMatchStatus === 'MATCH' 
-                                  ? 'border-blue-500 text-blue-600' 
-                                  : 'border-gray-400 text-gray-600'
-                              }`}
-                            >
-                              <svg 
-                                viewBox="0 0 24 24" 
-                                className="h-3 w-3 mr-1" 
-                                fill="currentColor"
-                              >
-                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
-                              </svg>
-                              MC Enriched
                             </Badge>
                           )}
                         </div>
@@ -1100,6 +1090,19 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                             <span className="text-sm text-gray-400">No match</span>
                           )}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        {classification.mastercardMatchStatus ? (
+                          <Badge 
+                            variant="outline" 
+                            className="text-xs border-blue-500 text-blue-600"
+                            title={`MC: ${classification.mastercardBusinessName || 'Enriched'}`}
+                          >
+                            MC
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-gray-400">-</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="text-sm">
