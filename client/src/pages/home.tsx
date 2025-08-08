@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload as UploadIcon, Download, Loader2, X, FileSpreadsheet, CheckCircle2, XCircle, Clock, AlertCircle, Activity, ArrowRight, ClipboardList, Sparkles, Eye, Settings, Brain } from "lucide-react";
+import { Upload as UploadIcon, Download, Loader2, X, FileSpreadsheet, CheckCircle2, XCircle, Clock, AlertCircle, Activity, ArrowRight, ClipboardList, Sparkles, Eye, Settings, Brain, Package } from "lucide-react";
 import { useState, useRef } from "react";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -730,14 +730,14 @@ export default function Home() {
                       <div>
                         <label className="text-xs text-muted-foreground">Address</label>
                         <Select 
-                          value={addressColumns.address} 
-                          onValueChange={(value) => setAddressColumns(prev => ({ ...prev, address: value }))}
+                          value={addressColumns.address || "_none"} 
+                          onValueChange={(value) => setAddressColumns(prev => ({ ...prev, address: value === "_none" ? "" : value }))}
                         >
                           <SelectTrigger className="w-full">
                             <SelectValue placeholder="Select address column" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">None</SelectItem>
+                            <SelectItem value="_none">None</SelectItem>
                             {previewData.headers.map((header) => (
                               <SelectItem key={header} value={header}>
                                 {header}
@@ -749,14 +749,14 @@ export default function Home() {
                       <div>
                         <label className="text-xs text-muted-foreground">City</label>
                         <Select 
-                          value={addressColumns.city} 
-                          onValueChange={(value) => setAddressColumns(prev => ({ ...prev, city: value }))}
+                          value={addressColumns.city || "_none"} 
+                          onValueChange={(value) => setAddressColumns(prev => ({ ...prev, city: value === "_none" ? "" : value }))}
                         >
                           <SelectTrigger className="w-full">
                             <SelectValue placeholder="Select city column" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">None</SelectItem>
+                            <SelectItem value="_none">None</SelectItem>
                             {previewData.headers.map((header) => (
                               <SelectItem key={header} value={header}>
                                 {header}
@@ -768,14 +768,14 @@ export default function Home() {
                       <div>
                         <label className="text-xs text-muted-foreground">State</label>
                         <Select 
-                          value={addressColumns.state} 
-                          onValueChange={(value) => setAddressColumns(prev => ({ ...prev, state: value }))}
+                          value={addressColumns.state || "_none"} 
+                          onValueChange={(value) => setAddressColumns(prev => ({ ...prev, state: value === "_none" ? "" : value }))}
                         >
                           <SelectTrigger className="w-full">
                             <SelectValue placeholder="Select state column" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">None</SelectItem>
+                            <SelectItem value="_none">None</SelectItem>
                             {previewData.headers.map((header) => (
                               <SelectItem key={header} value={header}>
                                 {header}
@@ -787,14 +787,14 @@ export default function Home() {
                       <div>
                         <label className="text-xs text-muted-foreground">Zip Code</label>
                         <Select 
-                          value={addressColumns.zip} 
-                          onValueChange={(value) => setAddressColumns(prev => ({ ...prev, zip: value }))}
+                          value={addressColumns.zip || "_none"} 
+                          onValueChange={(value) => setAddressColumns(prev => ({ ...prev, zip: value === "_none" ? "" : value }))}
                         >
                           <SelectTrigger className="w-full">
                             <SelectValue placeholder="Select zip column" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">None</SelectItem>
+                            <SelectItem value="_none">None</SelectItem>
                             {previewData.headers.map((header) => (
                               <SelectItem key={header} value={header}>
                                 {header}

@@ -22,6 +22,38 @@ router.get('/searches', async (req, res) => {
   }
 });
 
+// Get search statistics
+router.get('/searches/stats', async (req, res) => {
+  try {
+    // Get all searches for statistics
+    const searches = await db
+      .select()
+      .from(mastercardSearchRequests)
+      .orderBy(desc(mastercardSearchRequests.submittedAt))
+      .limit(1000);
+    
+    // Calculate stats
+    const stats = {
+      total: searches.length,
+      pending: searches.filter(s => s.status === 'pending').length,
+      submitted: searches.filter(s => s.status === 'submitted').length,
+      polling: searches.filter(s => s.status === 'polling').length,
+      completed: searches.filter(s => s.status === 'completed').length,
+      failed: searches.filter(s => s.status === 'failed').length,
+      cancelled: searches.filter(s => s.status === 'cancelled').length,
+      timeout: searches.filter(s => s.status === 'timeout').length
+    };
+    
+    res.json({
+      stats,
+      searches: searches.slice(0, 10) // Return top 10 most recent searches
+    });
+  } catch (error) {
+    console.error('Error fetching Mastercard search stats:', error);
+    res.status(500).json({ error: 'Failed to fetch search statistics' });
+  }
+});
+
 // Delete a Mastercard search
 router.delete('/searches/:id', async (req, res) => {
   try {

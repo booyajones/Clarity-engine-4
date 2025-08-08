@@ -46,6 +46,11 @@ router.get('/datasets', async (req, res) => {
  */
 router.get('/models', async (req, res) => {
   try {
+    // Check if Akkio is configured
+    if (!process.env.AKKIO_API_KEY) {
+      return res.json([]);  // Return empty array when no API key
+    }
+    
     const localModels = await db.select().from(akkioModels).orderBy(desc(akkioModels.createdAt));
     const akkioModelsList = await akkioService.listModels();
 
@@ -61,6 +66,10 @@ router.get('/models', async (req, res) => {
     res.json(combinedModels);
   } catch (error) {
     console.error('Failed to list Akkio models:', error);
+    // Return empty array instead of error for missing API key
+    if (error instanceof Error && error.message.includes('404')) {
+      return res.json([]);
+    }
     res.status(500).json({ 
       error: 'Failed to list models', 
       details: error instanceof Error ? error.message : 'Unknown error' 

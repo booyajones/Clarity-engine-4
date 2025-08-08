@@ -155,8 +155,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Apply general rate limiting to all routes
   app.use('/api/', generalLimiter);
   
-  // Health check routes (no rate limiting)
-  app.use('/api/health', healthRoutes);
+  // Health check routes (no rate limiting) - using middleware pattern
+  app.use('/api', healthRoutes);
   
   // Akkio predictive analytics routes
   app.use('/api/akkio', akkioRoutes);
@@ -256,10 +256,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Parse first few rows for preview
+      let preview: any[] = [];
+      
+      if (ext === ".csv") {
+        // Read first 5 rows for preview
+        const rows: any[] = [];
+        await new Promise((resolve, reject) => {
+          fs.createReadStream(filePath)
+            .pipe(csv())
+            .on("data", (data: any) => {
+              if (rows.length < 5) {
+                rows.push(data);
+              }
+            })
+            .on("end", () => {
+              preview = rows;
+              resolve(true);
+            })
+            .on("error", reject);
+        });
+      } else if (ext === ".xlsx" || ext === ".xls") {
+        // Excel preview - already have data
+        const workbook = XLSX.readFile(filePath);
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][];
+        
+        // Convert rows to objects using headers
+        preview = jsonData.slice(1, 6).map(row => {
+          const obj: any = {};
+          headers.forEach((header, index) => {
+            obj[header] = row[index] || "";
+          });
+          return obj;
+        });
+      }
+
       // Don't delete the temp file yet, we need it for processing
       res.json({ 
         filename: req.file.originalname,
         headers,
+        preview,
         tempFileName: req.file.filename
       });
     } catch (error) {
@@ -856,6 +894,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Test classification error:", error);
       res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // Single classification endpoint - Quick classify a single payee
+  app.post("/api/classify", classificationLimiter, async (req, res) => {
+    try {
+      const { payee, enableFinexio = true, enableMastercard = false, enableGoogleAddressValidation = false } = req.body;
+      
+      if (!payee) {
+        return res.status(400).json({ error: "Payee name is required" });
+      }
+
+      // Import OpenAI for classification
+      const openai = await (async () => {
+        const OpenAI = (await import('openai')).default;
+        return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      })();
+      
+      // Perform classification using OpenAI
+      const systemPrompt = `You are a financial classification expert. Classify the payee into one of these categories: Business, Individual, Government.
+Also provide a SIC code and description if applicable. Respond in JSON format:
+{
+  "classification": "Business|Individual|Government",
+  "confidence": 0.95,
+  "sicCode": "1234",
+  "sicDescription": "Description of the industry",
+  "reasoning": "Brief explanation"
+}`;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Classify this payee: ${payee}` }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.1
+      });
+
+      const aiResponse = JSON.parse(completion.choices[0].message.content || "{}");
+      
+      const result = {
+        payee,
+        classification: aiResponse.classification || "Unknown",
+        confidence: aiResponse.confidence || 0,
+        sicCode: aiResponse.sicCode || "",
+        sicDescription: aiResponse.sicDescription || "",
+        reasoning: aiResponse.reasoning || "",
+        status: aiResponse.confidence >= 0.95 ? "completed" : "low_confidence"
+      };
+
+      res.json(result);
+    } catch (error) {
+      console.error("Single classification error:", error);
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // Get classification rules
+  app.get("/api/classification-rules", async (req, res) => {
+    try {
+      const rules = await storage.getClassificationRules();
+      res.json(rules);
+    } catch (error) {
+      console.error("Error fetching classification rules:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Mastercard service status
+  app.get("/api/mastercard/status", async (req, res) => {
+    try {
+      const hasConsumerKey = !!process.env.MASTERCARD_CONSUMER_KEY;
+      const hasKeystorePassword = !!process.env.MASTERCARD_KEYSTORE_PASSWORD;
+      const hasKeystoreAlias = !!process.env.MASTERCARD_KEYSTORE_ALIAS;
+      
+      // Check if private key file exists
+      const fs = await import('fs');
+      const hasPrivateKey = fs.existsSync('./mastercard-private-key.pem');
+      
+      const isConfigured = hasConsumerKey && hasPrivateKey && hasKeystorePassword && hasKeystoreAlias;
+      
+      res.json({
+        status: isConfigured ? "ready" : "not_configured",
+        configuration: {
+          hasPrivateKey,
+          hasConsumerKey,
+          hasKeystorePassword,
+          hasKeystoreAlias
+        },
+        service: "Mastercard Merchant Match Tool",
+        apiVersion: "v1"
+      });
+    } catch (error) {
+      console.error("Error getting Mastercard status:", error);
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 

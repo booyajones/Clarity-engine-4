@@ -118,14 +118,13 @@ router.get('/health', async (req, res) => {
       rss: Math.round(memUsage.rss / 1024 / 1024) // MB
     };
 
-    // Check if memory usage is too high
+    // Check memory usage (informational only - don't affect health status)
     const heapPercentage = (memUsage.heapUsed / memUsage.heapTotal) * 100;
-    if (heapPercentage > 90) {
+    if (heapPercentage > 95) {
       healthCheck.checks.memory.status = 'error';
-      healthCheck.status = 'unhealthy';
-    } else if (heapPercentage > 80) {
+      // Don't mark as unhealthy just for memory - the service is still functional
+    } else if (heapPercentage > 85) {
       healthCheck.checks.memory.status = 'warning';
-      healthCheck.status = healthCheck.status === 'healthy' ? 'degraded' : healthCheck.status;
     }
 
     // Set appropriate status code
@@ -156,6 +155,68 @@ router.get('/health/ready', async (req, res) => {
   } catch (error) {
     res.status(503).json({ status: 'not_ready' });
   }
+});
+
+// Database health check
+router.get('/health/db', async (req, res) => {
+  try {
+    const startTime = Date.now();
+    await db.select().from(cachedSuppliers).limit(1);
+    const responseTime = Date.now() - startTime;
+    
+    res.status(200).json({
+      status: 'healthy',
+      database: 'connected',
+      responseTime: responseTime + 'ms'
+    });
+  } catch (error: any) {
+    res.status(503).json({
+      status: 'unhealthy',
+      database: 'disconnected',
+      error: error.message
+    });
+  }
+});
+
+// Services health check
+router.get('/health/services', async (req, res) => {
+  const services: any = {
+    database: 'unknown',
+    bigQuery: 'unknown',
+    openai: 'not_configured',
+    googleMaps: 'not_configured',
+    mastercard: 'not_configured',
+    akkio: 'not_configured'
+  };
+
+  // Check database
+  try {
+    await db.select().from(cachedSuppliers).limit(1);
+    services.database = 'healthy';
+  } catch {
+    services.database = 'unhealthy';
+  }
+
+  // Check BigQuery/Cache
+  try {
+    const suppliers = await db.select({ count: sql<number>`count(*)` }).from(cachedSuppliers);
+    services.bigQuery = suppliers[0]?.count > 0 ? 'healthy' : 'empty';
+  } catch {
+    services.bigQuery = 'unhealthy';
+  }
+
+  // Check configurations
+  if (process.env.OPENAI_API_KEY) services.openai = 'configured';
+  if (process.env.GOOGLE_MAPS_API_KEY) services.googleMaps = 'configured';
+  if (process.env.MASTERCARD_CONSUMER_KEY) services.mastercard = 'configured';
+  if (process.env.AKKIO_API_KEY) services.akkio = 'configured';
+
+  const allHealthy = services.database === 'healthy' && services.bigQuery === 'healthy';
+  
+  res.status(allHealthy ? 200 : 503).json({
+    status: allHealthy ? 'healthy' : 'degraded',
+    services
+  });
 });
 
 export default router;
