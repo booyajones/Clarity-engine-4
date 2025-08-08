@@ -165,28 +165,26 @@ export class MastercardBatchOptimizedService {
       const searchId = searchResponse.bulkSearchId;
       console.log(`📨 Submitted Mastercard search ${searchId} for batch ${batchIndex + 1}`);
       
-      // Super-optimized adaptive polling for batch results
+      // Polling for batch results with proper timeout
       let results = null;
       let attempts = 0;
-      const maxAttempts = 30; // Increased for reliability
-      let pollInterval = 100; // Start ultra-fast
+      const maxAttempts = 20; // Reduced to prevent infinite loops
+      const startTime = Date.now();
+      const maxWaitTime = 60000; // Maximum 60 seconds wait time
+      let pollInterval = 500; // Start with reasonable interval
       
-      console.log(`⚡ Starting super-optimized batch polling for batch ${batchIndex + 1}`);
+      console.log(`⚡ Starting batch polling for batch ${batchIndex + 1} (max ${maxWaitTime/1000}s)`);
       
-      while (!results && attempts < maxAttempts) {
+      while (!results && attempts < maxAttempts && (Date.now() - startTime) < maxWaitTime) {
         attempts++;
         
-        // Ultra-optimized adaptive intervals for batches
+        // Adaptive intervals
         if (attempts <= 5) {
-          pollInterval = 200; // First 5: 0.2s (slightly slower for batches)
+          pollInterval = 500; // First 5: 0.5s
         } else if (attempts <= 10) {
-          pollInterval = 500; // Next 5: 0.5s
-        } else if (attempts <= 15) {
           pollInterval = 1000; // Next 5: 1s
-        } else if (attempts <= 20) {
-          pollInterval = 3000; // Next 5: 3s
         } else {
-          pollInterval = 5000; // Final attempts: 5s
+          pollInterval = 2000; // Final attempts: 2s
         }
         
         // Add jitter to prevent thundering herd
@@ -197,22 +195,29 @@ export class MastercardBatchOptimizedService {
           const searchResults = await mastercardApi.getSearchResults(searchId);
           
           // Check if we have actual results
-          if (searchResults && searchResults.data && searchResults.data.items && searchResults.data.items.length > 0) {
+          if (searchResults && searchResults.results && searchResults.results.length > 0) {
             results = searchResults;
-            const totalTime = (attempts * pollInterval / 1000).toFixed(1);
-            console.log(`✅ Batch ${batchIndex + 1} results ready in ~${totalTime}s after ${attempts} attempts!`);
+            const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+            console.log(`✅ Batch ${batchIndex + 1} results ready in ${totalTime}s after ${attempts} attempts!`);
           }
         } catch (error) {
           // Only log every 5th error to reduce noise
           if (attempts % 5 === 0) {
-            console.log(`⏳ Batch ${batchIndex + 1}: attempt ${attempts}/${maxAttempts}`);
+            const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(1);
+            console.log(`⏳ Batch ${batchIndex + 1}: attempt ${attempts}/${maxAttempts}, ${elapsedTime}s elapsed`);
           }
         }
       }
       
+      // Check if we timed out
+      if (!results) {
+        const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.warn(`⚠️ Batch ${batchIndex + 1} timed out after ${elapsedTime}s and ${attempts} attempts`);
+      }
+      
       // Process results
-      if (results && results.data && results.data.items) {
-        for (const item of results.data.items) {
+      if (results && results.results) {
+        for (const item of results.results) {
           // Map the searchRequestId back to the original payee ID
           const payeeId = searchIdMapping.get(item.searchRequestId);
           if (!payeeId) {
@@ -220,27 +225,28 @@ export class MastercardBatchOptimizedService {
             continue;
           }
           
-          if (item.isMatched && item.searchResult) {
-            // Extract the BEST match data
-            const entityDetails = item.searchResult.entityDetails;
-            const cardHistory = item.searchResult.cardProcessingHistory;
+          // Check if we have a match (EXACT_MATCH or PARTIAL_MATCH)
+          if (item.matchStatus && item.matchStatus !== 'NO_MATCH' && item.merchantDetails) {
+            // Extract the match data - handle the actual API response structure
+            const merchantDetails = item.merchantDetails;
             
             batchResults.set(payeeId, {
               enriched: true,
               status: 'success',
               data: {
-                matchConfidence: item.confidence,
-                businessName: entityDetails?.businessName,
-                taxId: entityDetails?.organisationIdentifications?.[0]?.identification,
-                merchantIds: entityDetails?.merchantIds,
-                address: entityDetails?.businessAddress,
-                phone: entityDetails?.phoneNumber,
-                mccCode: cardHistory?.mcc,
-                mccGroup: cardHistory?.mccGroup,
-                transactionRecency: cardHistory?.transactionRecency,
-                commercialHistory: cardHistory?.commercialHistory,
-                smallBusiness: cardHistory?.smallBusiness,
-                purchaseCardLevel: cardHistory?.purchaseCardLevel
+                matchConfidence: item.matchConfidence || '0',
+                matchStatus: item.matchStatus,
+                businessName: merchantDetails.merchantName || null,
+                taxId: merchantDetails.taxId || null,
+                merchantIds: merchantDetails.merchantId ? [merchantDetails.merchantId] : null,
+                address: merchantDetails.businessAddress || null,
+                phone: merchantDetails.phoneNumber || null,
+                mccCode: merchantDetails.merchantCategoryCode || null,
+                mccGroup: merchantDetails.merchantCategoryDescription || null,
+                acceptanceNetwork: merchantDetails.acceptanceNetwork || null,
+                lastTransactionDate: merchantDetails.lastTransactionDate || null,
+                transactionVolume: merchantDetails.transactionVolume || null,
+                dataQuality: merchantDetails.dataQuality || null
               },
               source: 'api'
             });
@@ -300,7 +306,7 @@ export class MastercardBatchOptimizedService {
   async updateDatabaseWithResults(enrichmentResults: Map<string, any>): Promise<void> {
     const updates: Array<{
       id: number;
-      mastercardEnrichment: any;
+      enrichmentData: any;
     }> = [];
     
     enrichmentResults.forEach((result, idString) => {
@@ -308,7 +314,7 @@ export class MastercardBatchOptimizedService {
       if (!isNaN(id)) {
         updates.push({
           id,
-          mastercardEnrichment: result
+          enrichmentData: result
         });
       }
     });
@@ -320,15 +326,29 @@ export class MastercardBatchOptimizedService {
       
       // Update each record
       await Promise.all(
-        batch.map(update => 
-          db.update(payeeClassifications)
+        batch.map(update => {
+          const enrichment = update.enrichmentData;
+          const mastercardData = enrichment.data || {};
+          
+          return db.update(payeeClassifications)
             .set({ 
-              mastercardEnrichment: update.mastercardEnrichment,
-              mastercardEnrichmentStatus: update.mastercardEnrichment.enriched ? 'completed' : 'failed',
-              mastercardEnrichmentCompletedAt: new Date()
+              mastercardMatchStatus: enrichment.enriched ? 'matched' : 'no_match',
+              mastercardMatchConfidence: mastercardData.matchConfidence || 0,
+              mastercardBusinessName: mastercardData.businessName || null,
+              mastercardTaxId: mastercardData.taxId || null,
+              mastercardMerchantIds: mastercardData.merchantIds || null,
+              mastercardAddress: mastercardData.address || null,
+              mastercardPhone: mastercardData.phone || null,
+              mastercardMccCode: mastercardData.mccCode || null,
+              mastercardMccGroup: mastercardData.mccGroup || null,
+              mastercardTransactionRecency: mastercardData.transactionRecency || null,
+              mastercardCommercialHistory: mastercardData.commercialHistory || null,
+              mastercardSmallBusiness: mastercardData.smallBusiness || null,
+              mastercardPurchaseCardLevel: mastercardData.purchaseCardLevel || null,
+              mastercardEnrichmentDate: new Date()
             })
             .where(eq(payeeClassifications.id, update.id))
-        )
+        })
       );
     }
     

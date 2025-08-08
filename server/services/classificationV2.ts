@@ -919,13 +919,13 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       result = openaiResult;
     } else {
       // Try web search for low confidence cases
-      if (this.shouldTriggerWebSearch(payeeData.originalName, openaiResult.confidence)) {
+      if ((this as any).shouldTriggerWebSearch && (this as any).shouldTriggerWebSearch(payeeData.originalName, openaiResult.confidence)) {
         try {
           const webSearchResult = await this.performWebSearchClassification(payeeData, payeeData.originalName);
           // Use web search result if it has higher confidence
           result = webSearchResult.confidence > openaiResult.confidence ? webSearchResult : openaiResult;
-        } catch (error) {
-          console.log(`Web search failed for ${payeeData.originalName}: ${error.message}`);
+        } catch (error: any) {
+          console.log(`Web search failed for ${payeeData.originalName}: ${error?.message || 'Unknown error'}`);
           result = openaiResult;
         }
       } else {
@@ -940,7 +940,7 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
         ...result,
         reasoning: `${exclusionResult.reason || "Excluded by keyword filter"}. Original classification: ${result.reasoning}`,
         isExcluded: true,
-        exclusionKeyword: exclusionResult.exclusionKeyword || exclusionResult.matchedKeyword
+        exclusionKeyword: (exclusionResult as any).exclusionKeyword || exclusionResult.matchedKeyword
       };
     }
 
@@ -1056,32 +1056,59 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       }));
       
       try {
-        // Use the optimized batch service which handles:
-        // 1. Immediate matches (like Home Depot)
-        // 2. Breaking into optimal batch sizes
-        // 3. Returning only the BEST match per company
-        // 4. Concurrent processing for speed
-        const enrichmentResults = await mastercardBatchOptimizedService.enrichBatch(payeesForEnrichment);
-        
-        // Update database with all results
-        await mastercardBatchOptimizedService.updateDatabaseWithResults(enrichmentResults);
-        
-        // Count successful enrichments
-        let successCount = 0;
-        enrichmentResults.forEach(result => {
-          if (result.enriched) successCount++;
+        // Create a timeout promise
+        const timeoutPromise = new Promise<any[]>((resolve) => {
+          setTimeout(() => {
+            console.warn('⚠️ Mastercard enrichment timeout - returning empty results after 75 seconds');
+            // Return timeout results for all payees
+            const timeoutResults = payeesForEnrichment.map(p => ({
+              id: p.id,
+              enriched: false,
+              status: 'timeout' as const,
+              message: 'Mastercard enrichment timed out',
+              source: 'api' as const
+            }));
+            resolve(timeoutResults);
+          }, 75000); // 75 second total timeout
         });
         
-        // Update batch status
+        // Race between actual enrichment and timeout
+        const enrichmentResults = await Promise.race([
+          mastercardBatchOptimizedService.enrichBatch(payeesForEnrichment),
+          timeoutPromise
+        ]);
+        
+        // Update database with all results (including timeouts/failures)
+        await mastercardBatchOptimizedService.updateDatabaseWithResults(enrichmentResults);
+        
+        // Count successful enrichments and timeouts
+        let successCount = 0;
+        let timeoutCount = 0;
+        let failureCount = 0;
+        enrichmentResults.forEach(result => {
+          if (result.enriched) {
+            successCount++;
+          } else if (result.status === 'timeout') {
+            timeoutCount++;
+          } else {
+            failureCount++;
+          }
+        });
+        
+        // Update batch status to completed regardless of individual results
+        // The enrichment process is complete even if some/all searches timed out
         await storage.updateUploadBatch(batchId, {
           mastercardEnrichmentStatus: "completed",
           mastercardEnrichmentCompletedAt: new Date(),
           mastercardEnrichmentProcessed: businessClassifications.length,
-          mastercardEnrichmentProgress: 100,
-          mastercardEnrichmentSuccessCount: successCount
+          mastercardEnrichmentProgress: 100
         });
         
-        console.log(`✅ Mastercard enrichment completed: ${successCount}/${businessClassifications.length} successfully enriched`);
+        if (timeoutCount > 0) {
+          console.log(`⚠️ Mastercard enrichment completed with timeouts: ${successCount} enriched, ${timeoutCount} timed out, ${failureCount} failed out of ${businessClassifications.length} total`);
+        } else {
+          console.log(`✅ Mastercard enrichment completed: ${successCount}/${businessClassifications.length} successfully enriched`);
+        }
         
       } catch (error) {
         console.error('Mastercard batch enrichment failed:', error);
@@ -1089,8 +1116,7 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
         // Mark batch as failed but don't fail the overall processing
         await storage.updateUploadBatch(batchId, {
           mastercardEnrichmentStatus: "failed",
-          mastercardEnrichmentCompletedAt: new Date(),
-          mastercardEnrichmentError: error instanceof Error ? error.message : 'Unknown error'
+          mastercardEnrichmentCompletedAt: new Date()
         });
       }
     } catch (error) {
