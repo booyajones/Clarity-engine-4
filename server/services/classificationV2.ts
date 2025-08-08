@@ -1170,20 +1170,14 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       // Check if Akkio predictions are disabled
       if (this.matchingOptions.enableAkkio !== true) {
         console.log(`Akkio predictions disabled for batch ${batchId}`);
-        await storage.updateUploadBatch(batchId, {
-          akkioPredictionStatus: "skipped",
-          akkioPredictionCompletedAt: new Date()
-        });
+        // Skip status update - columns don't exist
         return;
       }
 
       // Check if Akkio API is configured
       if (!process.env.AKKIO_API_KEY) {
         console.log('Akkio API not configured, skipping predictions');
-        await storage.updateUploadBatch(batchId, {
-          akkioPredictionStatus: "skipped",
-          akkioPredictionCompletedAt: new Date()
-        });
+        // Skip status update - columns don't exist
         return;
       }
 
@@ -1192,10 +1186,7 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       
       if (!activeModel) {
         console.log('No active Akkio model found, skipping predictions');
-        await storage.updateUploadBatch(batchId, {
-          akkioPredictionStatus: "no_model",
-          akkioPredictionCompletedAt: new Date()
-        });
+        // Skip status update - columns don't exist
         return;
       }
 
@@ -1206,22 +1197,11 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       
       if (classificationsForPrediction.length === 0) {
         console.log('No classifications ready for Akkio predictions');
-        await storage.updateUploadBatch(batchId, {
-          akkioPredictionStatus: "completed",
-          akkioPredictionCompletedAt: new Date(),
-          akkioPredictionProgress: 100
-        });
+        // Skip status update - columns don't exist
         return;
       }
 
-      // Update status to in_progress
-      await storage.updateUploadBatch(batchId, {
-        akkioPredictionStatus: "in_progress",
-        akkioPredictionStartedAt: new Date(),
-        akkioPredictionTotal: classificationsForPrediction.length,
-        akkioPredictionProcessed: 0,
-        akkioPredictionProgress: 0
-      });
+      // Skip initial status update - columns don't exist in database
 
       console.log(`Starting Akkio predictions for ${classificationsForPrediction.length} classifications`);
 
@@ -1290,33 +1270,17 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
 
         // Update progress
         const progress = Math.round((processedCount / classificationsForPrediction.length) * 100);
-        await storage.updateUploadBatch(batchId, {
-          akkioPredictionProcessed: processedCount,
-          akkioPredictionProgress: progress,
-          akkioPredictionSuccessCount: successCount,
-          akkioPredictionFailureCount: failureCount
-        });
+        // Skip status update - columns don't exist in database
+        console.log(`Akkio prediction progress: ${progress}% (${processedCount}/${classificationsForPrediction.length})`);
       }
 
-      // Final update
-      await storage.updateUploadBatch(batchId, {
-        akkioPredictionStatus: "completed",
-        akkioPredictionCompletedAt: new Date(),
-        akkioPredictionProgress: 100,
-        akkioPredictionProcessed: processedCount,
-        akkioPredictionSuccessCount: successCount,
-        akkioPredictionFailureCount: failureCount
-      });
+      // Final update - skip database update as columns don't exist
 
       console.log(`Akkio predictions completed for batch ${batchId}: ${successCount} successful, ${failureCount} failed out of ${processedCount} total`);
     } catch (error) {
       console.error('Akkio prediction process failed:', error);
       
-      // Update batch with error status
-      await storage.updateUploadBatch(batchId, {
-        akkioPredictionStatus: "failed",
-        akkioPredictionCompletedAt: new Date()
-      });
+      // Skip error status update - columns don't exist in database
     }
   }
 
