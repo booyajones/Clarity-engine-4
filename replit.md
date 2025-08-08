@@ -27,6 +27,9 @@ Preferred communication style: Simple, everyday language.
 - **Batch Processing**: Scalable infrastructure handling thousands of concurrent requests with rate limiting
 - **Batch Job Management**: Advanced system for handling large-scale operations exceeding single batch limits (3000+ records for Mastercard, 1000+ for Finexio)
 - **Sub-batch Processing**: Automatic splitting of large jobs with progress tracking, retry logic, and failure recovery
+- **Memory Management**: Real-time monitoring with automatic garbage collection, memory leak detection, and alerts at 75%/85% thresholds
+- **Caching System**: LRU caches with 50MB size limits, automatic eviction, and TTL management for suppliers, classifications, and queries
+- **Resource Optimization**: Dynamic database connection pooling, scheduled cleanup tasks, and performance monitoring endpoints
 
 ### Database
 - **Primary Database**: PostgreSQL via Neon serverless
@@ -62,6 +65,8 @@ Preferred communication style: Simple, everyday language.
 - **Job Reliability**: Automatic job failure detection, sub-job processing, adaptive batch sizing.
 - **Results Viewing**: Detailed interface for examining classification results, including summary cards, search, filtering, and column sorting.
 - **Tool Toggle Controls**: User-configurable settings to enable/disable Finexio matching and Mastercard enrichment.
+- **System Monitoring**: Real-time memory monitoring at `/api/monitoring/memory`, performance metrics at `/api/monitoring/performance`, cache statistics at `/api/monitoring/cache/stats`.
+- **Resource Protection**: Automatic garbage collection on critical memory, memory leak detection, scheduled cleanup every 15 minutes.
 
 ## External Dependencies
 

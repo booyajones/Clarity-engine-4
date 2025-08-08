@@ -4,6 +4,8 @@ import { setupVite, serveStatic, log } from "./vite";
 import { schedulerService } from "./services/schedulerService";
 import { mastercardApi } from "./services/mastercardApi";
 import { getMastercardWorker } from "./services/mastercardWorker";
+import memoryMonitor from './utils/memoryMonitor';
+import { optimizeDatabase, scheduleCleanup } from './utils/performanceOptimizer';
 
 const app = express();
 // Security and optimization middleware
@@ -84,6 +86,22 @@ app.use((req, res, next) => {
     }, () => {
       log(`serving on port ${port}`);
       
+      // Initialize performance optimizations
+      try {
+        // Start memory monitoring
+        memoryMonitor.start(30000); // Check every 30 seconds
+        console.log('✅ Memory monitoring started');
+        
+        // Optimize database connections
+        optimizeDatabase();
+        
+        // Schedule cleanup tasks
+        scheduleCleanup();
+        console.log('✅ Performance optimizations initialized');
+      } catch (error) {
+        console.error('Failed to initialize performance optimizations:', error);
+      }
+
       // Initialize scheduled jobs after server starts
       try {
         schedulerService.initialize();
