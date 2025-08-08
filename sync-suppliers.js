@@ -1,8 +1,15 @@
 #!/usr/bin/env node
 import { BigQuery } from '@google-cloud/bigquery';
-import { db } from './server/db.js';
-import { cachedSuppliers } from './shared/schema.js';
+import { drizzle } from 'drizzle-orm/neon-serverless';
+import { Pool } from '@neondatabase/serverless';
+import { cachedSuppliers } from './shared/schema.ts';
 import { sql } from 'drizzle-orm';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const db = drizzle(pool);
 
 // Business indicators that suggest entity is a business
 const BUSINESS_INDICATORS = [

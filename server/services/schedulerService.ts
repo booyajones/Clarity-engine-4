@@ -1,5 +1,6 @@
 import * as cron from 'node-cron';
 import { supplierCacheService } from './supplierCacheService';
+import { DailySupplierSync } from './dailySupplierSync';
 
 class SchedulerService {
   private jobs: Map<string, cron.ScheduledTask> = new Map();
@@ -15,13 +16,8 @@ class SchedulerService {
     const supplierRefreshJob = cron.schedule('0 7 * * *', async () => {
       console.log('🔄 Starting scheduled supplier cache refresh...');
       try {
-        const startTime = Date.now();
-        const result = await supplierCacheService.refreshCache();
-        const duration = Math.round((Date.now() - startTime) / 1000);
-        
-        console.log(`✅ Supplier cache refresh completed in ${duration}s`);
-        console.log(`   Total suppliers: ${result.totalSuppliers}`);
-        console.log(`   Last updated: ${result.lastUpdated}`);
+        const syncer = DailySupplierSync.getInstance();
+        await syncer.runDailySync();
       } catch (error) {
         console.error('❌ Scheduled supplier cache refresh failed:', error);
       }
