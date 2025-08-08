@@ -1056,18 +1056,20 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       }));
       
       try {
-        // Create a timeout promise
-        const timeoutPromise = new Promise<any[]>((resolve) => {
+        // Create a timeout promise that returns a Map (same format as enrichBatch)
+        const timeoutPromise = new Promise<Map<string, any>>((resolve) => {
           setTimeout(() => {
             console.warn('⚠️ Mastercard enrichment timeout - returning empty results after 75 seconds');
-            // Return timeout results for all payees
-            const timeoutResults = payeesForEnrichment.map(p => ({
-              id: p.id,
-              enriched: false,
-              status: 'timeout' as const,
-              message: 'Mastercard enrichment timed out',
-              source: 'api' as const
-            }));
+            // Return timeout results for all payees as a Map
+            const timeoutResults = new Map<string, any>();
+            payeesForEnrichment.forEach(p => {
+              timeoutResults.set(p.id, {
+                enriched: false,
+                status: 'timeout',
+                message: 'Mastercard enrichment timed out after 75 seconds',
+                source: 'api'
+              });
+            });
             resolve(timeoutResults);
           }, 75000); // 75 second total timeout
         });
@@ -1085,7 +1087,7 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
         let successCount = 0;
         let timeoutCount = 0;
         let failureCount = 0;
-        enrichmentResults.forEach(result => {
+        enrichmentResults.forEach((result, id) => {
           if (result.enriched) {
             successCount++;
           } else if (result.status === 'timeout') {

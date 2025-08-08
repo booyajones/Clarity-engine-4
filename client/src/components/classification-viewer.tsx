@@ -1090,6 +1090,11 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                               <span className="text-xs text-gray-500 truncate max-w-[150px]" title={classification.payeeMatches[0].bigQueryPayeeName}>
                                 {classification.payeeMatches[0].bigQueryPayeeName}
                               </span>
+                              {classification.payeeMatches[0].paymentType && (
+                                <Badge variant="outline" className="text-xs mt-1">
+                                  {classification.payeeMatches[0].paymentType}
+                                </Badge>
+                              )}
                             </>
                           ) : (
                             <span className="text-sm text-gray-400">No match</span>

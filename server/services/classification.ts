@@ -354,23 +354,34 @@ export class ClassificationService {
 Payee Name: ${name}
 ${address ? `Address: ${address}` : ''}
 
-Provide a classification with confidence level (0-100). Only return results if confidence is 95% or higher.
+IMPORTANT: For businesses, you MUST provide the correct SIC code and description. Research the business type and provide accurate industry classification.
+
+Common SIC codes for reference:
+- Amazon/E-commerce: 5961 "Catalog and Mail-Order Houses"
+- Walmart/Target: 5331 "Variety Stores" or 5311 "Department Stores"
+- Home Depot: 5211 "Lumber and Other Building Materials Dealers"
+- Starbucks/Coffee shops: 5812 "Eating Places"
+- Microsoft/Software: 7372 "Prepackaged Software"
+- Apple (Tech): 3571 "Electronic Computers" or 5734 "Computer and Computer Software Stores"
+- Best Buy: 5731 "Radio, Television, and Consumer Electronics Stores"
+- Google/Alphabet: 7379 "Computer Related Services, NEC"
+- Facebook/Meta: 7379 "Computer Related Services, NEC"
 
 Respond with JSON in this format:
 {
   "payeeType": "Individual|Business|Government",
   "confidence": 0.95,
-  "sicCode": "optional SIC code for businesses",
-  "sicDescription": "optional SIC description for businesses",
+  "sicCode": "4-digit SIC code (REQUIRED for businesses)",
+  "sicDescription": "Full SIC industry description (REQUIRED for businesses, not just 'Business')",
   "reasoning": "brief explanation of classification"
 }
 
 Consider these factors:
+- Well-known companies should get their standard SIC codes
 - Business indicators: LLC, Inc, Corp, Ltd, Company, business services, etc.
 - Individual indicators: First name + Last name patterns, personal titles
 - Government indicators: City of, County of, State of, Department, Agency, etc.
-- Address patterns and context clues
-- Industry-specific terminology and SIC codes
+- If unsure of specific SIC code for a business, use the closest match based on industry
 
 Provide your best classification for every payee. Give realistic confidence levels based on available information.`;
 
