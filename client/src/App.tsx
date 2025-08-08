@@ -7,6 +7,7 @@ import Home from "@/pages/home";
 import NotFound from "@/pages/not-found";
 import { AkkioModels } from "@/pages/akkio-models";
 import MastercardMonitor from "@/pages/mastercard-monitor";
+import { BatchJobMonitor } from "@/pages/batch-job-monitor";
 
 function Router() {
   return (
@@ -15,6 +16,7 @@ function Router() {
         <Route path="/" component={Home} />
         <Route path="/akkio-models" component={AkkioModels} />
         <Route path="/mastercard-monitor" component={MastercardMonitor} />
+        <Route path="/batch-jobs" component={BatchJobMonitor} />
         <Route component={NotFound} />
       </Switch>
     </div>

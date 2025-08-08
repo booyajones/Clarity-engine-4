@@ -25,6 +25,8 @@ Preferred communication style: Simple, everyday language.
 - **Performance**: Optimized with local caching and database indexes
 - **Scheduler Service**: Automatic nightly cache refresh
 - **Batch Processing**: Scalable infrastructure handling thousands of concurrent requests with rate limiting
+- **Batch Job Management**: Advanced system for handling large-scale operations exceeding single batch limits (3000+ records for Mastercard, 1000+ for Finexio)
+- **Sub-batch Processing**: Automatic splitting of large jobs with progress tracking, retry logic, and failure recovery
 
 ### Database
 - **Primary Database**: PostgreSQL via Neon serverless
@@ -44,6 +46,7 @@ Preferred communication style: Simple, everyday language.
 - **Processing Order**: Address validation/cleaning happens before Mastercard enrichment for improved matching accuracy. Processing sequence: Finexio → OpenAI → Address Validation → Mastercard → Akkio.
 - **Intelligent Address Enhancement**: OpenAI-powered system selectively enhances addresses when it can meaningfully improve results, with a validation loop.
 - **Akkio Payment Prediction**: Integrated as the final enrichment step for payment method and outcome prediction using machine learning.
+- **Mastercard API Timing**: Searches typically complete in 30-60 seconds but can take up to 25 minutes based on empirical observations. System configured with 25-minute timeout and polling-based result retrieval.
 
 ### File Processing Pipeline
 - **Handling**: Asynchronous processing with status tracking.

@@ -257,6 +257,42 @@ export const mastercardSearchRequests = pgTable("mastercard_search_requests", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Batch job management tables for handling large-scale operations
+export const batchJobs = pgTable("batch_jobs", {
+  id: text("id").primaryKey(), // job_timestamp_random format
+  batchId: integer("batch_id").notNull(),
+  service: text("service").notNull(), // mastercard, finexio, openai
+  status: text("status").notNull().default("pending"), // pending, processing, completed, failed, partial, cancelled
+  totalRecords: integer("total_records").notNull(),
+  recordsProcessed: integer("records_processed").default(0),
+  recordsFailed: integer("records_failed").default(0),
+  progress: integer("progress").default(0), // 0-100
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const subBatchJobs = pgTable("sub_batch_jobs", {
+  id: text("id").primaryKey(), // jobId_sub_number format
+  batchJobId: text("batch_job_id").notNull(),
+  batchNumber: integer("batch_number").notNull(),
+  totalBatches: integer("total_batches").notNull(),
+  startIndex: integer("start_index").notNull(),
+  endIndex: integer("end_index").notNull(),
+  recordCount: integer("record_count").notNull(),
+  status: text("status").notNull().default("pending"), // pending, processing, completed, failed, timeout, cancelled
+  recordsProcessed: integer("records_processed").default(0),
+  recordsFailed: integer("records_failed").default(0),
+  retryCount: integer("retry_count").default(0),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,

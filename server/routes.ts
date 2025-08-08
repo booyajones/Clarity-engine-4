@@ -13,6 +13,7 @@ import compression from "compression";
 import morgan from "morgan";
 import healthRoutes from "./routes/health";
 import akkioRoutes from "./routes/akkio";
+import batchJobRoutes from "./routes/batch-jobs";
 import { AppError, errorHandler, notFoundHandler, asyncHandler } from "./middleware/errorHandler";
 import { generalLimiter, uploadLimiter, classificationLimiter, expensiveLimiter } from "./middleware/rateLimiter";
 import { db } from "./db";
@@ -159,6 +160,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Akkio predictive analytics routes
   app.use('/api/akkio', akkioRoutes);
+  
+  // Batch job management routes for large-scale processing
+  app.use('/api/batch-jobs', batchJobRoutes);
   
   // Test database connection on startup
   try {
