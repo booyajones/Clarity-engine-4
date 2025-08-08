@@ -473,6 +473,15 @@ export default function Home() {
                     Mastercard Monitor
                   </Button>
                 </Link>
+                <Link href="/batch-jobs">
+                  <Button
+                    variant="outline"
+                    className="flex items-center gap-2"
+                  >
+                    <Package className="h-4 w-4" />
+                    Batch Jobs
+                  </Button>
+                </Link>
               </div>
             </div>
           </div>

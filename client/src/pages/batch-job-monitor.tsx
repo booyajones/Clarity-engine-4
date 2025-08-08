@@ -82,6 +82,35 @@ interface SubBatch {
   updatedAt: string;
 }
 
+interface BatchInfo {
+  id: number;
+  originalFilename: string;
+  filename: string;
+  status: string;
+  totalRecords: number;
+  processedRecords: number;
+}
+
+interface BatchJobStats {
+  totalJobs: number;
+  byStatus: {
+    pending: number;
+    processing: number;
+    completed: number;
+    failed: number;
+    partial: number;
+    cancelled: number;
+  };
+  byService: {
+    mastercard: number;
+    finexio: number;
+    openai: number;
+  };
+  totalRecordsProcessed: number;
+  totalRecordsFailed: number;
+  averageProcessingTimeMs: number;
+}
+
 export function BatchJobMonitor() {
   const { toast } = useToast();
   const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
@@ -89,26 +118,26 @@ export function BatchJobMonitor() {
   const [autoRefresh, setAutoRefresh] = useState(true);
 
   // Fetch all batch IDs
-  const { data: batches } = useQuery({
+  const { data: batches } = useQuery<BatchInfo[]>({
     queryKey: ['/api/upload/batches'],
   });
 
   // Fetch jobs for selected batch
-  const { data: jobs, refetch: refetchJobs } = useQuery({
-    queryKey: selectedBatchId ? [`/api/batch-jobs/batch/${selectedBatchId}`] : null,
+  const { data: jobs, refetch: refetchJobs } = useQuery<BatchJob[]>({
+    queryKey: [`/api/batch-jobs/batch/${selectedBatchId}`],
     enabled: !!selectedBatchId,
     refetchInterval: autoRefresh ? 5000 : false,
   });
 
   // Fetch sub-batches for selected job
-  const { data: subBatches } = useQuery({
-    queryKey: selectedJobId ? [`/api/batch-jobs/job/${selectedJobId}/sub-batches`] : null,
+  const { data: subBatches } = useQuery<SubBatch[]>({
+    queryKey: [`/api/batch-jobs/job/${selectedJobId}/sub-batches`],
     enabled: !!selectedJobId,
     refetchInterval: autoRefresh ? 3000 : false,
   });
 
   // Fetch overall statistics
-  const { data: stats } = useQuery({
+  const { data: stats } = useQuery<BatchJobStats>({
     queryKey: ['/api/batch-jobs/stats'],
     refetchInterval: autoRefresh ? 10000 : false,
   });
@@ -153,9 +182,7 @@ export function BatchJobMonitor() {
 
   const handleResumeJob = async (jobId: string) => {
     try {
-      const response = await apiRequest(`/api/batch-jobs/job/${jobId}/resume`, {
-        method: 'POST',
-      });
+      const response = await apiRequest(`/api/batch-jobs/job/${jobId}/resume`, 'POST');
       
       toast({
         title: 'Job Resumed',
@@ -174,9 +201,7 @@ export function BatchJobMonitor() {
 
   const handleCancelJob = async (jobId: string) => {
     try {
-      await apiRequest(`/api/batch-jobs/job/${jobId}/cancel`, {
-        method: 'POST',
-      });
+      await apiRequest(`/api/batch-jobs/job/${jobId}/cancel`, 'POST');
       
       toast({
         title: 'Job Cancelled',
@@ -333,11 +358,17 @@ export function BatchJobMonitor() {
               <SelectValue placeholder="Select a batch..." />
             </SelectTrigger>
             <SelectContent>
-              {batches?.map((batch: any) => (
-                <SelectItem key={batch.id} value={batch.id.toString()}>
-                  {batch.originalFilename} (ID: {batch.id})
-                </SelectItem>
-              ))}
+              {batches && batches.length > 0 ? (
+                batches.map((batch) => (
+                  <SelectItem key={batch.id} value={batch.id.toString()}>
+                    {batch.originalFilename} (ID: {batch.id})
+                  </SelectItem>
+                ))
+              ) : (
+                <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                  No batches available
+                </div>
+              )}
             </SelectContent>
           </Select>
         </CardContent>
@@ -367,7 +398,7 @@ export function BatchJobMonitor() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {jobs.map((job: BatchJob) => (
+                {jobs && jobs.map((job) => (
                   <TableRow key={job.id}>
                     <TableCell className="font-mono text-xs">
                       {job.id.substring(0, 16)}...
@@ -446,7 +477,7 @@ export function BatchJobMonitor() {
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                  {subBatches.map((sb: SubBatch) => (
+                                  {subBatches && subBatches.map((sb) => (
                                     <TableRow key={sb.id}>
                                       <TableCell>
                                         {sb.batchNumber}/{sb.totalBatches}
