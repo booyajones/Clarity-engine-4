@@ -184,78 +184,94 @@ export class SupplierCacheService {
   async searchCachedSuppliers(payeeName: string, limit = 10): Promise<CachedSupplier[]> {
     const normalizedName = payeeName.toLowerCase().trim();
     
-    // First try exact and substring matches
-    const exactResults = await db.select()
-      .from(cachedSuppliers)
-      .where(
-        or(
-          // Exact match (case-insensitive)
-          sql`LOWER(${cachedSuppliers.payeeName}) = ${normalizedName}`,
-          // Contains match
-          sql`LOWER(${cachedSuppliers.payeeName}) LIKE ${`%${normalizedName}%`}`,
-          // Reverse contains (input contains supplier name)
-          sql`${normalizedName} LIKE CONCAT('%', LOWER(${cachedSuppliers.payeeName}), '%')`,
-          // Mastercard name match
-          sql`LOWER(${cachedSuppliers.mastercardBusinessName}) LIKE ${`%${normalizedName}%`}`
-        )
-      )
-      .orderBy(
-        // Order by relevance: exact matches first, then by length similarity
-        sql`
-          CASE 
-            WHEN LOWER(${cachedSuppliers.payeeName}) = ${normalizedName} THEN 0
-            WHEN ${normalizedName} LIKE CONCAT('%', LOWER(${cachedSuppliers.payeeName}), '%') THEN 1
-            WHEN LOWER(${cachedSuppliers.payeeName}) LIKE ${`%${normalizedName}%`} THEN 2
-            ELSE 3
-          END,
-          ABS(LENGTH(${cachedSuppliers.payeeName}) - ${payeeName.length})
-        `
-      )
-      .limit(limit);
+    console.log(`Searching cached suppliers for: "${payeeName}" (normalized: "${normalizedName}")`);
     
-    // If we found good matches, return them
-    if (exactResults.length >= 3) {
-      return exactResults;
-    }
-    
-    // For short results, also try trigram similarity for fuzzy matching
-    // This will find similar names even with misspellings
+    // Use proper SQL with explicit column names for ILIKE search
     try {
-      const fuzzyResults = await db.execute(sql`
-        SELECT *
-        FROM ${cachedSuppliers}
-        WHERE LENGTH(${payeeName}) >= 4
-        AND (
-          similarity(LOWER(${cachedSuppliers.payeeName}), ${normalizedName}) > 0.25
-          OR similarity(LOWER(${cachedSuppliers.mastercardBusinessName}), ${normalizedName}) > 0.25
-        )
-        ORDER BY 
-          GREATEST(
-            similarity(LOWER(${cachedSuppliers.payeeName}), ${normalizedName}),
-            similarity(LOWER(${cachedSuppliers.mastercardBusinessName}), ${normalizedName})
-          ) DESC
-        LIMIT ${limit - exactResults.length}
+      const simpleResults = await db.execute(sql`
+        SELECT * FROM cached_suppliers
+        WHERE 
+          payee_name ILIKE ${'%' + payeeName + '%'}
+          OR mastercard_business_name ILIKE ${'%' + payeeName + '%'}
+        LIMIT ${limit}
       `);
       
-      // Combine results, avoiding duplicates and filtering out null names
-      const existingIds = new Set(exactResults.map(r => r.payeeId));
-      const combinedResults = [...exactResults];
+      console.log(`Simple ILIKE search found ${simpleResults.rows.length} results`);
       
-      for (const row of fuzzyResults.rows) {
-        const supplier = row as CachedSupplier;
-        if (!existingIds.has(supplier.payeeId) && 
-            supplier.payeeName && 
-            combinedResults.length < limit) {
-          combinedResults.push(supplier);
-        }
+      if (simpleResults.rows.length > 0) {
+        // Map the raw results to our CachedSupplier type
+        return simpleResults.rows.map(row => ({
+          id: row.id as number,
+          payeeId: row.payee_id as string,
+          payeeName: row.payee_name as string,
+          normalizedName: row.normalized_name as string | null,
+          category: row.category as string | null,
+          mcc: row.mcc as string | null,
+          industry: row.industry as string | null,
+          paymentType: row.payment_type as string | null,
+          mastercardBusinessName: row.mastercard_business_name as string | null,
+          city: row.city as string | null,
+          state: row.state as string | null,
+          confidence: row.confidence as number | null,
+          nameLength: row.name_length as number | null,
+          hasBusinessIndicator: row.has_business_indicator as boolean | null,
+          commonNameScore: row.common_name_score as number | null,
+          lastUpdated: row.last_updated as Date,
+          createdAt: row.created_at as Date,
+        }));
       }
-      
-      return combinedResults;
     } catch (error) {
-      // If trigram extension is not available, just return exact results
-      console.log('Trigram search failed, falling back to exact matches:', error);
-      return exactResults;
+      console.error('Simple search failed:', error);
     }
+    
+    // If no simple matches, try token-based search
+    const searchTokens = normalizedName.split(/\s+/).filter(t => t.length > 2);
+    console.log(`Searching with tokens:`, searchTokens);
+    
+    if (searchTokens.length === 0) {
+      return [];
+    }
+    
+    // Build token-based search query
+    let tokenQuery = 'SELECT * FROM cached_suppliers WHERE ';
+    const tokenConditions = searchTokens.map((token, i) => {
+      const paramName = `$${i + 1}`;
+      return `payee_name ILIKE ${paramName}`;
+    });
+    tokenQuery += tokenConditions.join(' OR ');
+    tokenQuery += ` LIMIT ${limit}`;
+    
+    // Create a dynamic SQL query with tokens
+    const tokenResults = await db.execute(sql`
+      SELECT * FROM cached_suppliers
+      WHERE ${sql.raw(searchTokens.map(token => 
+        `payee_name ILIKE '%${token.replace(/'/g, "''")}%'`
+      ).join(' OR '))}
+      LIMIT ${limit}
+    `);
+    
+    console.log(`Token search found ${tokenResults.rows.length} results`);
+    
+    return tokenResults.rows.map(row => ({
+      id: row.id as number,
+      payeeId: row.payee_id as string,
+      payeeName: row.payee_name as string,
+      normalizedName: row.normalized_name as string | null,
+      category: row.category as string | null,
+      mcc: row.mcc as string | null,
+      industry: row.industry as string | null,
+      paymentType: row.payment_type as string | null,
+      mastercardBusinessName: row.mastercard_business_name as string | null,
+      city: row.city as string | null,
+      state: row.state as string | null,
+      confidence: row.confidence as number | null,
+      nameLength: row.name_length as number | null,
+      hasBusinessIndicator: row.has_business_indicator as boolean | null,
+      commonNameScore: row.common_name_score as number | null,
+      lastUpdated: row.last_updated as Date,
+      createdAt: row.created_at as Date,
+    }));
+
   }
 
   // Get supplier by ID

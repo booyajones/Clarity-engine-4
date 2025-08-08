@@ -64,8 +64,62 @@ export class FuzzyMatcher {
     matchType: string;
     details: Record<string, any>;
   }> {
+    // First check for exact case-insensitive match (before normalization)
+    if (inputName.toLowerCase().trim() === candidateName.toLowerCase().trim()) {
+      console.log(`Exact case-insensitive match: "${inputName}" vs "${candidateName}" - 100% confidence`);
+      return {
+        isMatch: true,
+        confidence: 1.0,
+        matchType: 'exact_case_insensitive',
+        details: { exact: 1.0 }
+      };
+    }
+    
+    // Check for exact prefix match (e.g., "AMAZON" matches "AMAZON BUSINESS")
+    const lowerInput = inputName.toLowerCase().trim();
+    const lowerCandidate = candidateName.toLowerCase().trim();
+    
+    if (lowerCandidate.startsWith(lowerInput + ' ') || 
+        lowerCandidate.startsWith(lowerInput + '.') ||
+        lowerCandidate.startsWith(lowerInput + ',') ||
+        lowerCandidate.startsWith(lowerInput + '-')) {
+      console.log(`Exact prefix match: "${inputName}" matches "${candidateName}" - 95% confidence`);
+      return {
+        isMatch: true,
+        confidence: 0.95,
+        matchType: 'exact_prefix',
+        details: { prefix: 0.95 }
+      };
+    }
+    
+    // Check if input is a significant word in candidate (word boundary match)
+    const wordBoundaryPattern = new RegExp(`\\b${lowerInput.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    if (wordBoundaryPattern.test(lowerCandidate) && lowerInput.length >= 4) {
+      // Calculate confidence based on how much of the candidate name the input represents
+      const lengthRatio = lowerInput.length / lowerCandidate.length;
+      const confidence = Math.max(0.80, Math.min(0.90, 0.80 + lengthRatio * 0.2));
+      console.log(`Word boundary match: "${inputName}" in "${candidateName}" - ${(confidence * 100).toFixed(0)}% confidence`);
+      return {
+        isMatch: true,
+        confidence: confidence,
+        matchType: 'word_boundary',
+        details: { wordBoundary: confidence }
+      };
+    }
+    
     const normalizedInput = this.normalize(inputName);
     const normalizedCandidate = this.normalize(candidateName);
+    
+    // Check for exact normalized match (after removing business suffixes)
+    if (normalizedInput === normalizedCandidate && normalizedInput.length > 0) {
+      console.log(`Exact normalized match: "${inputName}" vs "${candidateName}" - 100% confidence`);
+      return {
+        isMatch: true,
+        confidence: 1.0,
+        matchType: 'exact_normalized',
+        details: { exact: 1.0 }
+      };
+    }
     
     // Run multiple matching algorithms
     const results = await Promise.all([
@@ -263,8 +317,18 @@ export class FuzzyMatcher {
   
   // Token set matching (handles word order variations)
   private async tokenSetMatch(s1: string, s2: string): Promise<{ confidence: number }> {
-    const tokens1 = new Set(s1.split(' '));
-    const tokens2 = new Set(s2.split(' '));
+    const tokens1 = new Set(s1.split(' ').filter(t => t.length > 0));
+    const tokens2 = new Set(s2.split(' ').filter(t => t.length > 0));
+    
+    // If one is subset of the other, give high confidence
+    const allTokens1InTokens2 = Array.from(tokens1).every(t => tokens2.has(t));
+    const allTokens2InTokens1 = Array.from(tokens2).every(t => tokens1.has(t));
+    
+    if (allTokens1InTokens2 || allTokens2InTokens1) {
+      // One is a subset of the other - high confidence
+      const sizeRatio = Math.min(tokens1.size, tokens2.size) / Math.max(tokens1.size, tokens2.size);
+      return { confidence: 0.9 + (sizeRatio * 0.1) }; // 90-100% based on size similarity
+    }
     
     const intersection = new Set(Array.from(tokens1).filter(x => tokens2.has(x)));
     const union = new Set([...Array.from(tokens1), ...Array.from(tokens2)]);

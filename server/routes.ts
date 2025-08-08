@@ -904,7 +904,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Single classification endpoint - Quick classify a single payee
   app.post("/api/classify", classificationLimiter, async (req, res) => {
     try {
-      const { payee, enableFinexio = true, enableMastercard = false, enableGoogleAddressValidation = false } = req.body;
+      const { payee, options = {} } = req.body;
+      const { enableFinexio = true, enableMastercard = false, enableGoogleAddressValidation = false } = options;
       
       if (!payee) {
         return res.status(400).json({ error: "Payee name is required" });
@@ -939,14 +940,54 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
 
       const aiResponse = JSON.parse(completion.choices[0].message.content || "{}");
       
-      const result = {
-        payee,
-        classification: aiResponse.classification || "Unknown",
+      // Create a classification object similar to what the payee matching service expects
+      const classification = {
+        originalName: payee,
+        cleanedName: payee,
+        payeeType: aiResponse.classification || "Unknown",
         confidence: aiResponse.confidence || 0,
         sicCode: aiResponse.sicCode || "",
         sicDescription: aiResponse.sicDescription || "",
         reasoning: aiResponse.reasoning || "",
         status: aiResponse.confidence >= 0.95 ? "completed" : "low_confidence"
+      };
+      
+      // Try to match with Finexio if enabled
+      let finexioMatch = null;
+      if (enableFinexio) {
+        try {
+          const { payeeMatchingService } = await import("./services/payeeMatchingService");
+          const matchResult = await payeeMatchingService.matchPayeeWithBigQuery(
+            classification as any,
+            { enableFinexio, enableMastercard, enableAI: true }
+          );
+          
+          if (matchResult.matched && matchResult.matchedPayee) {
+            finexioMatch = {
+              matched: true,
+              payeeId: matchResult.matchedPayee.payeeId,
+              payeeName: matchResult.matchedPayee.payeeName,
+              confidence: matchResult.matchedPayee.confidence,
+              matchScore: matchResult.matchedPayee.finexioMatchScore,
+              paymentType: matchResult.matchedPayee.paymentType,
+              matchType: matchResult.matchedPayee.matchType,
+              matchReasoning: matchResult.matchedPayee.matchReasoning
+            };
+          }
+        } catch (error) {
+          console.error("Finexio matching error:", error);
+        }
+      }
+      
+      const result = {
+        payee,
+        classification: classification.payeeType,
+        confidence: classification.confidence,
+        sicCode: classification.sicCode,
+        sicDescription: classification.sicDescription,
+        reasoning: classification.reasoning,
+        status: classification.status,
+        finexioMatch
       };
 
       res.json(result);

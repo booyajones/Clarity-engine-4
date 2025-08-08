@@ -50,6 +50,7 @@ Preferred communication style: Simple, everyday language.
 - **Intelligent Address Enhancement**: OpenAI-powered system selectively enhances addresses when it can meaningfully improve results, with a validation loop.
 - **Akkio Payment Prediction**: Integrated as the final enrichment step for payment method and outcome prediction using machine learning.
 - **Mastercard API Timing**: Searches typically complete in 30-60 seconds but can take up to 25 minutes based on empirical observations. System configured with 25-minute timeout and polling-based result retrieval.
+- **Finexio Matching** (Fixed 8/8/2025): Database search layer fully functional with 387,283 suppliers. Exact prefix matching at 95% confidence for business name variations (e.g., "AMAZON" → "AMAZON BUSINESS").
 
 ### File Processing Pipeline
 - **Handling**: Asynchronous processing with status tracking.

@@ -57,8 +57,11 @@ export class PayeeMatchingService {
         return { matched: false };
       }
       
+      console.log('[PayeeMatching] Starting Finexio match for:', classification.cleanedName);
+      
       // Search for potential matches in cached suppliers (much faster!)
       const cachedCandidates = await supplierCacheService.searchCachedSuppliers(classification.cleanedName);
+      console.log('[PayeeMatching] Cached candidates found:', cachedCandidates.length);
       
       // If cache is empty or needs refresh, fall back to BigQuery
       let candidates: BigQueryPayeeResult[];
@@ -130,30 +133,34 @@ export class PayeeMatchingService {
       // Only accept matches that the fuzzy matcher determined as valid
       // (fuzzy matcher already handles thresholds: >=0.9 direct, 0.6-0.9 AI-enhanced, <0.6 no match)
       if (bestMatchResult.isMatch) {
-        // Store the match in database
-        await storage.createPayeeMatch({
-          classificationId: classification.id,
-          bigQueryPayeeId: bestMatch.payeeId,
-          bigQueryPayeeName: bestMatch.payeeName,
-          matchConfidence: finalConfidence,
-          finexioMatchScore: finexioMatchScore,
-          paymentType: bestMatch.paymentType,
-          matchType: matchType,
-          matchReasoning: matchReasoning,
-          matchDetails: {
-            originalConfidence: bestMatch.confidence,
-            city: bestMatch.city,
-            state: bestMatch.state,
-            mastercardBusinessName: bestMatch.normalizedName
-          },
-        });
-        
-        // Update classification with matched payee info if available
-        if (bestMatch.category || bestMatch.sicCode) {
-          await storage.updatePayeeClassification(classification.id, {
-            sicCode: bestMatch.sicCode || classification.sicCode,
-            sicDescription: bestMatch.category || classification.sicDescription,
+        // Store the match in database only if classification has an ID
+        if (classification.id) {
+          await storage.createPayeeMatch({
+            classificationId: classification.id,
+            bigQueryPayeeId: bestMatch.payeeId,
+            bigQueryPayeeName: bestMatch.payeeName,
+            matchConfidence: finalConfidence,
+            finexioMatchScore: finexioMatchScore,
+            paymentType: bestMatch.paymentType,
+            matchType: matchType,
+            matchReasoning: matchReasoning,
+            matchDetails: {
+              originalConfidence: bestMatch.confidence,
+              city: bestMatch.city,
+              state: bestMatch.state,
+              mastercardBusinessName: bestMatch.normalizedName
+            },
           });
+        
+          // Update classification with matched payee info if available
+          if (bestMatch.category || bestMatch.sicCode) {
+            await storage.updatePayeeClassification(classification.id, {
+              sicCode: bestMatch.sicCode || classification.sicCode,
+              sicDescription: bestMatch.category || classification.sicDescription,
+            });
+          }
+        } else {
+          console.log('[PayeeMatching] Skipping database save - no classification ID (single classify endpoint)');
         }
         
         return {
