@@ -64,61 +64,43 @@ export class FuzzyMatcher {
     matchType: string;
     details: Record<string, any>;
   }> {
-    // First check for exact case-insensitive match (before normalization)
-    if (inputName.toLowerCase().trim() === candidateName.toLowerCase().trim()) {
-      console.log(`Exact case-insensitive match: "${inputName}" vs "${candidateName}" - 100% confidence`);
-      return {
-        isMatch: true,
-        confidence: 1.0,
-        matchType: 'exact_case_insensitive',
-        details: { exact: 1.0 }
-      };
+    const lowerInput = inputName.toLowerCase().trim();
+    const lowerCandidate = candidateName.toLowerCase().trim();
+    const normalizedInput = this.normalize(inputName);
+    const normalizedCandidate = this.normalize(candidateName);
+    
+    // Track special match conditions for boosting
+    let prefixBoost = 0;
+    let exactBoost = 0;
+    let wordBoundaryBoost = 0;
+    
+    // Check for exact case-insensitive match
+    if (lowerInput === lowerCandidate) {
+      console.log(`Exact case-insensitive match detected: "${inputName}" vs "${candidateName}"`);
+      exactBoost = 0.3; // Boost final score by 30%
+    }
+    
+    // Check for exact normalized match
+    if (normalizedInput === normalizedCandidate && normalizedInput.length > 0) {
+      console.log(`Exact normalized match detected: "${inputName}" vs "${candidateName}"`);
+      exactBoost = Math.max(exactBoost, 0.25); // Boost by 25%
     }
     
     // Check for exact prefix match (e.g., "AMAZON" matches "AMAZON BUSINESS")
-    const lowerInput = inputName.toLowerCase().trim();
-    const lowerCandidate = candidateName.toLowerCase().trim();
-    
     if (lowerCandidate.startsWith(lowerInput + ' ') || 
         lowerCandidate.startsWith(lowerInput + '.') ||
         lowerCandidate.startsWith(lowerInput + ',') ||
         lowerCandidate.startsWith(lowerInput + '-')) {
-      console.log(`Exact prefix match: "${inputName}" matches "${candidateName}" - 95% confidence`);
-      return {
-        isMatch: true,
-        confidence: 0.95,
-        matchType: 'exact_prefix',
-        details: { prefix: 0.95 }
-      };
+      console.log(`Exact prefix match detected: "${inputName}" in "${candidateName}"`);
+      prefixBoost = 0.2; // Boost final score by 20%
     }
     
-    // Check if input is a significant word in candidate (word boundary match)
+    // Check if input is a significant word in candidate
     const wordBoundaryPattern = new RegExp(`\\b${lowerInput.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
     if (wordBoundaryPattern.test(lowerCandidate) && lowerInput.length >= 4) {
-      // Calculate confidence based on how much of the candidate name the input represents
       const lengthRatio = lowerInput.length / lowerCandidate.length;
-      const confidence = Math.max(0.80, Math.min(0.90, 0.80 + lengthRatio * 0.2));
-      console.log(`Word boundary match: "${inputName}" in "${candidateName}" - ${(confidence * 100).toFixed(0)}% confidence`);
-      return {
-        isMatch: true,
-        confidence: confidence,
-        matchType: 'word_boundary',
-        details: { wordBoundary: confidence }
-      };
-    }
-    
-    const normalizedInput = this.normalize(inputName);
-    const normalizedCandidate = this.normalize(candidateName);
-    
-    // Check for exact normalized match (after removing business suffixes)
-    if (normalizedInput === normalizedCandidate && normalizedInput.length > 0) {
-      console.log(`Exact normalized match: "${inputName}" vs "${candidateName}" - 100% confidence`);
-      return {
-        isMatch: true,
-        confidence: 1.0,
-        matchType: 'exact_normalized',
-        details: { exact: 1.0 }
-      };
+      wordBoundaryBoost = Math.max(0.1, Math.min(0.15, lengthRatio * 0.2)); // 10-15% boost
+      console.log(`Word boundary match detected: "${inputName}" in "${candidateName}"`);
     }
     
     // Run multiple matching algorithms
@@ -157,21 +139,36 @@ export class FuzzyMatcher {
     
     let averageConfidence = weightedSum / totalWeight;
     
+    // Apply boosts for special matches
+    const totalBoost = Math.min(0.4, exactBoost + prefixBoost + wordBoundaryBoost); // Cap total boost at 40%
+    averageConfidence = Math.min(1.0, averageConfidence + totalBoost);
+    
     // Apply ambiguity penalty for single-word matches
     const ambiguityPenalty = this.calculateAmbiguityPenalty(inputName, candidateName);
     averageConfidence = averageConfidence * (1 - ambiguityPenalty);
     
-    console.log(`Fuzzy match: "${inputName}" vs "${candidateName}" - Confidence: ${(averageConfidence * 100).toFixed(2)}% (penalty: ${(ambiguityPenalty * 100).toFixed(0)}%)`);
+    // Log comprehensive matching details
+    console.log(`Cascading match analysis: "${inputName}" vs "${candidateName}"`);
+    console.log(`  Algorithms: Levenshtein=${(matchDetails.levenshtein * 100).toFixed(1)}%, JaroWinkler=${(matchDetails.jaroWinkler * 100).toFixed(1)}%, TokenSet=${(matchDetails.tokenSet * 100).toFixed(1)}%`);
+    console.log(`  Phonetic: Metaphone=${(matchDetails.metaphone * 100).toFixed(1)}%, N-gram=${(matchDetails.nGram * 100).toFixed(1)}%`);
+    console.log(`  Boosts: Exact=${(exactBoost * 100).toFixed(0)}%, Prefix=${(prefixBoost * 100).toFixed(0)}%, WordBoundary=${(wordBoundaryBoost * 100).toFixed(0)}%`);
+    console.log(`  Final confidence: ${(averageConfidence * 100).toFixed(2)}% (penalty: ${(ambiguityPenalty * 100).toFixed(0)}%)`);
+    
+    // Determine match type based on confidence and special conditions
+    let matchType = 'cascading';
+    if (exactBoost > 0) matchType = 'exact_cascading';
+    else if (prefixBoost > 0) matchType = 'prefix_cascading';
+    else if (wordBoundaryBoost > 0) matchType = 'boundary_cascading';
     
     // If confidence is below 90%, use AI for final determination
     if (averageConfidence >= 0.9) {
       return {
         isMatch: true,
         confidence: averageConfidence,
-        matchType: 'deterministic',
-        details: matchDetails,
+        matchType: matchType,
+        details: { ...matchDetails, boosts: { exact: exactBoost, prefix: prefixBoost, wordBoundary: wordBoundaryBoost } },
       };
-    } else if (averageConfidence >= 0.6 && averageConfidence < 0.9 && this.openai) {
+    } else if (averageConfidence >= 0.5 && averageConfidence < 0.9 && this.openai) {
       // Skip AI for single-word matches with heavy penalties (likely just surnames)
       const isLikelySurname = inputName.split(/\s+/).length === 1 && ambiguityPenalty >= 0.3;
       if (isLikelySurname) {
@@ -179,18 +176,18 @@ export class FuzzyMatcher {
         return {
           isMatch: false,
           confidence: averageConfidence,
-          matchType: 'deterministic',
-          details: matchDetails,
+          matchType: matchType,
+          details: { ...matchDetails, boosts: { exact: exactBoost, prefix: prefixBoost, wordBoundary: wordBoundaryBoost } },
         };
       }
       
-      // Use AI for medium confidence matches (70-90%)
+      // Use AI for medium confidence matches (50-90%)
       console.log(`Triggering AI enhancement for confidence ${(averageConfidence * 100).toFixed(2)}% (below 90% threshold)`);
       const aiResult = await this.aiMatch(inputName, candidateName, matchDetails);
       console.log(`AI result: isMatch=${aiResult.isMatch}, confidence=${(aiResult.confidence * 100).toFixed(2)}%, type=${aiResult.matchType}`);
-      return aiResult;
+      return { ...aiResult, matchType: `ai_enhanced_${matchType}` };
     } else {
-      // Low confidence (<60%) - no match
+      // Low confidence (<50%) - no match
       return {
         isMatch: false,
         confidence: averageConfidence,
