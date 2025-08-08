@@ -71,7 +71,7 @@ Preferred communication style: Simple, everyday language.
 - **csv-parser**: CSV file processing.
 - **xlsx**: Excel file processing.
 - **OpenAI API**: For AI classification functionality.
-- **Mastercard Merchant Match Tool (MMT) API**: For business enrichment data.
+- **Mastercard Merchant Match Tool (MMT) API**: For business enrichment data. Important: Searches typically take 5-20 minutes to complete, with many taking the full 20 minutes. System tracks average completion times for performance monitoring.
 - **Akkio API**: For payment prediction and machine learning models.
 - **Google Maps API**: For address validation and geographic data.
 

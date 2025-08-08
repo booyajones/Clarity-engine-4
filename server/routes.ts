@@ -1551,6 +1551,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Manual Mastercard enrichment trigger (for testing)
+  app.post("/api/classifications/batch/:batchId/enrich-mastercard", async (req, res) => {
+    try {
+      const batchId = parseInt(req.params.batchId);
+      
+      console.log(`📍 Manual Mastercard enrichment triggered for batch ${batchId}`);
+      
+      // Get business classifications
+      const businessClassifications = await storage.getBusinessClassificationsForEnrichment(batchId);
+      
+      if (businessClassifications.length === 0) {
+        return res.json({ 
+          success: false, 
+          message: "No business classifications to enrich" 
+        });
+      }
+      
+      console.log(`Found ${businessClassifications.length} business classifications to enrich`);
+      
+      // Import the optimized batch service
+      const { mastercardBatchOptimizedService } = await import('./services/mastercardBatchOptimized');
+      
+      // Prepare payees for enrichment
+      const payeesForEnrichment = businessClassifications.slice(0, 3).map(c => ({
+        id: c.id.toString(),
+        name: c.cleanedName || c.originalName,
+        address: c.address || undefined,
+        city: c.city || undefined,
+        state: c.state || undefined,
+        zipCode: c.zipCode || undefined,
+      }));
+      
+      console.log('Testing with first 3 payees:', payeesForEnrichment.map(p => p.name));
+      
+      // Run enrichment
+      const enrichmentResults = await mastercardBatchOptimizedService.enrichBatch(payeesForEnrichment);
+      
+      console.log(`Enrichment completed with ${enrichmentResults.size} results`);
+      
+      // Update database
+      await mastercardBatchOptimizedService.updateDatabaseWithResults(enrichmentResults);
+      
+      res.json({ 
+        success: true, 
+        message: `Enriched ${enrichmentResults.size} records`,
+        results: Array.from(enrichmentResults.entries()).map(([id, result]) => ({
+          id,
+          enriched: result.enriched,
+          status: result.status,
+          businessName: result.data?.businessName
+        }))
+      });
+      
+    } catch (error) {
+      console.error('Manual enrichment error:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Enrichment failed' 
+      });
+    }
+  });
+
   // Mastercard webhook endpoint
   app.post("/api/webhooks/mastercard", async (req, res) => {
     try {

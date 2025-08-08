@@ -168,23 +168,26 @@ export class MastercardBatchOptimizedService {
       // Polling for batch results with proper timeout
       let results = null;
       let attempts = 0;
-      const maxAttempts = 20; // Reduced to prevent infinite loops
+      const maxAttempts = 240; // Increased for 20 minute searches (240 * 5s average = 20min)
       const startTime = Date.now();
-      const maxWaitTime = 60000; // Maximum 60 seconds wait time
+      const maxWaitTime = 1200000; // Maximum 20 minutes (1200 seconds) - Mastercard can take up to 20 minutes
       let pollInterval = 500; // Start with reasonable interval
       
       console.log(`⚡ Starting batch polling for batch ${batchIndex + 1} (max ${maxWaitTime/1000}s)`);
+      console.log(`  Note: Mastercard searches typically take 5-20 minutes to complete`);
       
       while (!results && attempts < maxAttempts && (Date.now() - startTime) < maxWaitTime) {
         attempts++;
         
-        // Adaptive intervals
-        if (attempts <= 5) {
-          pollInterval = 500; // First 5: 0.5s
-        } else if (attempts <= 10) {
-          pollInterval = 1000; // Next 5: 1s
+        // Adaptive intervals for 20-minute searches
+        if (attempts <= 10) {
+          pollInterval = 2000; // First 10 attempts: 2s (20s total)
+        } else if (attempts <= 30) {
+          pollInterval = 5000; // Next 20 attempts: 5s (100s total, ~2 mins cumulative)
+        } else if (attempts <= 60) {
+          pollInterval = 10000; // Next 30 attempts: 10s (300s total, ~7 mins cumulative)
         } else {
-          pollInterval = 2000; // Final attempts: 2s
+          pollInterval = 15000; // Remaining attempts: 15s (for the rest of the 20 minutes)
         }
         
         // Add jitter to prevent thundering herd
@@ -198,7 +201,16 @@ export class MastercardBatchOptimizedService {
           if (searchResults && searchResults.results && searchResults.results.length > 0) {
             results = searchResults;
             const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
-            console.log(`✅ Batch ${batchIndex + 1} results ready in ${totalTime}s after ${attempts} attempts!`);
+            const totalMinutes = (totalTime / 60).toFixed(1);
+            console.log(`✅ Batch ${batchIndex + 1} results ready in ${totalTime}s (${totalMinutes} minutes) after ${attempts} attempts!`);
+            
+            // Track average completion time
+            if (!global.mastercardSearchTimes) {
+              global.mastercardSearchTimes = [];
+            }
+            global.mastercardSearchTimes.push(parseFloat(totalTime));
+            const avgTime = global.mastercardSearchTimes.reduce((a, b) => a + b, 0) / global.mastercardSearchTimes.length;
+            console.log(`  📊 Average Mastercard search time: ${avgTime.toFixed(1)}s (${(avgTime/60).toFixed(1)} minutes)`);
           }
         } catch (error) {
           // Only log every 5th error to reduce noise
@@ -304,36 +316,53 @@ export class MastercardBatchOptimizedService {
    * Update database with enrichment results
    */
   async updateDatabaseWithResults(enrichmentResults: Map<string, any>): Promise<void> {
+    console.log(`📊 Starting database update with ${enrichmentResults.size} enrichment results`);
+    
     const updates: Array<{
       id: number;
       enrichmentData: any;
     }> = [];
     
+    // Log the actual Map entries for debugging
     enrichmentResults.forEach((result, idString) => {
+      console.log(`  - Processing ID: ${idString}, type: ${typeof idString}, enriched: ${result.enriched}`);
       const id = parseInt(idString);
       if (!isNaN(id)) {
         updates.push({
           id,
           enrichmentData: result
         });
+      } else {
+        console.warn(`  ⚠️ Could not parse ID: ${idString}`);
       }
     });
     
+    console.log(`📦 Prepared ${updates.length} updates for database`);
+    
+    if (updates.length === 0) {
+      console.warn('⚠️ No valid updates to process!');
+      return;
+    }
+    
     // Update in batches to avoid overwhelming the database
     const updateBatchSize = 100;
+    let successCount = 0;
+    let errorCount = 0;
+    
     for (let i = 0; i < updates.length; i += updateBatchSize) {
       const batch = updates.slice(i, i + updateBatchSize);
+      console.log(`  Processing batch ${Math.floor(i/updateBatchSize) + 1}: ${batch.length} records`);
       
-      // Update each record
-      await Promise.all(
-        batch.map(update => {
+      // Update each record with error handling
+      const results = await Promise.allSettled(
+        batch.map(async update => {
           const enrichment = update.enrichmentData;
           const mastercardData = enrichment.data || {};
           
-          return db.update(payeeClassifications)
-            .set({ 
-              mastercardMatchStatus: enrichment.enriched ? 'matched' : 'no_match',
-              mastercardMatchConfidence: mastercardData.matchConfidence || 0,
+          try {
+            const updateData = {
+              mastercardMatchStatus: enrichment.enriched ? 'matched' : enrichment.status || 'no_match',
+              mastercardMatchConfidence: parseFloat(mastercardData.matchConfidence || '0'),
               mastercardBusinessName: mastercardData.businessName || null,
               mastercardTaxId: mastercardData.taxId || null,
               mastercardMerchantIds: mastercardData.merchantIds || null,
@@ -345,14 +374,38 @@ export class MastercardBatchOptimizedService {
               mastercardCommercialHistory: mastercardData.commercialHistory || null,
               mastercardSmallBusiness: mastercardData.smallBusiness || null,
               mastercardPurchaseCardLevel: mastercardData.purchaseCardLevel || null,
+              mastercardSource: enrichment.source || 'api',
               mastercardEnrichmentDate: new Date()
-            })
-            .where(eq(payeeClassifications.id, update.id))
+            };
+            
+            console.log(`    Updating ID ${update.id}: status=${updateData.mastercardMatchStatus}, name=${updateData.mastercardBusinessName}`);
+            
+            await db.update(payeeClassifications)
+              .set(updateData)
+              .where(eq(payeeClassifications.id, update.id));
+              
+            return { success: true, id: update.id };
+          } catch (error) {
+            console.error(`    ❌ Failed to update ID ${update.id}:`, error);
+            return { success: false, id: update.id, error };
+          }
         })
       );
+      
+      // Count successes and failures
+      results.forEach(result => {
+        if (result.status === 'fulfilled' && result.value.success) {
+          successCount++;
+        } else {
+          errorCount++;
+        }
+      });
     }
     
-    console.log(`📝 Updated ${updates.length} records with Mastercard enrichment data`);
+    console.log(`📝 Database update completed:`);
+    console.log(`   ✅ Successfully updated: ${successCount} records`);
+    console.log(`   ❌ Failed updates: ${errorCount} records`);
+    console.log(`   📊 Total processed: ${updates.length} records`);
   }
 }
 
