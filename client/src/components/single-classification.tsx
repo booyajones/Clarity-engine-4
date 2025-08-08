@@ -621,6 +621,120 @@ export function SingleClassification() {
         </CardContent>
       </Card>
 
+      {/* Status Tiles */}
+      {result && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* Classification Status */}
+          <Card className="animate-fade-in-up">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Brain className="h-4 w-4 text-blue-600" />
+                Classification
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <Badge variant={result.payeeType ? 'default' : 'outline'} className="w-full justify-center">
+                {result.payeeType ? `✓ ${result.payeeType}` : 'Not Classified'}
+              </Badge>
+              {result.confidence && (
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  {(result.confidence * 100).toFixed(0)}% confidence
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Finexio Match Status */}
+          <Card className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Database className="h-4 w-4 text-purple-600" />
+                Finexio Match
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <Badge 
+                variant={result.bigQueryMatch?.matched || result.finexioMatch?.matched ? 'default' : 'secondary'} 
+                className="w-full justify-center"
+              >
+                {(result.bigQueryMatch?.matched || result.finexioMatch?.matched) ? '✓ Matched' : '✗ No Match'}
+              </Badge>
+              {(result.bigQueryMatch?.finexioSupplier?.paymentMethodDefault || result.finexioMatch?.paymentType) && (
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  {result.bigQueryMatch?.finexioSupplier?.paymentMethodDefault || result.finexioMatch?.paymentType}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Enrichment Status */}
+          <Card className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Globe className="h-4 w-4 text-green-600" />
+                Enrichment
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <Badge 
+                variant={
+                  result.mastercardEnrichment?.status === 'processing' ? 'outline' :
+                  result.mastercardEnrichment?.enriched ? 'default' : 
+                  result.mastercardEnrichment?.status === 'completed' ? 'secondary' : 
+                  'outline'
+                } 
+                className="w-full justify-center"
+              >
+                {result.mastercardEnrichment?.status === 'processing' ? (
+                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                ) : null}
+                {result.mastercardEnrichment?.enriched ? '✓ Enriched' : 
+                 result.mastercardEnrichment?.status === 'processing' ? 'Processing' :
+                 result.mastercardEnrichment?.status === 'completed' ? '✗ No Data' : 
+                 'Not Run'}
+              </Badge>
+              {result.mastercardEnrichment?.data?.mccCode && (
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  MCC {result.mastercardEnrichment.data.mccCode}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Address Validation Status */}
+          <Card className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-orange-600" />
+                Address
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <Badge 
+                variant={
+                  result.addressValidation?.status === 'validated' ? 'default' : 
+                  result.googleAddressValidation?.success ? 'default' :
+                  result.addressValidation?.status === 'failed' ? 'destructive' : 
+                  'outline'
+                } 
+                className="w-full justify-center"
+              >
+                {result.addressValidation?.status === 'validated' || result.googleAddressValidation?.success ? '✓ Validated' : 
+                 result.addressValidation?.status === 'failed' ? '✗ Invalid' : 
+                 'Not Run'}
+              </Badge>
+              {(result.addressValidation?.confidence || result.googleAddressValidation?.data?.result?.verdict?.validationGranularity) && (
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  {result.addressValidation?.confidence ? 
+                    `${(result.addressValidation.confidence * 100).toFixed(0)}% confidence` :
+                    result.googleAddressValidation?.data?.result?.verdict?.validationGranularity?.toLowerCase()}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {result && (
         <Card>
           <CardHeader>
