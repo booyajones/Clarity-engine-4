@@ -56,6 +56,10 @@ import {
   ChevronsUpDown,
   Settings,
   Loader2,
+  Globe,
+  MapPin,
+  CreditCard,
+  Brain,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -118,6 +122,25 @@ interface ClassificationData {
     matchReasoning: string;
     paymentType?: string;
   }>;
+  // Akkio payment prediction
+  akkioPrediction?: {
+    paymentMethod?: string;
+    paymentOutcome?: string;
+    confidence?: number;
+    processingTime?: string;
+  };
+  // Address validation results
+  addressValidationResult?: {
+    validated: boolean;
+    originalAddress?: string;
+    validatedAddress?: string;
+    confidence?: number;
+    postalCode?: string;
+    country?: string;
+    placeId?: string;
+    latitude?: number;
+    longitude?: number;
+  };
 }
 
 interface PayeeMatch {
@@ -1144,13 +1167,25 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                 <div className="grid grid-cols-2 gap-4">
                                   <div>
                                     <label className="text-sm font-medium">Classification</label>
-                                    <p className="text-sm text-gray-600">{selectedClassification.payeeType}</p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <Badge className={getTypeColor(selectedClassification.payeeType)}>
+                                        {selectedClassification.payeeType}
+                                      </Badge>
+                                    </div>
                                   </div>
                                   <div>
-                                    <label className="text-sm font-medium">Confidence</label>
-                                    <p className={`text-sm font-medium ${getConfidenceColor(selectedClassification.confidence)}`}>
-                                      {Math.round(selectedClassification.confidence * 100)}%
-                                    </p>
+                                    <label className="text-sm font-medium">Confidence Score</label>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <div className="flex-1 bg-gray-200 rounded-full h-2">
+                                        <div 
+                                          className="bg-gradient-to-r from-green-500 to-blue-500 h-2 rounded-full transition-all duration-300"
+                                          style={{ width: `${selectedClassification.confidence * 100}%` }}
+                                        />
+                                      </div>
+                                      <span className="text-sm font-medium">
+                                        {Math.round(selectedClassification.confidence * 100)}%
+                                      </span>
+                                    </div>
                                   </div>
                                 </div>
                                 
@@ -1163,13 +1198,90 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                   </div>
                                 )}
                                 
-                                {(selectedClassification.address || selectedClassification.city) && (
-                                  <div>
-                                    <label className="text-sm font-medium">Address</label>
-                                    <div className="text-sm text-gray-600">
-                                      {selectedClassification.address && <div>{selectedClassification.address}</div>}
-                                      {selectedClassification.city && selectedClassification.state && (
-                                        <div>{selectedClassification.city}, {selectedClassification.state} {selectedClassification.zipCode}</div>
+                                {/* Address Information & Validation Results */}
+                                {(selectedClassification.address || selectedClassification.city || selectedClassification.addressValidationResult) && (
+                                  <div className="bg-blue-50 p-4 rounded-lg space-y-3 border border-blue-200">
+                                    <div className="flex items-center gap-2">
+                                      <MapPin className="h-5 w-5 text-blue-700" />
+                                      <label className="text-sm font-medium text-blue-900">Address Information</label>
+                                      {selectedClassification.addressValidationResult?.validated && (
+                                        <Badge className="bg-green-100 text-green-800 text-xs">✓ Validated</Badge>
+                                      )}
+                                    </div>
+                                    
+                                    {selectedClassification.addressValidationResult?.validatedAddress ? (
+                                      <div className="space-y-2">
+                                        <div>
+                                          <label className="text-xs font-medium text-blue-700">Validated Address</label>
+                                          <p className="text-sm text-blue-900">{selectedClassification.addressValidationResult.validatedAddress}</p>
+                                        </div>
+                                        {selectedClassification.addressValidationResult.originalAddress && 
+                                         selectedClassification.addressValidationResult.originalAddress !== selectedClassification.addressValidationResult.validatedAddress && (
+                                          <div>
+                                            <label className="text-xs font-medium text-blue-600">Original Address</label>
+                                            <p className="text-xs text-blue-800 line-through opacity-75">
+                                              {selectedClassification.addressValidationResult.originalAddress}
+                                            </p>
+                                          </div>
+                                        )}
+                                        {selectedClassification.addressValidationResult.confidence && (
+                                          <div className="flex items-center gap-2">
+                                            <label className="text-xs font-medium text-blue-700">Validation Confidence</label>
+                                            <Badge className="text-xs bg-blue-100 text-blue-800">
+                                              {Math.round(selectedClassification.addressValidationResult.confidence * 100)}%
+                                            </Badge>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="text-sm text-blue-900">
+                                        {selectedClassification.address && <div>{selectedClassification.address}</div>}
+                                        {selectedClassification.city && selectedClassification.state && (
+                                          <div>{selectedClassification.city}, {selectedClassification.state} {selectedClassification.zipCode}</div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                
+                                {/* Akkio Payment Prediction */}
+                                {selectedClassification.akkioPrediction && (
+                                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-lg space-y-3 border border-indigo-200">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <Brain className="h-5 w-5 text-indigo-700" />
+                                        <label className="text-sm font-medium text-indigo-900">Akkio Payment Prediction</label>
+                                      </div>
+                                      {selectedClassification.akkioPrediction.confidence && (
+                                        <Badge className="bg-indigo-100 text-indigo-800 text-xs">
+                                          {Math.round(selectedClassification.akkioPrediction.confidence * 100)}% Confidence
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-2 gap-3 text-sm">
+                                      {selectedClassification.akkioPrediction.paymentMethod && (
+                                        <div>
+                                          <label className="text-xs font-medium text-indigo-700">Payment Method</label>
+                                          <div className="flex items-center gap-1 mt-1">
+                                            <CreditCard className="h-4 w-4 text-indigo-600" />
+                                            <p className="text-indigo-900 font-medium">{selectedClassification.akkioPrediction.paymentMethod}</p>
+                                          </div>
+                                        </div>
+                                      )}
+                                      
+                                      {selectedClassification.akkioPrediction.paymentOutcome && (
+                                        <div>
+                                          <label className="text-xs font-medium text-indigo-700">Payment Outcome</label>
+                                          <p className="text-indigo-900 font-medium">{selectedClassification.akkioPrediction.paymentOutcome}</p>
+                                        </div>
+                                      )}
+                                      
+                                      {selectedClassification.akkioPrediction.processingTime && (
+                                        <div className="col-span-2">
+                                          <label className="text-xs font-medium text-indigo-700">Processing Time</label>
+                                          <p className="text-indigo-900">{selectedClassification.akkioPrediction.processingTime}</p>
+                                        </div>
                                       )}
                                     </div>
                                   </div>
