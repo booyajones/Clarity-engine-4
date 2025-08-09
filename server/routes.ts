@@ -1018,7 +1018,14 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
               matchScore: matchResult.matchedPayee.finexioMatchScore,
               paymentType: matchResult.matchedPayee.paymentType,
               matchType: matchResult.matchedPayee.matchType,
-              matchReasoning: matchResult.matchedPayee.matchReasoning
+              matchReasoning: matchResult.matchedPayee.matchReasoning,
+              // Add finexioSupplier structure for backward compatibility
+              finexioSupplier: {
+                id: matchResult.matchedPayee.payeeId,
+                name: matchResult.matchedPayee.payeeName,
+                paymentType: matchResult.matchedPayee.paymentType,
+                confidence: matchResult.matchedPayee.confidence
+              }
             };
           }
         } catch (error) {

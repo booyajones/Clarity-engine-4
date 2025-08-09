@@ -180,71 +180,22 @@ export class SupplierCacheService {
     }
   }
 
-  // Search cached suppliers with optimized queries - FIXED FOR ACCURATE MATCHING
+  // Search cached suppliers - NOW USES ACCURATE MATCHING SERVICE
   async searchCachedSuppliers(payeeName: string, limit = 10): Promise<CachedSupplier[]> {
-    const normalizedName = payeeName.toLowerCase().trim();
+    // Import the accurate matching service
+    const { accurateMatchingService } = await import('./accurateMatchingService');
     
-    console.log(`Searching cached suppliers for: "${payeeName}" (normalized: "${normalizedName}")`);
+    // Use the new accurate matching algorithm
+    const matchResult = await accurateMatchingService.findBestMatch(payeeName, limit);
     
-    // Use proper SQL with prioritized matching:
-    // 1. Exact matches first
-    // 2. Then prefix matches
-    // 3. Then contains matches (but more restrictive)
-    try {
-      const simpleResults = await db.execute(sql`
-        SELECT * FROM cached_suppliers
-        WHERE 
-          LOWER(payee_name) = ${normalizedName}
-          OR LOWER(mastercard_business_name) = ${normalizedName}
-          OR LOWER(payee_name) LIKE ${normalizedName + '%'}
-          OR LOWER(mastercard_business_name) LIKE ${normalizedName + '%'}
-        ORDER BY 
-          CASE 
-            WHEN LOWER(payee_name) = ${normalizedName} THEN 1
-            WHEN LOWER(mastercard_business_name) = ${normalizedName} THEN 2
-            WHEN LOWER(payee_name) LIKE ${normalizedName + '%'} THEN 3
-            WHEN LOWER(mastercard_business_name) LIKE ${normalizedName + '%'} THEN 4
-            ELSE 5
-          END,
-          LENGTH(payee_name)
-        LIMIT ${limit}
-      `);
-      
-      console.log(`Prioritized search found ${simpleResults.rows.length} results`);
-      
-      // If no exact or prefix matches found, DON'T do a broad search
-      if (simpleResults.rows.length > 0) {
-        // Map the raw results to our CachedSupplier type
-        return simpleResults.rows.map(row => ({
-          id: row.id as number,
-          payeeId: row.payee_id as string,
-          payeeName: row.payee_name as string,
-          normalizedName: row.normalized_name as string | null,
-          category: row.category as string | null,
-          mcc: row.mcc as string | null,
-          industry: row.industry as string | null,
-          paymentType: row.payment_type as string | null,
-          mastercardBusinessName: row.mastercard_business_name as string | null,
-          city: row.city as string | null,
-          state: row.state as string | null,
-          confidence: row.confidence as number | null,
-          nameLength: row.name_length as number | null,
-          hasBusinessIndicator: row.has_business_indicator as boolean | null,
-          commonNameScore: row.common_name_score as number | null,
-          lastUpdated: row.last_updated as Date,
-          createdAt: row.created_at as Date,
-        }));
-      }
-    } catch (error) {
-      console.error('Simple search failed:', error);
+    // Return all matches above threshold, sorted by score
+    if (matchResult.matches.length > 0) {
+      console.log(`[SupplierCache] Found ${matchResult.matches.length} high-confidence matches for "${payeeName}"`);
+      return matchResult.matches.map(m => m.supplier);
     }
     
-    // DISABLED TOKEN SEARCH - IT WAS CAUSING BAD MATCHES
-    // For "HD Supply" it was returning "10-S TENNIS SUPPLY"
-    // Return empty array if no exact or prefix matches found
-    console.log(`No exact or prefix matches found for "${payeeName}" - returning empty`);
+    console.log(`[SupplierCache] No high-confidence matches found for "${payeeName}"`);
     return [];
-
   }
 
   // Get supplier by ID
