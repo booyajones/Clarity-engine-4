@@ -1,0 +1,229 @@
+version: '3.8'
+
+services:
+  # Redis for message queues and caching
+  redis:
+    image: redis:7-alpine
+    container_name: clarity-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # API Gateway - Main entry point
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    container_name: clarity-gateway
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - NODE_OPTIONS=--expose-gc --max-old-space-size=512
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DATABASE_URL=${DATABASE_URL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MASTERCARD_CONSUMER_KEY=${MASTERCARD_CONSUMER_KEY}
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Finexio Network Service
+  finexio-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: clarity-finexio
+    command: node workers/finexioWorker.js
+    environment:
+      - NODE_ENV=production
+      - NODE_OPTIONS=--expose-gc --max-old-space-size=1024
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DATABASE_URL=${DATABASE_URL}
+      - FINEXIO_CONCURRENCY=5
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 1024m
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 1024M
+        reservations:
+          memory: 512M
+
+  # Classification Service
+  classification-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: clarity-classification
+    command: node workers/classificationWorker.js
+    environment:
+      - NODE_ENV=production
+      - NODE_OPTIONS=--expose-gc --max-old-space-size=512
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DATABASE_URL=${DATABASE_URL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CLASSIFICATION_CONCURRENCY=3
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 512m
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # Mastercard Service
+  mastercard-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: clarity-mastercard
+    command: node workers/mastercardWorker.js
+    environment:
+      - NODE_ENV=production
+      - NODE_OPTIONS=--expose-gc --max-old-space-size=512
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DATABASE_URL=${DATABASE_URL}
+      - MASTERCARD_CONSUMER_KEY=${MASTERCARD_CONSUMER_KEY}
+      - MASTERCARD_ENVIRONMENT=${MASTERCARD_ENVIRONMENT}
+      - MASTERCARD_CONCURRENCY=2
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 512m
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # Address Validation Service
+  address-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: clarity-address
+    command: node workers/addressWorker.js
+    environment:
+      - NODE_ENV=production
+      - NODE_OPTIONS=--expose-gc --max-old-space-size=256
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DATABASE_URL=${DATABASE_URL}
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
+      - ADDRESS_CONCURRENCY=5
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 256m
+
+  # Orchestration Service
+  orchestration-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: clarity-orchestration
+    command: node workers/orchestrationWorker.js
+    environment:
+      - NODE_ENV=production
+      - NODE_OPTIONS=--expose-gc --max-old-space-size=512
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DATABASE_URL=${DATABASE_URL}
+      - ORCHESTRATION_CONCURRENCY=10
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 512m
+    deploy:
+      replicas: 2
+
+  # Monitoring with Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: clarity-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    restart: unless-stopped
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: clarity-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/dashboards:/etc/grafana/provisioning/dashboards
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  # Bull Board for queue monitoring
+  bull-board:
+    build:
+      context: .
+      dockerfile: Dockerfile.bullboard
+    container_name: clarity-bullboard
+    ports:
+      - "3001:3001"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  default:
+    name: clarity-network
+    driver: bridge

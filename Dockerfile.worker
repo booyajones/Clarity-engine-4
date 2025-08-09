@@ -1,0 +1,26 @@
+# Worker Service Dockerfile
+FROM node:20-alpine
+
+# Install build dependencies
+RUN apk add --no-cache python3 make g++
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY tsconfig.json ./
+
+# Install dependencies
+RUN npm ci --only=production
+
+# Copy source code
+COPY workers ./workers
+COPY server ./server
+COPY shared ./shared
+
+# Build TypeScript
+RUN npx tsc
+
+# Default command (override in docker-compose)
+CMD ["node", "--expose-gc", "workers/finexioWorker.js"]

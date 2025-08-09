@@ -3,6 +3,8 @@
 ## Overview
 Clarity Engine 3 is an AI-powered web application for finance and accounting professionals. It transforms unstructured payee data into organized, actionable insights by intelligently classifying payees (Individual, Business, Government) and assigning SIC codes with confidence scores. The platform is enhanced with Mastercard Merchant Match Tool (MMT) API integration for comprehensive business enrichment, aiming to provide a sophisticated tool for data transformation and analysis in financial contexts. Key capabilities include smart classification, intuitive user experience, robust data management, and reliable job processing.
 
+**CRITICAL UPDATE (1/11/2025)**: System architecture assessment completed. Currently running as monolith at 96% memory capacity. Immediate refactoring to microservices architecture initiated for production-grade scalability. See docs/MICROSERVICES_ARCHITECTURE_PLAN.md for full details.
+
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
