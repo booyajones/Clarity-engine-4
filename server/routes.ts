@@ -1058,12 +1058,16 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
       
       const result = {
         payee,
-        classification: classification.payeeType,
-        confidence: classification.confidence,
-        sicCode: classification.sicCode,
-        sicDescription: classification.sicDescription,
-        reasoning: classification.reasoning,
-        status: classification.status,
+        classification: {
+          payeeType: classification.payeeType,
+          confidence: classification.confidence,
+          sicCode: classification.sicCode,
+          sicDescription: classification.sicDescription,
+          reasoning: classification.reasoning,
+          status: classification.status,
+          originalName: classification.originalName,
+          cleanedName: classification.cleanedName
+        },
         finexioMatch
       };
 

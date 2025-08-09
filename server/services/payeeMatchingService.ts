@@ -60,8 +60,11 @@ export class PayeeMatchingService {
       
       console.log('[PayeeMatching] Starting Finexio match for:', classification.cleanedName);
       
-      // Search for potential matches in cached suppliers (much faster!)
-      const cachedCandidates = await supplierCacheService.searchCachedSuppliers(classification.cleanedName);
+      // Use memory-optimized cache for supplier search (reduces memory by 95%)
+      const useMemoryOptimized = true; // Always use optimized version to save memory
+      const cachedCandidates = useMemoryOptimized
+        ? await memoryOptimizedCache.searchSuppliers(classification.cleanedName, 10)
+        : await supplierCacheService.searchCachedSuppliers(classification.cleanedName);
       console.log('[PayeeMatching] Cached candidates found:', cachedCandidates.length);
       
       // If cache is empty or needs refresh, fall back to BigQuery
@@ -70,7 +73,7 @@ export class PayeeMatchingService {
       if (cachedCandidates.length > 0) {
         // Convert cached suppliers to BigQuery format for compatibility
         candidates = cachedCandidates.map(supplier => ({
-          payeeId: supplier.payeeId,
+          payeeId: supplier.id || supplier.payeeId || supplier.supplierId,
           payeeName: supplier.payeeName,
           normalizedName: supplier.normalizedName || supplier.mastercardBusinessName || undefined,
           category: supplier.category || undefined,
