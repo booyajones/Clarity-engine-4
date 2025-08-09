@@ -144,11 +144,11 @@ async function validateClassification() {
   
   for (const test of testCases) {
     try {
-      // Try different parameter names since the API might expect different formats
+      // Use the correct parameter name
       const attempts = [
+        { payee: test.payeeName },
         { payeeName: test.payeeName },
-        { name: test.payeeName },
-        { payee_name: test.payeeName }
+        { name: test.payeeName }
       ];
       
       let success = false;
