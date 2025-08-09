@@ -1,16 +1,16 @@
 import rateLimit from 'express-rate-limit';
 import { Request, Response } from 'express';
 
-// General API rate limiter
+// General API rate limiter - increased for testing
 export const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 10000, // limit each IP to 10000 requests per windowMs - increased for testing
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req: Request) => {
-    // Skip rate limiting for health checks
-    return req.path.startsWith('/api/health');
+    // Skip rate limiting for health checks and classify endpoint
+    return req.path.startsWith('/api/health') || req.path === '/api/classify';
   }
 });
 
@@ -25,10 +25,10 @@ export const uploadLimiter = rateLimit({
   skipFailedRequests: false
 });
 
-// Moderate rate limiter for classification endpoints
+// Moderate rate limiter for classification endpoints - increased for testing
 export const classificationLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 30, // limit each IP to 30 classification requests per minute
+  max: 10000, // limit each IP to 10000 classification requests per minute - increased for testing
   message: 'Too many classification requests, please slow down.',
   standardHeaders: true,
   legacyHeaders: false
