@@ -1036,6 +1036,11 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                           {getTypeIcon(classification.payeeType)}
                           <span className="ml-1">{classification.payeeType}</span>
                         </span>
+                        {classification.sicCode && (
+                          <div className="mt-1">
+                            <span className="text-xs text-gray-600">SIC: {classification.sicCode}</span>
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>
                         <span className={`font-medium ${getConfidenceColor(classification.confidence)}`}>
@@ -1057,10 +1062,10 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                       <TableCell>
                         <div className="flex flex-col">
                           {classification.sicCode && (
-                            <span className="text-sm">{classification.sicCode}</span>
+                            <span className="text-sm font-semibold">{classification.sicCode}</span>
                           )}
                           {classification.sicDescription && (
-                            <span className="text-xs text-gray-500 max-w-xs truncate">
+                            <span className="text-xs text-gray-500 max-w-[200px] truncate">
                               {classification.sicDescription}
                             </span>
                           )}

@@ -51,7 +51,8 @@ export class AccurateMatchingService {
     if (prefixMatches.length > 0) {
       // Score prefix matches based on length similarity
       const scoredPrefixMatches = prefixMatches.map(supplier => {
-        const lengthRatio = cleanInput.length / supplier.payee_name.length;
+        const supplierName = supplier.payeeName || supplier.payee_name || '';
+        const lengthRatio = supplierName ? cleanInput.length / supplierName.length : 0;
         const score = this.PREFIX_MATCH_SCORE * Math.max(0.8, lengthRatio);
         return {
           supplier,
@@ -75,12 +76,39 @@ export class AccurateMatchingService {
       }
     }
     
-    // Stage 3: Intelligent Contains Match (only for very specific patterns)
+    // Stage 3: Smart Partial Matching (handles "ACCO ENGINEERED" -> "ACCO ENGINEERED SYSTEMS")
+    const smartMatches = await this.findSmartPartialMatches(cleanInput, normalizedInput, limit * 2);
+    if (smartMatches.length > 0) {
+      const scoredSmartMatches = smartMatches.map(supplier => {
+        const supplierName = supplier.payeeName || supplier.payee_name || '';
+        const score = this.calculateSmartMatchScore(cleanInput, supplierName);
+        return {
+          supplier,
+          score,
+          matchType: 'smart_partial',
+          reasoning: `Smart match for "${cleanInput}" (${Math.round(score * 100)}% confidence)`
+        };
+      });
+      
+      const goodMatches = scoredSmartMatches.filter(m => m.score >= this.MIN_CONFIDENCE_THRESHOLD);
+      if (goodMatches.length > 0) {
+        const bestMatch = goodMatches[0];
+        console.log(`[AccurateMatching] Found smart partial match: ${bestMatch.supplier.payeeName || bestMatch.supplier.payee_name} (${Math.round(bestMatch.score * 100)}%)`);
+        return {
+          matches: goodMatches,
+          bestMatch: bestMatch.supplier,
+          confidence: bestMatch.score
+        };
+      }
+    }
+    
+    // Stage 4: Intelligent Contains Match (only for very specific patterns)
     // This is where we prevent "HD Supply" from matching "10-S TENNIS SUPPLY"
     const containsMatches = await this.findIntelligentContainsMatches(cleanInput, normalizedInput, limit);
     if (containsMatches.length > 0) {
       const scoredContainsMatches = containsMatches.map(supplier => {
-        const score = this.calculateContainsScore(cleanInput, supplier.payee_name);
+        const supplierName = supplier.payeeName || supplier.payee_name || '';
+        const score = this.calculateContainsScore(cleanInput, supplierName);
         return {
           supplier,
           score,
@@ -164,6 +192,43 @@ export class AccurateMatchingService {
   }
   
   /**
+   * Smart partial matching for company names (handles cases like "ACCO ENGINEERED" matching "ACCO ENGINEERED SYSTEMS")
+   */
+  private async findSmartPartialMatches(cleanInput: string, normalizedInput: string, limit: number): Promise<CachedSupplier[]> {
+    try {
+      // Don't do partial matching for very generic single words
+      const genericWords = ['supply', 'supplies', 'tennis', 'service', 'services', 'company', 'corp', 'inc', 'llc'];
+      if (cleanInput.split(/\s+/).length === 1 && genericWords.includes(cleanInput.toLowerCase())) {
+        return [];
+      }
+      
+      // Build query that looks for names that start with the input
+      // This handles cases where user types partial company name
+      const result = await db.execute(sql`
+        SELECT * FROM cached_suppliers
+        WHERE 
+          LOWER(payee_name) LIKE ${cleanInput.toLowerCase() + '%'}
+          OR LOWER(payee_name) LIKE ${'%' + cleanInput.toLowerCase() + '%'}
+          OR LOWER(mastercard_business_name) LIKE ${cleanInput.toLowerCase() + '%'}
+          OR LOWER(mastercard_business_name) LIKE ${'%' + cleanInput.toLowerCase() + '%'}
+        ORDER BY 
+          CASE 
+            WHEN LOWER(payee_name) LIKE ${cleanInput.toLowerCase() + '%'} THEN 1
+            WHEN LOWER(mastercard_business_name) LIKE ${cleanInput.toLowerCase() + '%'} THEN 2
+            ELSE 3
+          END,
+          LENGTH(payee_name)
+        LIMIT ${limit}
+      `);
+      
+      return result.rows.map(row => this.mapToCachedSupplier(row));
+    } catch (error) {
+      console.error('[AccurateMatching] Smart partial match failed:', error);
+      return [];
+    }
+  }
+  
+  /**
    * Intelligent contains matching that avoids false positives
    */
   private async findIntelligentContainsMatches(cleanInput: string, normalizedInput: string, limit: number): Promise<CachedSupplier[]> {
@@ -198,6 +263,53 @@ export class AccurateMatchingService {
       console.error('[AccurateMatching] Intelligent contains match failed:', error);
       return [];
     }
+  }
+  
+  /**
+   * Calculate score for smart partial matches
+   */
+  private calculateSmartMatchScore(input: string, candidateName: string): number {
+    if (!input || !candidateName) return 0;
+    
+    const inputLower = input.toLowerCase();
+    const candidateLower = candidateName.toLowerCase();
+    
+    // If candidate starts with input, very high score
+    if (candidateLower.startsWith(inputLower)) {
+      const lengthRatio = input.length / candidateName.length;
+      // Give high score if input is most of the candidate name
+      if (lengthRatio > 0.7) {
+        return 0.95; // Very high confidence
+      }
+      return 0.90; // Still high confidence for prefix match
+    }
+    
+    // Check for word-level matching
+    const inputWords = inputLower.split(/\s+/);
+    const candidateWords = candidateLower.split(/\s+/);
+    
+    // Count matching words in order
+    let matchedWords = 0;
+    let candidateIndex = 0;
+    
+    for (const inputWord of inputWords) {
+      for (let i = candidateIndex; i < candidateWords.length; i++) {
+        if (candidateWords[i].startsWith(inputWord) || inputWord.startsWith(candidateWords[i])) {
+          matchedWords++;
+          candidateIndex = i + 1;
+          break;
+        }
+      }
+    }
+    
+    const wordMatchRatio = matchedWords / inputWords.length;
+    if (wordMatchRatio >= 1.0) {
+      return 0.92; // All words matched in order
+    } else if (wordMatchRatio >= 0.8) {
+      return 0.85; // Most words matched
+    }
+    
+    return wordMatchRatio * 0.8; // Scale down for partial matches
   }
   
   /**
