@@ -180,24 +180,39 @@ export class SupplierCacheService {
     }
   }
 
-  // Search cached suppliers with optimized queries
+  // Search cached suppliers with optimized queries - FIXED FOR ACCURATE MATCHING
   async searchCachedSuppliers(payeeName: string, limit = 10): Promise<CachedSupplier[]> {
     const normalizedName = payeeName.toLowerCase().trim();
     
     console.log(`Searching cached suppliers for: "${payeeName}" (normalized: "${normalizedName}")`);
     
-    // Use proper SQL with explicit column names for ILIKE search
+    // Use proper SQL with prioritized matching:
+    // 1. Exact matches first
+    // 2. Then prefix matches
+    // 3. Then contains matches (but more restrictive)
     try {
       const simpleResults = await db.execute(sql`
         SELECT * FROM cached_suppliers
         WHERE 
-          payee_name ILIKE ${'%' + payeeName + '%'}
-          OR mastercard_business_name ILIKE ${'%' + payeeName + '%'}
+          LOWER(payee_name) = ${normalizedName}
+          OR LOWER(mastercard_business_name) = ${normalizedName}
+          OR LOWER(payee_name) LIKE ${normalizedName + '%'}
+          OR LOWER(mastercard_business_name) LIKE ${normalizedName + '%'}
+        ORDER BY 
+          CASE 
+            WHEN LOWER(payee_name) = ${normalizedName} THEN 1
+            WHEN LOWER(mastercard_business_name) = ${normalizedName} THEN 2
+            WHEN LOWER(payee_name) LIKE ${normalizedName + '%'} THEN 3
+            WHEN LOWER(mastercard_business_name) LIKE ${normalizedName + '%'} THEN 4
+            ELSE 5
+          END,
+          LENGTH(payee_name)
         LIMIT ${limit}
       `);
       
-      console.log(`Simple ILIKE search found ${simpleResults.rows.length} results`);
+      console.log(`Prioritized search found ${simpleResults.rows.length} results`);
       
+      // If no exact or prefix matches found, DON'T do a broad search
       if (simpleResults.rows.length > 0) {
         // Map the raw results to our CachedSupplier type
         return simpleResults.rows.map(row => ({
@@ -224,53 +239,11 @@ export class SupplierCacheService {
       console.error('Simple search failed:', error);
     }
     
-    // If no simple matches, try token-based search
-    const searchTokens = normalizedName.split(/\s+/).filter(t => t.length > 2);
-    console.log(`Searching with tokens:`, searchTokens);
-    
-    if (searchTokens.length === 0) {
-      return [];
-    }
-    
-    // Build token-based search query
-    let tokenQuery = 'SELECT * FROM cached_suppliers WHERE ';
-    const tokenConditions = searchTokens.map((token, i) => {
-      const paramName = `$${i + 1}`;
-      return `payee_name ILIKE ${paramName}`;
-    });
-    tokenQuery += tokenConditions.join(' OR ');
-    tokenQuery += ` LIMIT ${limit}`;
-    
-    // Create a dynamic SQL query with tokens
-    const tokenResults = await db.execute(sql`
-      SELECT * FROM cached_suppliers
-      WHERE ${sql.raw(searchTokens.map(token => 
-        `payee_name ILIKE '%${token.replace(/'/g, "''")}%'`
-      ).join(' OR '))}
-      LIMIT ${limit}
-    `);
-    
-    console.log(`Token search found ${tokenResults.rows.length} results`);
-    
-    return tokenResults.rows.map(row => ({
-      id: row.id as number,
-      payeeId: row.payee_id as string,
-      payeeName: row.payee_name as string,
-      normalizedName: row.normalized_name as string | null,
-      category: row.category as string | null,
-      mcc: row.mcc as string | null,
-      industry: row.industry as string | null,
-      paymentType: row.payment_type as string | null,
-      mastercardBusinessName: row.mastercard_business_name as string | null,
-      city: row.city as string | null,
-      state: row.state as string | null,
-      confidence: row.confidence as number | null,
-      nameLength: row.name_length as number | null,
-      hasBusinessIndicator: row.has_business_indicator as boolean | null,
-      commonNameScore: row.common_name_score as number | null,
-      lastUpdated: row.last_updated as Date,
-      createdAt: row.created_at as Date,
-    }));
+    // DISABLED TOKEN SEARCH - IT WAS CAUSING BAD MATCHES
+    // For "HD Supply" it was returning "10-S TENNIS SUPPLY"
+    // Return empty array if no exact or prefix matches found
+    console.log(`No exact or prefix matches found for "${payeeName}" - returning empty`);
+    return [];
 
   }
 
