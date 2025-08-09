@@ -68,6 +68,7 @@ Preferred communication style: Simple, everyday language.
 - **Tool Toggle Controls**: User-configurable settings to enable/disable Finexio matching and Mastercard enrichment.
 - **System Monitoring**: Real-time memory monitoring at `/api/monitoring/memory`, performance metrics at `/api/monitoring/performance`, cache statistics at `/api/monitoring/cache/stats`.
 - **Resource Protection**: Automatic garbage collection on critical memory, memory leak detection, scheduled cleanup every 15 minutes.
+- **Keyword Exclusion System**: 593 permanent exclusion keywords for government/financial entities (loaded 8/8/2025). Automatically excludes payees matching these keywords from classification.
 
 ## External Dependencies
 
