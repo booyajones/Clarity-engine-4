@@ -3,6 +3,7 @@ import { fuzzyMatcher } from './fuzzyMatcher';
 import { storage } from '../storage';
 import type { PayeeClassification } from '@shared/schema';
 import { supplierCacheService } from './supplierCacheService';
+import { memoryOptimizedCache } from './memoryOptimizedSupplierCache';
 import OpenAI from 'openai';
 
 // Configuration interface for matching options

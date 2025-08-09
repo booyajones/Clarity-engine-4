@@ -17,12 +17,19 @@ const redisConfig = {
   }
 };
 
-// Create Redis clients for Bull
+// Create Redis clients for Bull (only if microservices enabled)
 const createRedisClient = () => {
+  // Don't connect to Redis if microservices disabled
+  if (process.env.ENABLE_MICROSERVICES !== 'true') {
+    return null as any; // Return null to prevent connection attempts
+  }
+  
   const client = new Redis(redisConfig);
   
   client.on('error', (err) => {
-    console.error('Redis connection error:', err);
+    if (process.env.ENABLE_MICROSERVICES === 'true') {
+      console.error('Redis connection error:', err);
+    }
   });
   
   client.on('connect', () => {
@@ -45,56 +52,42 @@ const defaultQueueOptions: Bull.QueueOptions = {
   }
 };
 
-// Initialize queues with Redis clients
-export const classificationQueue = new Bull('classification', {
-  ...defaultQueueOptions,
-  createClient: (type) => {
-    switch (type) {
-      case 'client':
-        return createRedisClient();
-      case 'subscriber':
-        return createRedisClient();
-      case 'bclient':
-        return createRedisClient();
-      default:
-        return createRedisClient();
-    }
+// Initialize queues only if microservices enabled
+const createQueue = (name: string, options?: Bull.QueueOptions) => {
+  if (process.env.ENABLE_MICROSERVICES !== 'true') {
+    // Return a mock queue that does nothing when microservices disabled
+    return {
+      add: async () => ({ id: 'mock' }),
+      process: () => {},
+      on: () => {},
+      close: async () => {},
+      getJobCounts: async () => ({ waiting: 0, active: 0, completed: 0, failed: 0 }),
+      getJob: async () => null,
+      getJobs: async () => [],
+      removeJobs: async () => {},
+    } as any;
   }
-});
+  
+  return new Bull(name, {
+    redis: redisConfig,
+    ...options
+  });
+};
 
-export const finexioQueue = new Bull('finexio', {
-  ...defaultQueueOptions,
-  createClient: () => createRedisClient()
-});
-
-export const mastercardQueue = new Bull('mastercard', {
+export const classificationQueue = createQueue('classification', defaultQueueOptions);
+export const finexioQueue = createQueue('finexio', defaultQueueOptions);
+export const mastercardQueue = createQueue('mastercard', {
   ...defaultQueueOptions,
   defaultJobOptions: {
     ...defaultQueueOptions.defaultJobOptions,
     timeout: 25 * 60 * 1000, // 25 minutes for Mastercard searches
-  },
-  createClient: () => createRedisClient()
+  }
 });
 
-export const addressQueue = new Bull('address-validation', {
-  ...defaultQueueOptions,
-  createClient: () => createRedisClient()
-});
-
-export const akkioQueue = new Bull('akkio-prediction', {
-  ...defaultQueueOptions,
-  createClient: () => createRedisClient()
-});
-
-export const batchQueue = new Bull('batch-processing', {
-  ...defaultQueueOptions,
-  createClient: () => createRedisClient()
-});
-
-export const orchestrationQueue = new Bull('orchestration', {
-  ...defaultQueueOptions,
-  createClient: () => createRedisClient()
-});
+export const addressQueue = createQueue('address-validation', defaultQueueOptions);
+export const akkioQueue = createQueue('akkio-prediction', defaultQueueOptions);
+export const batchQueue = createQueue('batch-processing', defaultQueueOptions);
+export const orchestrationQueue = createQueue('orchestration', defaultQueueOptions);
 
 // Queue health check
 export async function checkQueueHealth(): Promise<{

@@ -21,6 +21,7 @@ import { db } from "./db";
 import { mastercardSearchRequests } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 import { mastercardApi } from "./services/mastercardApi";
+import apiGateway from "./apiGateway";
 
 // Global type for Mastercard results cache
 declare global {
@@ -179,6 +180,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // Note: Health check is now handled by the health routes middleware above
+
+  // API Gateway health check for microservices
+  app.get("/api/gateway/health", asyncHandler(async (req, res) => {
+    if (process.env.ENABLE_MICROSERVICES === 'true') {
+      try {
+        const health = await apiGateway.gatewayHealth();
+        res.json(health);
+      } catch (error) {
+        res.json({
+          status: 'degraded',
+          error: error.message,
+          microservicesEnabled: true
+        });
+      }
+    } else {
+      res.json({
+        status: 'monolith',
+        message: 'Running in monolith mode',
+        microservicesEnabled: false
+      });
+    }
+  }));
 
   // Dashboard stats - Fixed for 100% functionality
   app.get("/api/dashboard/stats", async (req, res) => {
