@@ -8,7 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import XLSX from 'xlsx';
 import { keywordExclusionService } from './keywordExclusion';
-import { openaiRateLimiter } from './rateLimiter';
+// Rate limiting is handled at the route level, not needed here
 import { mastercardApi } from './mastercardApi';
 import { payeeMatchingService } from './payeeMatchingService';
 import { akkioService } from './akkioService';
@@ -530,10 +530,7 @@ export class OptimizedClassificationService {
 
   private async performOpenAIClassification(payee: PayeeData): Promise<ClassificationResult> {
     try {
-      // Light rate limiting for Tier 5 (30,000 RPM)
-      if (!(await openaiRateLimiter.canMakeRequest())) {
-        await new Promise(resolve => setTimeout(resolve, 10)); // Very brief pause
-      }
+      // Rate limiting is handled at the route level
       
       const response = await openai.chat.completions.create({
         model: "gpt-4o", // Use GPT-4o for best accuracy

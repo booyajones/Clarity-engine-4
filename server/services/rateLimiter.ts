@@ -262,3 +262,10 @@ export const rateLimiters = {
     maxRequests: 50
   })
 };
+
+// Export OpenAI rate limiter for classification service
+export const openaiRateLimiter = createRateLimiter('openai', {
+  windowMs: 60 * 1000, // 1 minute
+  maxRequests: 50, // Tier 5 limit
+  skipFailedRequests: true
+});
