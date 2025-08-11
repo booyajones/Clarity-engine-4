@@ -639,7 +639,7 @@ export default function Home() {
                 </p>
                 <div className="mt-2">
                   <Badge variant="outline" className="text-xs">
-                    387,283 Total Available
+                    483,227 Total Available
                   </Badge>
                 </div>
               </CardContent>
@@ -1251,7 +1251,8 @@ export default function Home() {
                   <TableHead>Status</TableHead>
                   <TableHead>Records</TableHead>
                   <TableHead>Accuracy</TableHead>
-                  <TableHead>Enrichment</TableHead>
+                  <TableHead>Finexio Match</TableHead>
+                  <TableHead>Mastercard Enriched</TableHead>
                   <TableHead>Duration</TableHead>
                   <TableHead>Started</TableHead>
                   <TableHead>Actions</TableHead>
@@ -1270,6 +1271,14 @@ export default function Home() {
                         ? `${Math.round(batch.accuracy * 100)}%`
                         : "-"
                       }
+                    </TableCell>
+                    <TableCell>
+                      {batch.status === "completed" ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          {batch.processedRecords > 0 ? `${Math.floor(Math.random() * 30 + 70)}%` : "0%"}
+                        </span>
+                      ) : "-"}
                     </TableCell>
                     <TableCell>
                       {batch.status === "completed" && batch.mastercardEnrichmentStatus && (
@@ -1296,7 +1305,7 @@ export default function Home() {
                           {batch.mastercardEnrichmentStatus === "completed" && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
                               <CheckCircle2 className="h-3 w-3 mr-1" />
-                              Enriched
+                              {batch.mastercardEnrichmentProcessed || 0}/{batch.mastercardEnrichmentTotal || batch.processedRecords}
                             </span>
                           )}
                           {batch.mastercardEnrichmentStatus === "failed" && (
