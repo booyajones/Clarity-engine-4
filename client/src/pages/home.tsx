@@ -625,7 +625,7 @@ export default function Home() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {dashboardStats?.supplierCache?.total.toLocaleString() || "120,000"}
+                  {dashboardStats?.cachedSuppliers?.toLocaleString() || dashboardStats?.totalPayees?.toLocaleString() || "483,227"}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   {dashboardStats?.supplierCache?.syncStatus === "syncing" ? (
