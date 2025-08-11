@@ -1325,12 +1325,26 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                             ? 'bg-green-100 text-green-800' 
                                             : selectedClassification.mastercardMatchStatus === 'NO_MATCH'
                                             ? 'bg-gray-100 text-gray-800'
+                                            : selectedClassification.mastercardMatchStatus === 'error'
+                                            ? 'bg-red-100 text-red-800'
                                             : 'bg-amber-100 text-amber-800'
                                         }`}>
-                                          {selectedClassification.mastercardMatchStatus === 'enriched' ? '✓ Enriched' : selectedClassification.mastercardMatchStatus}
+                                          {selectedClassification.mastercardMatchStatus === 'enriched' ? '✓ Enriched' : 
+                                           selectedClassification.mastercardMatchStatus === 'error' ? '✗ Error' :
+                                           selectedClassification.mastercardMatchStatus}
                                         </Badge>
                                       )}
                                     </div>
+                                    
+                                    {/* Error Message for Mastercard */}
+                                    {selectedClassification.mastercardMatchStatus === 'error' && (
+                                      <div className="bg-red-50 p-2 rounded text-sm text-red-700 border border-red-200">
+                                        <p>Unable to enrich with Mastercard data. The enrichment service encountered an error.</p>
+                                        {selectedClassification.mastercardSource && (
+                                          <p className="text-xs mt-1">Source: {selectedClassification.mastercardSource}</p>
+                                        )}
+                                      </div>
+                                    )}
                                     
                                     {/* Primary Business Information */}
                                     {(selectedClassification.mastercardBusinessName || selectedClassification.mastercardTaxId) && (
