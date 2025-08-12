@@ -30,6 +30,7 @@ export const uploadBatches = pgTable("upload_batches", {
   mastercardEnrichmentProgress: integer("mastercard_enrichment_progress").default(0), // Percentage
   mastercardEnrichmentTotal: integer("mastercard_enrichment_total").default(0),
   mastercardEnrichmentProcessed: integer("mastercard_enrichment_processed").default(0),
+  mastercardActualEnriched: integer("mastercard_actual_enriched").default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   completedAt: timestamp("completed_at"),
 });

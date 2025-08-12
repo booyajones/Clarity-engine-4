@@ -56,6 +56,7 @@ interface UploadBatch {
   mastercardEnrichmentProgress?: number;
   mastercardEnrichmentTotal?: number;
   mastercardEnrichmentProcessed?: number;
+  mastercardActualEnriched?: number;
 }
 
 interface DashboardStats {
@@ -1305,7 +1306,7 @@ export default function Home() {
                           {batch.mastercardEnrichmentStatus === "completed" && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
                               <CheckCircle2 className="h-3 w-3 mr-1" />
-                              {batch.mastercardEnrichmentProcessed || 0}/{batch.mastercardEnrichmentTotal || batch.processedRecords}
+                              {batch.mastercardActualEnriched || 0} enriched / {batch.mastercardEnrichmentTotal || batch.processedRecords} processed
                             </span>
                           )}
                           {batch.mastercardEnrichmentStatus === "failed" && (
@@ -1324,10 +1325,21 @@ export default function Home() {
                       {(!batch.mastercardEnrichmentStatus || batch.status !== "completed") && "-"}
                     </TableCell>
                     <TableCell>
-                      {batch.status === "completed" || batch.status === "failed" || batch.status === "cancelled"
-                        ? formatDuration(batch.createdAt, batch.completedAt)
-                        : formatDuration(batch.createdAt)
-                      }
+                      <div className="flex flex-col gap-1">
+                        <span className="text-sm">
+                          {batch.status === "completed" || batch.status === "failed" || batch.status === "cancelled"
+                            ? formatDuration(batch.createdAt, 
+                                batch.mastercardEnrichmentCompletedAt || batch.completedAt)
+                            : formatDuration(batch.createdAt)
+                          }
+                        </span>
+                        {batch.mastercardEnrichmentCompletedAt && batch.completedAt && (
+                          <span className="text-xs text-gray-500">
+                            Classification: {formatDuration(batch.createdAt, batch.completedAt)} | 
+                            MC: {formatDuration(batch.mastercardEnrichmentStartedAt || batch.completedAt, batch.mastercardEnrichmentCompletedAt)}
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {new Date(batch.createdAt).toLocaleString()}
