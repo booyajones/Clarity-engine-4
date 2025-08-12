@@ -237,6 +237,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const finexioMatchRate = totalClassifications > 0 ? 
         Math.round((finexioMatched / totalClassifications) * 100) : 0;
       
+      // Get Google Address Validation stats
+      const googleStatsResult = await pool.query(`
+        WITH recent_batches AS (
+          SELECT id FROM upload_batches 
+          WHERE status = 'completed' 
+          ORDER BY created_at DESC 
+          LIMIT 5
+        ),
+        recent_classifications AS (
+          SELECT pc.*
+          FROM payee_classifications pc
+          JOIN recent_batches rb ON pc.batch_id = rb.id
+        )
+        SELECT 
+          COUNT(*) as total_records,
+          COUNT(CASE WHEN google_address_validation_status = 'validated' THEN 1 END) as validated,
+          COUNT(CASE WHEN google_address_validation_status IS NOT NULL AND google_address_validation_status != '' THEN 1 END) as attempted,
+          AVG(CASE WHEN google_address_confidence IS NOT NULL THEN google_address_confidence ELSE NULL END) as avg_confidence
+        FROM recent_classifications
+      `);
+      
+      const googleTotal = parseInt(googleStatsResult.rows[0].total_records) || 0;
+      const googleValidated = parseInt(googleStatsResult.rows[0].validated) || 0;
+      const googleAttempted = parseInt(googleStatsResult.rows[0].attempted) || 0;
+      const googleAvgConfidence = parseFloat(googleStatsResult.rows[0].avg_confidence) || 0;
+      const googleValidationRate = googleTotal > 0 ? Math.round((googleValidated / googleTotal) * 100) : 0;
+      
       const stats = await storage.getClassificationStats();
       
       // Override with actual supplier count for 100% accuracy
@@ -248,6 +275,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           matchRate: finexioMatchRate,
           totalMatches: finexioMatched,
           enabled: true // Finexio is always enabled since we have the full database
+        },
+        google: {
+          validationRate: googleValidationRate,
+          totalValidated: googleValidated,
+          avgConfidence: Math.round(googleAvgConfidence * 100),
+          enabled: googleAttempted > 0 // Enabled if any records have been attempted
         }
       });
     } catch (error) {

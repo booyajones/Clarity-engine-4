@@ -75,6 +75,12 @@ interface DashboardStats {
     totalMatches: number;
     enabled: boolean;
   };
+  google: {
+    validationRate: number;
+    totalValidated: number;
+    avgConfidence: number;
+    enabled: boolean;
+  };
   mastercard: {
     enrichmentRate: number;
     pendingSearches: number;
@@ -699,6 +705,37 @@ export default function Home() {
                   <span className="text-xs text-muted-foreground">
                     {dashboardStats?.finexio?.totalMatches || "120K"} matches
                   </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Google Address Validation */}
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-blue-600" />
+                  Google Address
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {dashboardStats?.google?.validationRate || 0}%
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Validation rate
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <Badge 
+                    variant={dashboardStats?.google?.enabled ? "success" : "secondary"} 
+                    className="text-xs"
+                  >
+                    {dashboardStats?.google?.enabled ? "Enabled" : "Not Used"}
+                  </Badge>
+                  {dashboardStats?.google?.avgConfidence > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      {dashboardStats?.google?.avgConfidence}% conf
+                    </span>
+                  )}
                 </div>
               </CardContent>
             </Card>
