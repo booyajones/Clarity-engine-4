@@ -211,21 +211,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const supplierCountResult = await pool.query('SELECT COUNT(*) as count FROM cached_suppliers');
       const cachedSuppliers = parseInt(supplierCountResult.rows[0].count);
       
-      // Get Finexio match stats
+      // Get Finexio match stats - calculate for recent batches
       const finexioStatsResult = await pool.query(`
+        WITH recent_batches AS (
+          SELECT id FROM upload_batches 
+          WHERE status = 'completed' 
+          ORDER BY created_at DESC 
+          LIMIT 5
+        ),
+        recent_classifications AS (
+          SELECT pc.id
+          FROM payee_classifications pc
+          JOIN recent_batches rb ON pc.batch_id = rb.id
+        )
         SELECT 
-          COUNT(DISTINCT classification_id) as total_matched,
-          AVG(finexio_match_score) as avg_score
-        FROM payee_matches 
-        WHERE finexio_match_score > 0
+          COUNT(DISTINCT pm.classification_id) as total_matched,
+          COUNT(DISTINCT rc.id) as total_classifications,
+          AVG(pm.finexio_match_score) as avg_score
+        FROM recent_classifications rc
+        LEFT JOIN payee_matches pm ON pm.classification_id = rc.id AND pm.finexio_match_score > 0
       `);
       
-      const totalClassificationsResult = await pool.query(`
-        SELECT COUNT(*) as total FROM payee_classifications
-      `);
-      
-      const totalClassifications = parseInt(totalClassificationsResult.rows[0].total);
-      const finexioMatched = parseInt(finexioStatsResult.rows[0].total_matched);
+      const totalClassifications = parseInt(finexioStatsResult.rows[0].total_classifications) || 0;
+      const finexioMatched = parseInt(finexioStatsResult.rows[0].total_matched) || 0;
       const finexioMatchRate = totalClassifications > 0 ? 
         Math.round((finexioMatched / totalClassifications) * 100) : 0;
       
@@ -954,6 +962,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           clarity_finexio_match_type: firstMatch?.matchType || "",
           clarity_payment_type: firstMatch ? (firstMatch.matchDetails as any)?.paymentType || "" : "",
           clarity_match_reasoning: firstMatch?.matchReasoning || "",
+          // Google Address Validation fields  
+          clarity_google_validation_status: c.googleAddressValidationStatus || "",
+          clarity_google_confidence: c.googleAddressConfidence ? Math.round(c.googleAddressConfidence * 100) + "%" : "",
+          clarity_google_formatted_address: c.googleFormattedAddress || "",
+          clarity_google_street: c.googleStreetAddress || "",
+          clarity_google_city: c.googleCity || "",
+          clarity_google_state: c.googleState || "",
+          clarity_google_postal_code: c.googlePostalCode || "",
+          clarity_google_country: c.googleCountry || "",
+          clarity_address_normalized: c.addressNormalizationApplied ? "Yes" : "No",
+          clarity_google_place_id: c.googlePlaceId || "",
+          clarity_google_latitude: c.googleLatitude || "",
+          clarity_google_longitude: c.googleLongitude || "",
         };
       });
 
