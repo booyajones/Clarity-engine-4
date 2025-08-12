@@ -622,197 +622,227 @@ export default function Home() {
         <div className="space-y-6 animate-fade-in-up">
           {/* System Status Overview */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Total Processed */}
+            {/* Jobs Today */}
             <Card className="hover:shadow-lg transition-shadow">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Database className="h-4 w-4 text-blue-600" />
-                  Total Classified
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {completedBatches?.reduce((sum, b) => sum + b.totalRecords, 0).toLocaleString() || "0"}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Records processed
-                </p>
-                <div className="mt-2 flex items-center gap-2">
-                  <Badge variant="outline" className="text-xs">
-                    {completedBatches?.length || 0} batches
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">
-                    All time
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Classification Accuracy */}
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Brain className="h-4 w-4 text-purple-600" />
-                  AI Accuracy
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {dashboardStats?.accuracy || 97.5}%
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Confidence score
-                </p>
-                <div className="mt-2 flex items-center gap-2">
-                  <Badge variant="success" className="text-xs">
-                    GPT-4o
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">
-                    95% threshold
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Recent Performance */}
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-green-600" />
-                  Recent Batch
+                  <BarChart3 className="h-4 w-4 text-blue-600" />
+                  Today's Jobs
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
                   {(() => {
-                    const recentBatch = completedBatches?.[0];
-                    if (!recentBatch) return "N/A";
-                    const successRate = Math.round(((recentBatch.totalRecords - (recentBatch.skippedRecords || 0)) / recentBatch.totalRecords) * 100);
-                    return `${successRate}%`;
+                    const today = new Date();
+                    today.setHours(0,0,0,0);
+                    const todayJobs = batches?.filter(b => new Date(b.createdAt) >= today) || [];
+                    return todayJobs.length;
                   })()}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Success rate
+                  Jobs submitted
                 </p>
                 <div className="mt-2 flex items-center gap-2">
-                  {completedBatches?.[0] && (
-                    <>
-                      <Badge variant="outline" className="text-xs">
-                        {completedBatches[0].totalRecords} records
-                      </Badge>
-                      {completedBatches[0].skippedRecords > 0 && (
-                        <span className="text-xs text-muted-foreground">
-                          {completedBatches[0].skippedRecords} excluded
-                        </span>
-                      )}
-                    </>
-                  )}
+                  <span className="text-xs text-muted-foreground">
+                    {(() => {
+                      const today = new Date();
+                      today.setHours(0,0,0,0);
+                      const todayJobs = batches?.filter(b => new Date(b.createdAt) >= today) || [];
+                      const totalRecords = todayJobs.reduce((sum, b) => sum + b.totalRecords, 0);
+                      return `${totalRecords.toLocaleString()} records`;
+                    })()}
+                  </span>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Processing Speed */}
+            {/* Average Job Size */}
             <Card className="hover:shadow-lg transition-shadow">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Zap className="h-4 w-4 text-yellow-600" />
-                  System Status
+                  <Database className="h-4 w-4 text-purple-600" />
+                  Avg Job Size
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {processingBatches.length > 0 ? "Active" : "Ready"}
+                  {(() => {
+                    if (!completedBatches?.length) return "0";
+                    const avg = completedBatches.reduce((sum, b) => sum + b.totalRecords, 0) / completedBatches.length;
+                    return Math.round(avg).toLocaleString();
+                  })()}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {processingBatches.length > 0 ? `${processingBatches.length} jobs running` : "Awaiting files"}
+                  Records per job
                 </p>
                 <div className="mt-2 flex items-center gap-2">
-                  <Badge variant={processingBatches.length > 0 ? "success" : "secondary"} className="text-xs">
-                    {processingBatches.length > 0 ? "Processing" : "Idle"}
+                  <Badge variant="outline" className="text-xs">
+                    {completedBatches?.length || 0} total jobs
                   </Badge>
-                  {dashboardStats?.system?.memoryUsage && (
-                    <span className="text-xs text-muted-foreground">
-                      Memory: {dashboardStats.system.memoryUsage}%
-                    </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Job Success Rate */}
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-green-600" />
+                  Success Rate
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {(() => {
+                    const successfulJobs = completedBatches?.filter(b => b.status === 'completed').length || 0;
+                    const totalJobs = batches?.length || 0;
+                    if (totalJobs === 0) return "N/A";
+                    return `${Math.round((successfulJobs / totalJobs) * 100)}%`;
+                  })()}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Jobs completed
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <Badge variant="success" className="text-xs">
+                    {completedBatches?.length || 0} complete
+                  </Badge>
+                  {(() => {
+                    const failedJobs = batches?.filter(b => b.status === 'failed').length || 0;
+                    if (failedJobs > 0) {
+                      return <Badge variant="destructive" className="text-xs">{failedJobs} failed</Badge>;
+                    }
+                    return null;
+                  })()}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Processing Queue */}
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-orange-600" />
+                  Queue Status
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {processingBatches.length}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Jobs processing
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  {processingBatches.length > 0 ? (
+                    <>
+                      <Badge variant="default" className="text-xs animate-pulse">
+                        Active
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {processingBatches.reduce((sum, b) => sum + (b.totalRecords - b.processedRecords), 0).toLocaleString()} pending
+                      </span>
+                    </>
+                  ) : (
+                    <Badge variant="secondary" className="text-xs">
+                      Idle
+                    </Badge>
                   )}
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Processing Status */}
+          {/* Job Performance Summary */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Active Processing */}
+            {/* Job Breakdown */}
             <Card className="hover:shadow-lg transition-shadow">
               <CardHeader>
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-blue-600" />
-                  Active Processing
+                  <BarChart3 className="h-4 w-4 text-blue-600" />
+                  Job Performance (Last 7 Days)
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {batches?.filter(b => b.status === "processing").slice(0, 3).map(batch => (
-                    <div key={batch.id} className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">{batch.originalFilename}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <div className="flex-1 bg-gray-200 rounded-full h-2">
-                            <div 
-                              className="bg-blue-600 h-2 rounded-full transition-all"
-                              style={{ width: `${(batch.processedRecords / batch.totalRecords) * 100}%` }}
-                            />
-                          </div>
-                          <span className="text-xs text-muted-foreground">
-                            {batch.processedRecords}/{batch.totalRecords}
+                  {(() => {
+                    const sevenDaysAgo = new Date();
+                    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                    const recentJobs = batches?.filter(b => new Date(b.createdAt) >= sevenDaysAgo) || [];
+                    const avgProcessingTime = recentJobs.filter(b => b.completedAt).reduce((sum, b) => {
+                      const duration = new Date(b.completedAt!).getTime() - new Date(b.createdAt).getTime();
+                      return sum + duration;
+                    }, 0) / (recentJobs.filter(b => b.completedAt).length || 1);
+                    const avgMinutes = Math.round(avgProcessingTime / 60000);
+                    
+                    return (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">Jobs Processed</span>
+                          <span className="text-sm font-medium">{recentJobs.length}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">Total Records</span>
+                          <span className="text-sm font-medium">
+                            {recentJobs.reduce((sum, b) => sum + b.totalRecords, 0).toLocaleString()}
                           </span>
                         </div>
-                      </div>
-                    </div>
-                  )) || (
-                    <p className="text-sm text-muted-foreground">No active processing</p>
-                  )}
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">Avg Processing Time</span>
+                          <span className="text-sm font-medium">{avgMinutes} min</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">Avg Exclusion Rate</span>
+                          <span className="text-sm font-medium">
+                            {(() => {
+                              const totalRecords = recentJobs.reduce((sum, b) => sum + b.totalRecords, 0);
+                              const totalSkipped = recentJobs.reduce((sum, b) => sum + (b.skippedRecords || 0), 0);
+                              return totalRecords > 0 ? `${Math.round((totalSkipped / totalRecords) * 100)}%` : "0%";
+                            })()}
+                          </span>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </CardContent>
             </Card>
 
-            {/* System Health */}
+            {/* Current Activity */}
             <Card className="hover:shadow-lg transition-shadow">
               <CardHeader>
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Zap className="h-4 w-4 text-yellow-600" />
-                  System Health
+                  <Activity className="h-4 w-4 text-green-600" />
+                  Current Activity
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Memory Usage</span>
-                    <div className="flex items-center gap-2">
-                      <div className="w-24 bg-gray-200 rounded-full h-2">
-                        <div 
-                          className={`h-2 rounded-full transition-all ${
-                            (dashboardStats?.system?.memoryUsage || 82) > 90 ? 'bg-red-600' : 
-                            (dashboardStats?.system?.memoryUsage || 82) > 75 ? 'bg-yellow-600' : 'bg-green-600'
-                          }`}
-                          style={{ width: `${dashboardStats?.system?.memoryUsage || 82}%` }}
-                        />
+                  {processingBatches.length > 0 ? (
+                    processingBatches.slice(0, 3).map(batch => (
+                      <div key={batch.id} className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <p className="text-sm font-medium truncate">{batch.originalFilename}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <div className="flex-1 bg-gray-200 rounded-full h-2">
+                              <div 
+                                className="bg-green-600 h-2 rounded-full transition-all"
+                                style={{ width: `${(batch.processedRecords / batch.totalRecords) * 100}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {Math.round((batch.processedRecords / batch.totalRecords) * 100)}%
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <span className="text-xs font-medium">{dashboardStats?.system?.memoryUsage || 82}%</span>
+                    ))
+                  ) : (
+                    <div className="text-center py-4">
+                      <p className="text-sm text-muted-foreground mb-2">No active jobs</p>
+                      <Badge variant="secondary">System Ready</Badge>
                     </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Active Batches</span>
-                    <Badge variant="outline">{dashboardStats?.system?.activeBatches || batches?.filter(b => b.status === "processing").length || 0}</Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Queue Length</span>
-                    <Badge variant="outline">{dashboardStats?.system?.queueLength || 0}</Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Daily Sync</span>
-                    <Badge variant="success" className="text-xs">Scheduled 2 AM EST</Badge>
-                  </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
