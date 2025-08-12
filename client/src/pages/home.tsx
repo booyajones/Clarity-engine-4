@@ -622,150 +622,118 @@ export default function Home() {
         <div className="space-y-6 animate-fade-in-up">
           {/* System Status Overview */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Supplier Cache Status */}
+            {/* Total Processed */}
             <Card className="hover:shadow-lg transition-shadow">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
                   <Database className="h-4 w-4 text-blue-600" />
-                  Supplier Cache
+                  Total Classified
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {dashboardStats?.cachedSuppliers?.toLocaleString() || dashboardStats?.totalPayees?.toLocaleString() || "483,227"}
+                  {completedBatches?.reduce((sum, b) => sum + b.totalRecords, 0).toLocaleString() || "0"}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {dashboardStats?.supplierCache?.syncStatus === "syncing" ? (
-                    <span className="flex items-center gap-1">
-                      <RefreshCw className="h-3 w-3 animate-spin" />
-                      Syncing...
-                    </span>
-                  ) : (
-                    "Last updated: 2 hours ago"
-                  )}
-                </p>
-                <div className="mt-2">
-                  <Badge variant="outline" className="text-xs">
-                    483,227 Total Available
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Classification Performance */}
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Brain className="h-4 w-4 text-purple-600" />
-                  Classification Rate
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {dashboardStats?.classification?.accuracy || 97.4}%
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Average accuracy
-                </p>
-                <div className="mt-2 flex gap-1">
-                  <Badge variant="success" className="text-xs">
-                    {dashboardStats?.classification?.totalProcessed || "6,791"} Processed
-                  </Badge>
-                  {(dashboardStats?.classification?.pendingCount || 0) > 0 && (
-                    <Badge variant="secondary" className="text-xs">
-                      {dashboardStats?.classification?.pendingCount} Pending
-                    </Badge>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Finexio Match Status */}
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Users className="h-4 w-4 text-green-600" />
-                  Finexio Matching
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {dashboardStats?.finexio?.matchRate || 31}%
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Match rate
+                  Records processed
                 </p>
                 <div className="mt-2 flex items-center gap-2">
-                  <Badge 
-                    variant={dashboardStats?.finexio?.enabled ? "success" : "secondary"} 
-                    className="text-xs"
-                  >
-                    {dashboardStats?.finexio?.enabled ? "Enabled" : "Disabled"}
+                  <Badge variant="outline" className="text-xs">
+                    {completedBatches?.length || 0} batches
                   </Badge>
                   <span className="text-xs text-muted-foreground">
-                    {dashboardStats?.finexio?.totalMatches || "120K"} matches
+                    All time
                   </span>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Google Address Validation */}
+            {/* Classification Accuracy */}
             <Card className="hover:shadow-lg transition-shadow">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-blue-600" />
-                  Google Address
+                  <Brain className="h-4 w-4 text-purple-600" />
+                  AI Accuracy
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {dashboardStats?.google?.validationRate || 0}%
+                  {dashboardStats?.accuracy || 97.5}%
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Validation rate
+                  Confidence score
                 </p>
                 <div className="mt-2 flex items-center gap-2">
-                  <Badge 
-                    variant={dashboardStats?.google?.enabled ? "success" : "secondary"} 
-                    className="text-xs"
-                  >
-                    {dashboardStats?.google?.enabled ? "Enabled" : "Not Used"}
+                  <Badge variant="success" className="text-xs">
+                    GPT-4o
                   </Badge>
-                  {dashboardStats?.google?.avgConfidence > 0 && (
-                    <span className="text-xs text-muted-foreground">
-                      {dashboardStats?.google?.avgConfidence}% conf
-                    </span>
+                  <span className="text-xs text-muted-foreground">
+                    95% threshold
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Recent Performance */}
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-green-600" />
+                  Recent Batch
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {(() => {
+                    const recentBatch = completedBatches?.[0];
+                    if (!recentBatch) return "N/A";
+                    const successRate = Math.round(((recentBatch.totalRecords - (recentBatch.skippedRecords || 0)) / recentBatch.totalRecords) * 100);
+                    return `${successRate}%`;
+                  })()}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Success rate
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  {completedBatches?.[0] && (
+                    <>
+                      <Badge variant="outline" className="text-xs">
+                        {completedBatches[0].totalRecords} records
+                      </Badge>
+                      {completedBatches[0].skippedRecords > 0 && (
+                        <span className="text-xs text-muted-foreground">
+                          {completedBatches[0].skippedRecords} excluded
+                        </span>
+                      )}
+                    </>
                   )}
                 </div>
               </CardContent>
             </Card>
 
-            {/* Mastercard Enrichment */}
+            {/* Processing Speed */}
             <Card className="hover:shadow-lg transition-shadow">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-orange-600" />
-                  Mastercard Enrichment
+                  <Zap className="h-4 w-4 text-yellow-600" />
+                  System Status
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {dashboardStats?.mastercard?.enrichmentRate || 78}%
+                  {processingBatches.length > 0 ? "Active" : "Ready"}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Enrichment rate
+                  {processingBatches.length > 0 ? `${processingBatches.length} jobs running` : "Awaiting files"}
                 </p>
                 <div className="mt-2 flex items-center gap-2">
-                  <Badge 
-                    variant={dashboardStats?.mastercard?.enabled ? "success" : "secondary"} 
-                    className="text-xs"
-                  >
-                    {dashboardStats?.mastercard?.enabled ? "Enabled" : "Disabled"}
+                  <Badge variant={processingBatches.length > 0 ? "success" : "secondary"} className="text-xs">
+                    {processingBatches.length > 0 ? "Processing" : "Idle"}
                   </Badge>
-                  {(dashboardStats?.mastercard?.pendingSearches || 0) > 0 && (
-                    <Badge variant="outline" className="text-xs">
-                      {dashboardStats?.mastercard?.pendingSearches} pending
-                    </Badge>
+                  {dashboardStats?.system?.memoryUsage && (
+                    <span className="text-xs text-muted-foreground">
+                      Memory: {dashboardStats.system.memoryUsage}%
+                    </span>
                   )}
                 </div>
               </CardContent>
@@ -1004,83 +972,79 @@ export default function Home() {
                   </Select>
                 </div>
                 
-                {/* Matching Options */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm font-medium">Matching Options</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" size="sm">
-                          <Settings className="h-4 w-4 mr-2" />
-                          Configure
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-80">
-                        <div className="space-y-4">
-                          <div className="space-y-2">
-                            <h4 className="font-medium leading-none">Matching Tools</h4>
-                            <p className="text-sm text-muted-foreground">
-                              Enable or disable matching tools for classification
-                            </p>
-                          </div>
-                          <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                              <Label htmlFor="finexio-toggle" className="text-sm">
-                                Finexio Matching
-                              </Label>
-                              <Switch
-                                id="finexio-toggle"
-                                checked={matchingOptions.enableFinexio}
-                                onCheckedChange={(checked) =>
-                                  setMatchingOptions((prev) => ({ ...prev, enableFinexio: checked }))
-                                }
-                              />
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <Label htmlFor="mastercard-toggle" className="text-sm">
-                                Mastercard Enrichment
-                                {matchingOptions.enableGoogleAddressValidation && (
-                                  <span className="text-xs text-muted-foreground ml-1">(After Address Validation)</span>
-                                )}
-                              </Label>
-                              <Switch
-                                id="mastercard-toggle"
-                                checked={matchingOptions.enableMastercard}
-                                onCheckedChange={(checked) =>
-                                  setMatchingOptions((prev) => ({ ...prev, enableMastercard: checked }))
-                                }
-                              />
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <Label htmlFor="google-address-toggle" className="text-sm">
-                                Google Address Validation
-                              </Label>
-                              <Switch
-                                id="google-address-toggle"
-                                checked={matchingOptions.enableGoogleAddressValidation}
-                                onCheckedChange={(checked) =>
-                                  setMatchingOptions((prev) => ({ ...prev, enableGoogleAddressValidation: checked }))
-                                }
-                              />
-                            </div>
-                            {matchingOptions.enableGoogleAddressValidation && (
-                              <div className="flex items-center justify-between pl-4">
-                                <Label htmlFor="address-norm-toggle" className="text-sm text-muted-foreground">
-                                  Enable Address Normalization
-                                </Label>
-                                <Switch
-                                  id="address-norm-toggle"
-                                  checked={matchingOptions.enableAddressNormalization}
-                                  onCheckedChange={(checked) =>
-                                    setMatchingOptions((prev) => ({ ...prev, enableAddressNormalization: checked }))
-                                  }
-                                />
-                              </div>
-                            )}
-                          </div>
+                {/* Enrichment Options */}
+                <div className="space-y-3 p-4 bg-gray-50 rounded-lg border">
+                  <div className="text-sm font-medium mb-2">Enrichment Services</div>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-green-600" />
+                        <Label htmlFor="finexio-toggle" className="text-sm cursor-pointer">
+                          Finexio Network Matching
+                        </Label>
+                      </div>
+                      <Switch
+                        id="finexio-toggle"
+                        checked={matchingOptions.enableFinexio}
+                        onCheckedChange={(checked) =>
+                          setMatchingOptions((prev) => ({ ...prev, enableFinexio: checked }))
+                        }
+                        className="data-[state=checked]:bg-green-600"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-blue-600" />
+                        <Label htmlFor="google-address-toggle" className="text-sm cursor-pointer">
+                          Google Address Validation
+                        </Label>
+                      </div>
+                      <Switch
+                        id="google-address-toggle"
+                        checked={matchingOptions.enableGoogleAddressValidation}
+                        onCheckedChange={(checked) =>
+                          setMatchingOptions((prev) => ({ ...prev, enableGoogleAddressValidation: checked }))
+                        }
+                        className="data-[state=checked]:bg-blue-600"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Shield className="h-4 w-4 text-orange-600" />
+                        <Label htmlFor="mastercard-toggle" className="text-sm cursor-pointer">
+                          Mastercard Merchant Data
+                          {matchingOptions.enableGoogleAddressValidation && (
+                            <span className="text-xs text-muted-foreground ml-1">(Enhanced)</span>
+                          )}
+                        </Label>
+                      </div>
+                      <Switch
+                        id="mastercard-toggle"
+                        checked={matchingOptions.enableMastercard}
+                        onCheckedChange={(checked) =>
+                          setMatchingOptions((prev) => ({ ...prev, enableMastercard: checked }))
+                        }
+                        className="data-[state=checked]:bg-orange-600"
+                      />
+                    </div>
+                    {matchingOptions.enableGoogleAddressValidation && (
+                      <div className="flex items-center justify-between pl-6 opacity-90">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="h-3 w-3 text-purple-600" />
+                          <Label htmlFor="address-norm-toggle" className="text-xs cursor-pointer">
+                            Smart Address Enhancement
+                          </Label>
                         </div>
-                      </PopoverContent>
-                    </Popover>
+                        <Switch
+                          id="address-norm-toggle"
+                          checked={matchingOptions.enableAddressNormalization}
+                          onCheckedChange={(checked) =>
+                            setMatchingOptions((prev) => ({ ...prev, enableAddressNormalization: checked }))
+                          }
+                          className="data-[state=checked]:bg-purple-600 scale-90"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
                 
