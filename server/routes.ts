@@ -211,13 +211,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const supplierCountResult = await pool.query('SELECT COUNT(*) as count FROM cached_suppliers');
       const cachedSuppliers = parseInt(supplierCountResult.rows[0].count);
       
+      // Get Finexio match stats
+      const finexioStatsResult = await pool.query(`
+        SELECT 
+          COUNT(DISTINCT classification_id) as total_matched,
+          AVG(finexio_match_score) as avg_score
+        FROM payee_matches 
+        WHERE finexio_match_score > 0
+      `);
+      
+      const totalClassificationsResult = await pool.query(`
+        SELECT COUNT(*) as total FROM payee_classifications
+      `);
+      
+      const totalClassifications = parseInt(totalClassificationsResult.rows[0].total);
+      const finexioMatched = parseInt(finexioStatsResult.rows[0].total_matched);
+      const finexioMatchRate = totalClassifications > 0 ? 
+        Math.round((finexioMatched / totalClassifications) * 100) : 0;
+      
       const stats = await storage.getClassificationStats();
       
       // Override with actual supplier count for 100% accuracy
       res.json({
         ...stats,
         totalPayees: cachedSuppliers,
-        cachedSuppliers
+        cachedSuppliers,
+        finexio: {
+          matchRate: finexioMatchRate,
+          totalMatches: finexioMatched,
+          enabled: true // Finexio is always enabled since we have the full database
+        }
       });
     } catch (error) {
       console.error("Error fetching dashboard stats:", error);
