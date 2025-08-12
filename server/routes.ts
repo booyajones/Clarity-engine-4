@@ -904,6 +904,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           clarity_excluded: c.isExcluded ? "Yes" : "No",
           clarity_exclusion_keyword: c.exclusionKeyword || "",
           // Mastercard enrichment fields
+          // Determine actual enrichment status based on whether we have real data
+          clarity_mastercard_enriched: (c.mastercardBusinessName && c.mastercardBusinessName !== 'None' && c.mastercardBusinessName !== null) ? "Yes" : "No",
           clarity_mastercard_match_status: c.mastercardMatchStatus || "",
           clarity_mastercard_business_name: c.mastercardBusinessName || "",
           clarity_mastercard_tax_id: c.mastercardTaxId || "",

@@ -1307,47 +1307,81 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                   </div>
                                 </div>
                                 
-                                {/* Mastercard Enrichment Data */}
-                                {(selectedClassification.mastercardMatchStatus || selectedClassification.mastercardBusinessName) && (
-                                  <div className="bg-amber-50 p-4 rounded-lg space-y-3 border border-amber-200">
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-2">
-                                        <svg viewBox="0 0 24 24" className="h-5 w-5 text-amber-700" fill="currentColor">
-                                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
-                                          <circle cx="8" cy="12" r="3" opacity="0.8"/>
-                                          <circle cx="16" cy="12" r="3" opacity="0.6"/>
-                                        </svg>
-                                        <label className="text-sm font-medium text-amber-900">Mastercard Track™ Enrichment</label>
-                                      </div>
-                                      {selectedClassification.mastercardMatchStatus && (
+                                {/* Mastercard Enrichment Data - Only show if we have actual enrichment data */}
+                                {(() => {
+                                  // Check if we have actual Mastercard data
+                                  const hasMastercardData = selectedClassification.mastercardBusinessName && 
+                                    selectedClassification.mastercardBusinessName !== 'None' &&
+                                    selectedClassification.mastercardBusinessName !== null;
+                                  
+                                  const hasAnyMastercardFields = hasMastercardData ||
+                                    selectedClassification.mastercardTaxId ||
+                                    selectedClassification.mastercardAddress ||
+                                    selectedClassification.mastercardCity ||
+                                    selectedClassification.mastercardState;
+                                  
+                                  // Only show section if we have status or actual data
+                                  if (!selectedClassification.mastercardMatchStatus && !hasAnyMastercardFields) {
+                                    return null;
+                                  }
+                                  
+                                  return (
+                                    <div className={`p-4 rounded-lg space-y-3 border ${
+                                      hasMastercardData ? 'bg-amber-50 border-amber-200' :
+                                      selectedClassification.mastercardMatchStatus === 'error' ? 'bg-red-50 border-red-200' :
+                                      'bg-gray-50 border-gray-200'
+                                    }`}>
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                          <svg viewBox="0 0 24 24" className={`h-5 w-5 ${
+                                            hasMastercardData ? 'text-amber-700' :
+                                            selectedClassification.mastercardMatchStatus === 'error' ? 'text-red-700' :
+                                            'text-gray-700'
+                                          }`} fill="currentColor">
+                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
+                                            <circle cx="8" cy="12" r="3" opacity="0.8"/>
+                                            <circle cx="16" cy="12" r="3" opacity="0.6"/>
+                                          </svg>
+                                          <label className={`text-sm font-medium ${
+                                            hasMastercardData ? 'text-amber-900' :
+                                            selectedClassification.mastercardMatchStatus === 'error' ? 'text-red-900' :
+                                            'text-gray-900'
+                                          }`}>Mastercard Track™ Enrichment</label>
+                                        </div>
                                         <Badge className={`text-xs ${
-                                          selectedClassification.mastercardMatchStatus === 'MATCH' || selectedClassification.mastercardMatchStatus === 'enriched'
-                                            ? 'bg-green-100 text-green-800' 
-                                            : selectedClassification.mastercardMatchStatus === 'NO_MATCH'
-                                            ? 'bg-gray-100 text-gray-800'
-                                            : selectedClassification.mastercardMatchStatus === 'error'
-                                            ? 'bg-red-100 text-red-800'
-                                            : 'bg-amber-100 text-amber-800'
+                                          hasMastercardData ? 'bg-green-100 text-green-800' :
+                                          selectedClassification.mastercardMatchStatus === 'error' ? 'bg-red-100 text-red-800' :
+                                          selectedClassification.mastercardMatchStatus === 'NO_MATCH' ? 'bg-gray-100 text-gray-800' :
+                                          selectedClassification.mastercardMatchStatus === 'matched' ? 'bg-yellow-100 text-yellow-800' :
+                                          'bg-gray-100 text-gray-800'
                                         }`}>
-                                          {selectedClassification.mastercardMatchStatus === 'enriched' ? '✓ Enriched' : 
+                                          {hasMastercardData ? '✓ Enriched' :
                                            selectedClassification.mastercardMatchStatus === 'error' ? '✗ Error' :
-                                           selectedClassification.mastercardMatchStatus}
+                                           selectedClassification.mastercardMatchStatus === 'NO_MATCH' ? 'No Match' :
+                                           selectedClassification.mastercardMatchStatus === 'matched' ? 'Processing' :
+                                           'Not Enriched'}
                                         </Badge>
-                                      )}
-                                    </div>
-                                    
-                                    {/* Error Message for Mastercard */}
-                                    {selectedClassification.mastercardMatchStatus === 'error' && (
-                                      <div className="bg-red-50 p-2 rounded text-sm text-red-700 border border-red-200">
-                                        <p>Unable to enrich with Mastercard data. The enrichment service encountered an error.</p>
-                                        {selectedClassification.mastercardSource && (
-                                          <p className="text-xs mt-1">Source: {selectedClassification.mastercardSource}</p>
-                                        )}
                                       </div>
-                                    )}
+                                      
+                                      {/* Error Message for Mastercard */}
+                                      {selectedClassification.mastercardMatchStatus === 'error' && !hasMastercardData && (
+                                        <div className="bg-red-50 p-2 rounded text-sm text-red-700 border border-red-200">
+                                          <p>Unable to enrich with Mastercard data. The enrichment service encountered an error.</p>
+                                          {selectedClassification.mastercardSource && (
+                                            <p className="text-xs mt-1">Source: {selectedClassification.mastercardSource}</p>
+                                          )}
+                                        </div>
+                                      )}
+                                      
+                                      {/* No Match Message */}
+                                      {!hasMastercardData && selectedClassification.mastercardMatchStatus === 'matched' && (
+                                        <div className="bg-gray-50 p-2 rounded text-sm text-gray-700 border border-gray-200">
+                                          <p>No matching business found in Mastercard network.</p>
+                                        </div>
+                                      )}
                                     
-                                    {/* Primary Business Information */}
-                                    {(selectedClassification.mastercardBusinessName || selectedClassification.mastercardTaxId) && (
+                                      {/* Primary Business Information - Only show if we have real data */}
+                                      {hasMastercardData && (
                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                                         {selectedClassification.mastercardBusinessName && (
                                           <div className="md:col-span-2">
@@ -1480,14 +1514,15 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                       </div>
                                     )}
                                     
-                                    {/* Data Source Info */}
-                                    {selectedClassification.mastercardSource && (
-                                      <div className="text-xs text-amber-600 pt-2 border-t border-amber-200">
-                                        Source: {selectedClassification.mastercardSource}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
+                                      {/* Data Source Info - Only show for successful enrichments */}
+                                      {hasMastercardData && selectedClassification.mastercardSource && (
+                                        <div className="text-xs text-amber-600 pt-2 border-t border-amber-200">
+                                          Source: {selectedClassification.mastercardSource}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                                 
                                 {/* BigQuery/Finexio Enrichment Data from payeeMatches */}
                                 {selectedClassification.payeeMatches && selectedClassification.payeeMatches[0] && (
