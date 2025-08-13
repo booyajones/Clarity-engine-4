@@ -22,6 +22,7 @@ import { mastercardSearchRequests } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 import { mastercardApi } from "./services/mastercardApi";
 import apiGateway from "./apiGateway";
+import { fieldPredictionService, type PredictionResult } from "./services/fieldPredictionService";
 
 // Global type for Mastercard results cache
 declare global {
@@ -358,23 +359,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Parse first few rows for preview
+      // Parse first few rows for preview and field prediction
       let preview: any[] = [];
+      let sampleData: any[][] = [];
       
       if (ext === ".csv") {
-        // Read first 5 rows for preview
+        // Read first 10 rows for preview and analysis
         const rows: any[] = [];
         await new Promise((resolve, reject) => {
           fs.createReadStream(filePath)
             .pipe(csv())
             .on("data", (data: any) => {
-              if (rows.length < 5) {
+              if (rows.length < 10) {
                 rows.push(data);
+                if (rows.length <= 5) preview.push(data); // First 5 for preview
               }
             })
             .on("end", () => {
-              preview = rows;
-              resolve(true);
+              // Convert rows to array format for field prediction
+              sampleData = rows.map(row => headers.map(header => row[header] || ''));
+              preview = rows.slice(0, 5);
+              resolve(rows);
             })
             .on("error", reject);
         });
@@ -385,7 +390,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][];
         
-        // Convert rows to objects using headers
+        // Convert to sample data format for prediction
+        sampleData = jsonData.slice(1, 11); // Skip header row, take next 10
+        
+        // Convert rows to objects using headers for preview
         preview = jsonData.slice(1, 6).map(row => {
           const obj: any = {};
           headers.forEach((header, index) => {
@@ -395,18 +403,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // Run field prediction analysis
+      let fieldPredictions: PredictionResult | null = null;
+      try {
+        console.log('🔍 Running field prediction analysis...');
+        fieldPredictions = await fieldPredictionService.predictFields(headers, sampleData);
+        console.log('✅ Field prediction completed successfully');
+      } catch (error) {
+        console.error('❌ Field prediction failed:', error);
+        // Continue without predictions if it fails
+      }
+
       // Don't delete the temp file yet, we need it for processing
       res.json({ 
         filename: req.file.originalname,
         headers,
         preview,
-        tempFileName: req.file.filename
+        tempFileName: req.file.filename,
+        fieldPredictions
       });
     } catch (error) {
       console.error("Error previewing file:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
+
+  // Dedicated field prediction API endpoint
+  app.post("/api/upload/analyze-fields", generalLimiter, asyncHandler(async (req, res) => {
+    const { headers, sampleData } = req.body;
+    
+    if (!headers || !Array.isArray(headers)) {
+      throw new AppError("Invalid headers provided", 400);
+    }
+    
+    if (!sampleData || !Array.isArray(sampleData)) {
+      throw new AppError("Invalid sample data provided", 400);
+    }
+    
+    try {
+      const predictions = await fieldPredictionService.predictFields(headers, sampleData);
+      res.json(predictions);
+    } catch (error) {
+      console.error('Field prediction API error:', error);
+      throw new AppError("Field prediction analysis failed", 500);
+    }
+  }));
 
   // Process file with selected column
   app.post("/api/upload/process", async (req, res) => {

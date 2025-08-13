@@ -59,6 +59,21 @@ interface UploadBatch {
   mastercardActualEnriched?: number;
 }
 
+interface FieldPrediction {
+  fieldName: string;
+  predictedType: string;
+  confidence: number;
+  reasoning: string;
+  dataPattern: string;
+  suggestedMapping?: string;
+}
+
+interface PredictionResult {
+  predictions: FieldPrediction[];
+  overallConfidence: number;
+  recommendedActions: string[];
+}
+
 interface DashboardStats {
   supplierCache: {
     total: number;
@@ -102,6 +117,7 @@ export default function Home() {
     filename: string;
     headers: string[];
     tempFileName: string;
+    fieldPredictions?: PredictionResult;
   } | null>(null);
   const [selectedColumn, setSelectedColumn] = useState<string>("");
   const [viewingBatchId, setViewingBatchId] = useState<number | null>(null);
@@ -181,6 +197,14 @@ export default function Home() {
             });
           }
         }
+      }
+
+      // Show field predictions if available
+      if (data.fieldPredictions) {
+        toast({
+          title: "Field Analysis Complete",
+          description: `${data.fieldPredictions.predictions.length} fields analyzed with ${data.fieldPredictions.overallConfidence}% confidence`,
+        });
       }
     },
     onError: (error: Error) => {
@@ -689,7 +713,7 @@ export default function Home() {
               </Button>
               <Button
                 variant={currentView === "single" ? "default" : "outline"}
-                onClick={() => setCurrentView("single" as any)}
+                onClick={() => setCurrentView("single")}
                 className={`flex items-center gap-2 transition-all ${currentView === "single" ? "shadow-lg" : "hover:shadow-md hover:border-purple-300"}`}
               >
                 <Sparkles className="h-4 w-4" />
@@ -697,7 +721,7 @@ export default function Home() {
               </Button>
               <Button
                 variant={currentView === "keywords" ? "default" : "outline"}
-                onClick={() => setCurrentView("keywords" as any)}
+                onClick={() => setCurrentView("keywords")}
                 className={`flex items-center gap-2 transition-all ${currentView === "keywords" ? "shadow-lg" : "hover:shadow-md hover:border-amber-300"}`}
               >
                 <ClipboardList className="h-4 w-4" />
@@ -979,9 +1003,9 @@ export default function Home() {
                     <div className="flex items-center gap-2">
                       <Badge 
                         variant={
-                          batch.status === "completed" ? "success" : 
-                          batch.status === "processing" ? "default" : 
-                          batch.status === "failed" ? "destructive" : "secondary"
+                          batch.status === "completed" ? "default" : 
+                          batch.status === "processing" ? "secondary" : 
+                          batch.status === "failed" ? "destructive" : "outline"
                         }
                       >
                         {batch.status}
@@ -1093,6 +1117,70 @@ export default function Home() {
               </div>
             )}
             
+            {/* Field Predictions */}
+            {previewData?.fieldPredictions && (
+              <div className="border-t pt-4 mb-4">
+                <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <Brain className="h-4 w-4" />
+                  Intelligent Field Analysis
+                </h4>
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
+                      <span className="text-sm font-medium">
+                        Analysis Complete - {previewData.fieldPredictions.overallConfidence}% Overall Confidence
+                      </span>
+                    </div>
+                    <Badge variant="outline" className="text-xs">
+                      {previewData.fieldPredictions.predictions.length} fields analyzed
+                    </Badge>
+                  </div>
+                  
+                  {previewData.fieldPredictions.recommendedActions.length > 0 && (
+                    <div className="bg-white rounded-md p-3 mb-3">
+                      <h5 className="text-xs font-semibold text-gray-700 mb-2">Recommendations:</h5>
+                      <ul className="text-xs text-gray-600 space-y-1">
+                        {previewData.fieldPredictions.recommendedActions.map((action, idx) => (
+                          <li key={idx} className="flex items-start gap-2">
+                            <ArrowRight className="h-3 w-3 mt-0.5 text-blue-500 flex-shrink-0" />
+                            <span>{action}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {previewData.fieldPredictions.predictions.map((pred, idx) => (
+                      <div key={idx} className="bg-white rounded-md p-3 border border-gray-100">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium text-sm truncate">{pred.fieldName}</span>
+                          <Badge 
+                            variant={pred.confidence >= 80 ? "default" : pred.confidence >= 60 ? "secondary" : "outline"} 
+                            className="text-xs"
+                          >
+                            {pred.confidence}%
+                          </Badge>
+                        </div>
+                        <div className="text-xs text-gray-600 mb-1">
+                          <span className="font-semibold">Type:</span> {pred.predictedType}
+                        </div>
+                        <div className="text-xs text-gray-600 mb-1">
+                          <span className="font-semibold">Pattern:</span> {pred.dataPattern}
+                        </div>
+                        {pred.suggestedMapping && (
+                          <div className="text-xs text-blue-600">
+                            <span className="font-semibold">Mapping:</span> {pred.suggestedMapping}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Column Selection */}
             {previewData && (
               <div className="space-y-4 border-t pt-4">

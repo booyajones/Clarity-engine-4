@@ -52,6 +52,8 @@ export const payeeClassifications = pgTable("payee_classifications", {
   status: text("status").notNull().default("auto-classified"), // auto-classified, user-confirmed, user-corrected, pending-review
   reviewedBy: integer("reviewed_by"),
   originalData: jsonb("original_data"), // Store original CSV row data
+  // Intelligent field predictions
+  fieldPredictions: jsonb("field_predictions"), // AI-detected field types and confidence
   isExcluded: boolean("is_excluded").default(false),
   exclusionKeyword: text("exclusion_keyword"),
   // Mastercard enrichment fields
