@@ -165,6 +165,23 @@ export default function Home() {
       if (found) {
         setSelectedColumn(found);
       }
+      
+      // Smart field detection for Google Address Validation
+      if (matchingOptions.enableGoogleAddressValidation && data.headers) {
+        const detectedColumns = detectAddressColumns(data.headers, data.rows);
+        if (detectedColumns) {
+          setAddressColumns(detectedColumns);
+          const mappedFields = Object.entries(detectedColumns)
+            .filter(([_, value]) => value)
+            .map(([key, _]) => key);
+          if (mappedFields.length > 0) {
+            toast({
+              title: "Address Fields Auto-Detected",
+              description: `Mapped: ${mappedFields.join(', ')}. You can adjust if needed.`,
+            });
+          }
+        }
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -308,8 +325,101 @@ export default function Home() {
       tempFileName: previewData.tempFileName,
       originalFilename: previewData.filename,
       payeeColumn: selectedColumn,
-      matchingOptions,
+      matchingOptions: {
+        ...matchingOptions,
+        addressColumns: matchingOptions.enableGoogleAddressValidation ? addressColumns : undefined
+      },
     });
+  };
+
+  // Smart address field detection
+  const detectAddressColumns = (headers: string[], rows?: any[]) => {
+    const normalizeHeader = (header: string) => header.toLowerCase().replace(/[^a-z0-9]/g, '');
+    
+    const detected: any = {
+      address: "",
+      city: "",
+      state: "",
+      zip: "",
+      country: ""
+    };
+    
+    // Pattern matching for each field type
+    const patterns = {
+      address: [
+        'address', 'addr', 'street', 'address1', 'addr1', 'streetaddress', 
+        'mailingaddress', 'physicaladdress', 'location', 'addressline1',
+        'addressline', 'streetname', 'streetaddr'
+      ],
+      city: [
+        'city', 'town', 'municipality', 'locality', 'cityname', 'cities'
+      ],
+      state: [
+        'state', 'st', 'province', 'region', 'statecode', 'stateprovince',
+        'stateabbr', 'stateabbreviation'
+      ],
+      zip: [
+        'zip', 'zipcode', 'postal', 'postalcode', 'postcode', 'zip5', 
+        'zip4', 'zipcodepostalcode', 'postalzip', 'zips'
+      ],
+      country: [
+        'country', 'nation', 'countrycode', 'countryname', 'countries'
+      ]
+    };
+    
+    // Check headers against patterns
+    headers.forEach(header => {
+      const normalized = normalizeHeader(header);
+      
+      Object.entries(patterns).forEach(([field, fieldPatterns]) => {
+        if (!detected[field] && fieldPatterns.some(pattern => normalized.includes(pattern))) {
+          detected[field] = header;
+        }
+      });
+    });
+    
+    // If we have address2 but no address1, check for it
+    if (!detected.address) {
+      const address2Header = headers.find(h => normalizeHeader(h).includes('address2'));
+      if (address2Header) {
+        // Look for address1
+        const address1Header = headers.find(h => 
+          normalizeHeader(h).includes('address1') || 
+          normalizeHeader(h) === 'address'
+        );
+        if (address1Header) {
+          detected.address = address1Header;
+        }
+      }
+    }
+    
+    // Smart detection based on data patterns if headers aren't clear
+    if (rows && rows.length > 0 && (!detected.state || !detected.zip)) {
+      headers.forEach((header, index) => {
+        if (!detected.state || !detected.zip) {
+          // Sample first few rows for patterns
+          const samples = rows.slice(0, Math.min(5, rows.length)).map(row => {
+            const value = row[index] || row[header];
+            return value?.toString() || '';
+          });
+          
+          // Check for state codes (2 uppercase letters)
+          if (!detected.state && samples.some(s => /^[A-Z]{2}$/.test(s.trim()))) {
+            const validStates = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC'];
+            if (samples.some(s => validStates.includes(s.trim()))) {
+              detected.state = header;
+            }
+          }
+          
+          // Check for zip codes (5 digits or 5+4 format)
+          if (!detected.zip && samples.some(s => /^\d{5}(-\d{4})?$/.test(s.trim()))) {
+            detected.zip = header;
+          }
+        }
+      });
+    }
+    
+    return detected;
   };
 
   const formatDuration = (start: string, end?: string) => {
@@ -704,7 +814,7 @@ export default function Home() {
                   Jobs completed
                 </p>
                 <div className="mt-2 flex items-center gap-2">
-                  <Badge variant="success" className="text-xs">
+                  <Badge variant="default" className="text-xs">
                     {completedBatches?.length || 0} complete
                   </Badge>
                   {(() => {
