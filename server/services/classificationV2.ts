@@ -290,15 +290,15 @@ export class OptimizedClassificationService {
       const totalConfidence = classifications.reduce((sum, c) => sum + c.confidence, 0);
       const accuracy = classifications.length > 0 ? totalConfidence / classifications.length : 0;
       
-      // Update batch with classification results but keep status as processing since enrichment is still pending
+      // Update batch to enriching status now that classification is done
       await storage.updateUploadBatch(batchId, {
-        status: "processing", // Keep as processing until ALL enrichment is done
+        status: "enriching", // Change to enriching status
         processedRecords: totalProcessed,
         totalRecords,
         accuracy,
         currentStep: "Starting enrichment",
         progressMessage: `Classification completed! Starting enrichment for ${totalProcessed} records...`,
-        // Don't set completedAt yet - wait until enrichment is done
+        // Don't set completedAt yet - wait until ALL enrichment is done
       });
       
       // Start enrichment processes with proper sequencing
@@ -1050,11 +1050,14 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
 
       // Update status to in_progress
       await storage.updateUploadBatch(batchId, {
+        status: "enriching", // Keep status as enriching
         mastercardEnrichmentStatus: "in_progress",
         mastercardEnrichmentStartedAt: new Date(),
         mastercardEnrichmentTotal: businessClassifications.length,
         mastercardEnrichmentProcessed: 0,
-        mastercardEnrichmentProgress: 0
+        mastercardEnrichmentProgress: 0,
+        currentStep: "Running Mastercard enrichment",
+        progressMessage: `Running Mastercard enrichment for ${businessClassifications.length} business classifications...`
       });
 
       console.log(`📦 Starting optimized Mastercard enrichment for ${businessClassifications.length} business classifications`);
@@ -1209,13 +1212,54 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
     }
   }
 
+  // Wait for all enrichment processes to complete
+  private async waitForEnrichmentCompletion(batchId: number): Promise<void> {
+    // Poll for enrichment completion status
+    let maxWaitTime = 30 * 60 * 1000; // 30 minutes max wait
+    const pollInterval = 5000; // 5 seconds
+    let waitedTime = 0;
+    
+    while (waitedTime < maxWaitTime) {
+      const batch = await storage.getUploadBatch(batchId);
+      
+      if (!batch) {
+        console.log(`Batch ${batchId} not found`);
+        return;
+      }
+      
+      // Check if Mastercard enrichment is complete
+      const mastercardComplete = 
+        batch.mastercardEnrichmentStatus === 'completed' ||
+        batch.mastercardEnrichmentStatus === 'failed' ||
+        batch.mastercardEnrichmentStatus === 'skipped' ||
+        !batch.mastercardEnrichmentStatus;
+      
+      if (mastercardComplete) {
+        console.log(`All enrichment processes completed for batch ${batchId}`);
+        return;
+      }
+      
+      console.log(`Waiting for enrichment to complete for batch ${batchId}... (${batch.mastercardEnrichmentStatus}, ${batch.mastercardEnrichmentProgress}%)`);
+      
+      // Wait before next check
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+      waitedTime += pollInterval;
+    }
+    
+    console.warn(`Enrichment wait timeout for batch ${batchId} after ${maxWaitTime/1000} seconds`);
+  }
+
   // Start Akkio predictions as the final enrichment step
   private async startAkkioPredictions(batchId: number): Promise<void> {
     try {
       // Check if Akkio predictions are disabled
       if (this.matchingOptions.enableAkkio !== true) {
         console.log(`Akkio predictions disabled for batch ${batchId}`);
-        // Mark batch as completed since all other processing is done
+        
+        // Wait for Mastercard enrichment to complete before marking batch as completed
+        await this.waitForEnrichmentCompletion(batchId);
+        
+        // Now mark batch as completed since all processing is done
         await storage.updateUploadBatch(batchId, {
           status: "completed",
           completedAt: new Date(),
@@ -1228,7 +1272,11 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       // Check if Akkio API is configured
       if (!process.env.AKKIO_API_KEY) {
         console.log('Akkio API not configured, skipping predictions');
-        // Mark batch as completed since all other processing is done
+        
+        // Wait for Mastercard enrichment to complete before marking batch as completed
+        await this.waitForEnrichmentCompletion(batchId);
+        
+        // Now mark batch as completed since all processing is done
         await storage.updateUploadBatch(batchId, {
           status: "completed",
           completedAt: new Date(),
@@ -1243,7 +1291,11 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       
       if (!activeModel) {
         console.log('No active Akkio model found, skipping predictions');
-        // Mark batch as completed since all other processing is done
+        
+        // Wait for Mastercard enrichment to complete before marking batch as completed
+        await this.waitForEnrichmentCompletion(batchId);
+        
+        // Now mark batch as completed since all processing is done
         await storage.updateUploadBatch(batchId, {
           status: "completed",
           completedAt: new Date(),

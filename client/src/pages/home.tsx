@@ -139,11 +139,11 @@ export default function Home() {
   const { data: batches, isLoading } = useQuery<UploadBatch[]>({
     queryKey: ["/api/upload/batches"],
     refetchInterval: (query) => {
-      // Only poll when there are active processing batches
+      // Only poll when there are active processing or enriching batches
       const hasProcessingBatches = query.state.data?.some(
-        batch => batch.status === "processing"
+        batch => batch.status === "processing" || batch.status === "enriching"
       );
-      return hasProcessingBatches ? 5000 : false; // Poll every 5 seconds only when processing
+      return hasProcessingBatches ? 5000 : false; // Poll every 5 seconds only when processing or enriching
     }
   });
 
@@ -389,6 +389,13 @@ export default function Home() {
             Processing
           </span>
         );
+      case "enriching":
+        return (
+          <span className="badge-enhanced status-processing border pulse-gentle">
+            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            Enriching
+          </span>
+        );
       case "failed":
         return (
           <span className="badge-enhanced status-failed border">
@@ -479,9 +486,9 @@ export default function Home() {
     }
   };
 
-  const processingBatches = batches?.filter(b => b.status === "processing") || [];
+  const processingBatches = batches?.filter(b => b.status === "processing" || b.status === "enriching") || [];
   const completedBatches = batches?.filter(b => b.status === "completed") || [];
-  const otherBatches = batches?.filter(b => !["processing", "completed"].includes(b.status)) || [];
+  const otherBatches = batches?.filter(b => !["processing", "enriching", "completed"].includes(b.status)) || [];
 
   // If viewing a specific batch, show the classification viewer
   if (viewingBatchId) {
@@ -1404,8 +1411,7 @@ export default function Home() {
                       <div className="flex flex-col gap-1">
                         <span className="text-sm">
                           {batch.status === "completed" || batch.status === "failed" || batch.status === "cancelled"
-                            ? formatDuration(batch.createdAt, 
-                                batch.mastercardEnrichmentCompletedAt || batch.completedAt)
+                            ? formatDuration(batch.createdAt, batch.completedAt)
                             : formatDuration(batch.createdAt)
                           }
                         </span>
