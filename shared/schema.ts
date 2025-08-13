@@ -15,7 +15,7 @@ export const uploadBatches = pgTable("upload_batches", {
   id: serial("id").primaryKey(),
   filename: text("filename").notNull(),
   originalFilename: text("original_filename").notNull(),
-  status: text("status").notNull().default("processing"), // processing, enriching, completed, failed
+  status: text("status").notNull().default("processing"), // processing, enriching, completed, failed, cancelled, pending
   totalRecords: integer("total_records").notNull().default(0),
   processedRecords: integer("processed_records").notNull().default(0),
   skippedRecords: integer("skipped_records").notNull().default(0),

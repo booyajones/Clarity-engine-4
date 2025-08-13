@@ -141,7 +141,7 @@ export default function Home() {
     refetchInterval: (query) => {
       // Only poll when there are active processing or enriching batches
       const hasProcessingBatches = query.state.data?.some(
-        batch => batch.status === "processing" || batch.status === "enriching"
+        batch => batch.status === "processing" || (batch.status as string) === "enriching"
       );
       return hasProcessingBatches ? 5000 : false; // Poll every 5 seconds only when processing or enriching
     }
@@ -486,9 +486,9 @@ export default function Home() {
     }
   };
 
-  const processingBatches = batches?.filter(b => b.status === "processing" || b.status === "enriching") || [];
+  const processingBatches = batches?.filter(b => b.status === "processing" || (b.status as string) === "enriching") || [];
   const completedBatches = batches?.filter(b => b.status === "completed") || [];
-  const otherBatches = batches?.filter(b => !["processing", "enriching", "completed"].includes(b.status)) || [];
+  const otherBatches = batches?.filter(b => !["processing", "enriching", "completed"].includes(b.status as string)) || [];
 
   // If viewing a specific batch, show the classification viewer
   if (viewingBatchId) {
@@ -670,6 +670,162 @@ export default function Home() {
       {/* Dashboard View */}
       {currentView === "dashboard" && (
         <div className="space-y-6 animate-fade-in-up">
+          {/* Latest File Status - Most prominent card */}
+          {batches && batches.length > 0 && (
+            <Card className="mb-6 hover:shadow-lg transition-shadow border-2 border-blue-100 bg-gradient-to-br from-blue-50 to-white">
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                  <FileSpreadsheet className="h-5 w-5 text-blue-600" />
+                  Latest File Status
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  const latestBatch = batches[0];
+                  const isEnriching = (latestBatch.status as string) === "enriching" || 
+                    (latestBatch.processedRecords === latestBatch.totalRecords && latestBatch.status === "processing");
+                  
+                  return (
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-medium text-lg">{latestBatch.originalFilename}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {new Date(latestBatch.createdAt).toLocaleString()}
+                          </p>
+                        </div>
+                        <Badge 
+                          variant={
+                            latestBatch.status === "completed" ? "default" :
+                            isEnriching ? "secondary" :
+                            latestBatch.status === "processing" ? "outline" :
+                            latestBatch.status === "failed" ? "destructive" : "outline"
+                          }
+                          className={isEnriching ? "animate-pulse" : ""}
+                        >
+                          {isEnriching ? "Enriching" : latestBatch.status}
+                        </Badge>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        {/* Classification Progress */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-sm">
+                            <span className="font-medium">Classification</span>
+                            <span className="text-muted-foreground">
+                              {latestBatch.processedRecords}/{latestBatch.totalRecords} records
+                            </span>
+                          </div>
+                          <div className="bg-gray-200 rounded-full h-2">
+                            <div 
+                              className="bg-blue-600 h-2 rounded-full transition-all"
+                              style={{ width: `${Math.min(100, (latestBatch.processedRecords / latestBatch.totalRecords) * 100)}%` }}
+                            />
+                          </div>
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>{Math.round((latestBatch.processedRecords / latestBatch.totalRecords) * 100)}% complete</span>
+                            {latestBatch.processedRecords === latestBatch.totalRecords && (
+                              <CheckCircle2 className="h-3 w-3 text-green-600" />
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Finexio Matching */}
+                        {latestBatch.processedRecords === latestBatch.totalRecords && (
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <span className="font-medium">Finexio Matching</span>
+                              <span className="text-muted-foreground">
+                                {(latestBatch as any).finexioMatchPercentage ? `${(latestBatch as any).finexioMatchPercentage}% matched` : "Processing..."}
+                              </span>
+                            </div>
+                            <div className="bg-gray-200 rounded-full h-2">
+                              <div 
+                                className="bg-green-600 h-2 rounded-full transition-all"
+                                style={{ width: `${(latestBatch as any).finexioMatchPercentage || 0}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Mastercard Enrichment */}
+                        {latestBatch.processedRecords === latestBatch.totalRecords && latestBatch.mastercardEnrichmentStatus !== "skipped" && (
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <span className="font-medium">Mastercard Enrichment</span>
+                              <span className="text-muted-foreground">
+                                {latestBatch.mastercardEnrichmentStatus === "completed" ? 
+                                  `${latestBatch.mastercardActualEnriched || 0} enriched` :
+                                  latestBatch.mastercardEnrichmentStatus === "in_progress" ?
+                                  `${latestBatch.mastercardEnrichmentProgress || 0}%` :
+                                  latestBatch.mastercardEnrichmentStatus
+                                }
+                              </span>
+                            </div>
+                            <div className="bg-gray-200 rounded-full h-2">
+                              <div 
+                                className={`${
+                                  latestBatch.mastercardEnrichmentStatus === "completed" ? "bg-purple-600" :
+                                  latestBatch.mastercardEnrichmentStatus === "in_progress" ? "bg-purple-400" :
+                                  "bg-gray-400"
+                                } h-2 rounded-full transition-all`}
+                                style={{ 
+                                  width: `${
+                                    latestBatch.mastercardEnrichmentStatus === "completed" ? 100 :
+                                    latestBatch.mastercardEnrichmentProgress || 0
+                                  }%` 
+                                }}
+                              />
+                            </div>
+                            {latestBatch.mastercardEnrichmentStatus === "completed" && (
+                              <div className="flex justify-between text-xs text-muted-foreground">
+                                <span>Complete</span>
+                                <CheckCircle2 className="h-3 w-3 text-purple-600" />
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        {/* Overall Status Message */}
+                        <div className="pt-2 border-t">
+                          <p className="text-sm text-muted-foreground">
+                            {latestBatch.progressMessage || 
+                              (isEnriching ? "Enriching data with external sources..." : "Processing payee data...")
+                            }
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {/* Action Buttons */}
+                      <div className="flex gap-2 pt-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleViewBatch(latestBatch.id)}
+                          className="flex-1"
+                        >
+                          <Eye className="h-3 w-3 mr-1" />
+                          View Results
+                        </Button>
+                        {latestBatch.status === "completed" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDownloadBatch(latestBatch.id)}
+                            className="flex-1"
+                          >
+                            <Download className="h-3 w-3 mr-1" />
+                            Download
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+          )}
+          
           {/* System Status Overview */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Jobs Today */}
@@ -790,7 +946,9 @@ export default function Home() {
                         Active
                       </Badge>
                       <span className="text-xs text-muted-foreground">
-                        {processingBatches.reduce((sum, b) => sum + (b.totalRecords - b.processedRecords), 0).toLocaleString()} pending
+                        {processingBatches.map(b => 
+                          (b.status as string) === "enriching" ? "Enriching..." : `${b.totalRecords - b.processedRecords} pending`
+                        ).join(", ")}
                       </span>
                     </>
                   ) : (
@@ -873,16 +1031,44 @@ export default function Home() {
                       <div key={batch.id} className="flex items-center justify-between">
                         <div className="flex-1">
                           <p className="text-sm font-medium truncate">{batch.originalFilename}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <div className="flex-1 bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-green-600 h-2 rounded-full transition-all"
-                                style={{ width: `${(batch.processedRecords / batch.totalRecords) * 100}%` }}
-                              />
-                            </div>
-                            <span className="text-xs text-muted-foreground">
-                              {Math.round((batch.processedRecords / batch.totalRecords) * 100)}%
-                            </span>
+                          <div className="space-y-1 mt-1">
+                            {batch.status === "processing" && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">Classification:</span>
+                                <div className="flex-1 bg-gray-200 rounded-full h-2">
+                                  <div 
+                                    className="bg-blue-600 h-2 rounded-full transition-all"
+                                    style={{ width: `${(batch.processedRecords / batch.totalRecords) * 100}%` }}
+                                  />
+                                </div>
+                                <span className="text-xs text-muted-foreground">
+                                  {Math.round((batch.processedRecords / batch.totalRecords) * 100)}%
+                                </span>
+                              </div>
+                            )}
+                            {(batch.status as string) === "enriching" && (
+                              <>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">Classification:</span>
+                                  <CheckCircle2 className="h-3 w-3 text-green-600" />
+                                  <span className="text-xs text-green-600">Complete</span>
+                                </div>
+                                {batch.mastercardEnrichmentStatus === "in_progress" && (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-muted-foreground">Mastercard:</span>
+                                    <div className="flex-1 bg-gray-200 rounded-full h-2">
+                                      <div 
+                                        className="bg-orange-600 h-2 rounded-full transition-all"
+                                        style={{ width: `${batch.mastercardEnrichmentProgress || 0}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-xs text-muted-foreground">
+                                      {batch.mastercardEnrichmentProgress || 0}%
+                                    </span>
+                                  </div>
+                                )}
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -920,11 +1106,13 @@ export default function Home() {
                       <Badge 
                         variant={
                           batch.status === "completed" ? "default" : 
-                          batch.status === "processing" ? "secondary" : 
+                          (batch.status as string) === "enriching" ? "secondary" :
+                          batch.status === "processing" ? "outline" : 
                           batch.status === "failed" ? "destructive" : "outline"
                         }
+                        className={(batch.status as string) === "enriching" ? "animate-pulse" : ""}
                       >
-                        {batch.status}
+                        {(batch.status as string) === "enriching" ? "Enriching" : batch.status}
                       </Badge>
                       <span className="text-sm font-medium">
                         {batch.totalRecords} records
@@ -1348,7 +1536,16 @@ export default function Home() {
                     <TableCell className="font-medium">{batch.originalFilename}</TableCell>
                     <TableCell>{getStatusBadge(batch.status)}</TableCell>
                     <TableCell>
-                      {batch.processedRecords}/{batch.totalRecords}
+                      <div className="space-y-1">
+                        <div className="text-sm">
+                          Classification: {batch.processedRecords}/{batch.totalRecords}
+                        </div>
+                        {(batch.status as string) === "enriching" && (
+                          <div className="text-xs text-muted-foreground">
+                            Enriching data...
+                          </div>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {batch.status === "completed" 
@@ -1360,7 +1557,7 @@ export default function Home() {
                       {batch.status === "completed" ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
                           <CheckCircle2 className="h-3 w-3 mr-1" />
-                          {batch.finexioMatchPercentage !== undefined ? `${batch.finexioMatchPercentage}%` : "0%"}
+                          {(batch as any).finexioMatchPercentage !== undefined ? `${(batch as any).finexioMatchPercentage}%` : "0%"}
                         </span>
                       ) : "-"}
                     </TableCell>
