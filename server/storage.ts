@@ -161,11 +161,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserUploadBatches(userId: number): Promise<UploadBatch[]> {
-    return await db
+    const batches = await db
       .select()
       .from(uploadBatches)
       .where(eq(uploadBatches.userId, userId))
       .orderBy(desc(uploadBatches.createdAt));
+    
+    // Calculate Finexio match percentage for each batch
+    for (const batch of batches) {
+      if (batch.processedRecords > 0) {
+        // Get count of records with Finexio matches
+        const result = await db.execute(sql`
+          SELECT COUNT(DISTINCT pm.classification_id) as matched_count
+          FROM payee_matches pm
+          JOIN payee_classifications pc ON pm.classification_id = pc.id
+          WHERE pc.batch_id = ${batch.id} AND pm.finexio_match_score > 0
+        `);
+        
+        const matchedCount = parseInt(result.rows[0]?.matched_count || '0');
+        batch.finexioMatchedCount = matchedCount;
+        batch.finexioMatchPercentage = Math.round((matchedCount / batch.processedRecords) * 100);
+      }
+    }
+    
+    return batches;
   }
 
   async createPayeeClassification(classification: InsertPayeeClassification): Promise<PayeeClassification> {

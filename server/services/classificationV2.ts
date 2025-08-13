@@ -290,15 +290,15 @@ export class OptimizedClassificationService {
       const totalConfidence = classifications.reduce((sum, c) => sum + c.confidence, 0);
       const accuracy = classifications.length > 0 ? totalConfidence / classifications.length : 0;
       
-      // Mark classification as complete before enrichment
+      // Update batch with classification results but keep status as processing since enrichment is still pending
       await storage.updateUploadBatch(batchId, {
-        status: "completed",
+        status: "processing", // Keep as processing until ALL enrichment is done
         processedRecords: totalProcessed,
         totalRecords,
         accuracy,
-        currentStep: "Classification complete",
-        progressMessage: `Classification completed! Processed ${totalProcessed} records in ${elapsedSeconds.toFixed(1)}s`,
-        completedAt: new Date()
+        currentStep: "Starting enrichment",
+        progressMessage: `Classification completed! Starting enrichment for ${totalProcessed} records...`,
+        // Don't set completedAt yet - wait until enrichment is done
       });
       
       // Start enrichment processes with proper sequencing
@@ -354,13 +354,33 @@ export class OptimizedClassificationService {
       
       // Wait for all enrichment processes to complete
       Promise.all(enrichmentPromises)
-        .then(() => {
+        .then(async () => {
           // After all enrichments complete, start Akkio predictions as the final step
           console.log(`All enrichments completed for batch ${batchId}, starting Akkio predictions`);
-          return this.startAkkioPredictions(batchId);
+          
+          // Start Akkio predictions - this will mark batch as completed when done
+          try {
+            await this.startAkkioPredictions(batchId);
+          } catch (error) {
+            console.error('Akkio predictions failed, marking batch as completed anyway:', error);
+            // If Akkio fails, still mark batch as completed since main processing is done
+            await storage.updateUploadBatch(batchId, {
+              status: "completed",
+              completedAt: new Date(),
+              currentStep: "Processing complete",
+              progressMessage: `Processing completed with Akkio unavailable. Classification, Finexio matching, and Mastercard enrichment done.`
+            });
+          }
         })
-        .catch(error => {
+        .catch(async (error) => {
           console.error('Error in enrichment pipeline:', error);
+          // Even if enrichment fails, mark batch as completed since classification was done
+          await storage.updateUploadBatch(batchId, {
+            status: "completed",
+            completedAt: new Date(),
+            currentStep: "Processing complete with errors",
+            progressMessage: `Processing completed with some enrichment errors. Check logs for details.`
+          });
         });
       
       console.log(`Batch ${batchId} classification completed: ${totalProcessed} records in ${elapsedSeconds}s (${recordsPerSecond.toFixed(1)} rec/s)`);
@@ -1195,14 +1215,26 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       // Check if Akkio predictions are disabled
       if (this.matchingOptions.enableAkkio !== true) {
         console.log(`Akkio predictions disabled for batch ${batchId}`);
-        // Skip status update - columns don't exist
+        // Mark batch as completed since all other processing is done
+        await storage.updateUploadBatch(batchId, {
+          status: "completed",
+          completedAt: new Date(),
+          currentStep: "All processing complete",
+          progressMessage: `Processing completed! Classification, Finexio matching, and Mastercard enrichment done.`
+        });
         return;
       }
 
       // Check if Akkio API is configured
       if (!process.env.AKKIO_API_KEY) {
         console.log('Akkio API not configured, skipping predictions');
-        // Skip status update - columns don't exist
+        // Mark batch as completed since all other processing is done
+        await storage.updateUploadBatch(batchId, {
+          status: "completed",
+          completedAt: new Date(),
+          currentStep: "All processing complete",
+          progressMessage: `Processing completed! Classification, Finexio matching, and Mastercard enrichment done.`
+        });
         return;
       }
 
@@ -1211,7 +1243,13 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       
       if (!activeModel) {
         console.log('No active Akkio model found, skipping predictions');
-        // Skip status update - columns don't exist
+        // Mark batch as completed since all other processing is done
+        await storage.updateUploadBatch(batchId, {
+          status: "completed",
+          completedAt: new Date(),
+          currentStep: "All processing complete",
+          progressMessage: `Processing completed! Classification, Finexio matching, and Mastercard enrichment done.`
+        });
         return;
       }
 
@@ -1222,7 +1260,13 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       
       if (classificationsForPrediction.length === 0) {
         console.log('No classifications ready for Akkio predictions');
-        // Skip status update - columns don't exist
+        // Mark batch as completed since all other processing is done
+        await storage.updateUploadBatch(batchId, {
+          status: "completed",
+          completedAt: new Date(),
+          currentStep: "All processing complete",
+          progressMessage: `Processing completed! Classification, Finexio matching, and Mastercard enrichment done.`
+        });
         return;
       }
 
@@ -1299,7 +1343,13 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
         console.log(`Akkio prediction progress: ${progress}% (${processedCount}/${classificationsForPrediction.length})`);
       }
 
-      // Final update - skip database update as columns don't exist
+      // Final update - mark batch as TRULY completed now that ALL processing is done
+      await storage.updateUploadBatch(batchId, {
+        status: "completed",
+        completedAt: new Date(),
+        currentStep: "All processing complete",
+        progressMessage: `All processing completed! Classification, Finexio matching, Mastercard enrichment, and Akkio predictions done.`
+      });
 
       console.log(`Akkio predictions completed for batch ${batchId}: ${successCount} successful, ${failureCount} failed out of ${processedCount} total`);
     } catch (error) {

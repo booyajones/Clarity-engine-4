@@ -31,6 +31,9 @@ export const uploadBatches = pgTable("upload_batches", {
   mastercardEnrichmentTotal: integer("mastercard_enrichment_total").default(0),
   mastercardEnrichmentProcessed: integer("mastercard_enrichment_processed").default(0),
   mastercardActualEnriched: integer("mastercard_actual_enriched").default(0),
+  // Finexio match tracking
+  finexioMatchPercentage: integer("finexio_match_percentage").default(0), // Percentage of records matched
+  finexioMatchedCount: integer("finexio_matched_count").default(0), // Number of records matched
   createdAt: timestamp("created_at").defaultNow().notNull(),
   completedAt: timestamp("completed_at"),
 });
