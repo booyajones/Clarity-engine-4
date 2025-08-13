@@ -22,7 +22,63 @@ import { mastercardSearchRequests } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 import { mastercardApi } from "./services/mastercardApi";
 import apiGateway from "./apiGateway";
-import { FieldPredictionService, type PredictionResult } from "./services/fieldPredictionService";
+// Simple address field detection function
+function detectAddressFields(headers: string[]): Record<string, string> {
+  const addressMapping: Record<string, string> = {};
+  
+  // Convert headers to lowercase for case-insensitive matching
+  const lowerHeaders = headers.map(h => h.toLowerCase().trim());
+  
+  // Find address field (street address)
+  const addressPatterns = [
+    'address', 'address1', 'address 1', 'street', 'street address', 
+    'address line 1', 'addr1', 'addr', 'street1', 'mailing address',
+    'street_address', 'mail_address'
+  ];
+  for (const pattern of addressPatterns) {
+    const index = lowerHeaders.findIndex(h => h === pattern || h.includes(pattern));
+    if (index !== -1 && !addressMapping.address) {
+      addressMapping.address = headers[index];
+      break;
+    }
+  }
+  
+  // Find city field
+  const cityPatterns = ['city', 'town', 'municipality', 'locality', 'city_name'];
+  for (const pattern of cityPatterns) {
+    const index = lowerHeaders.findIndex(h => h === pattern || h.includes(pattern));
+    if (index !== -1 && !addressMapping.city) {
+      addressMapping.city = headers[index];
+      break;
+    }
+  }
+  
+  // Find state field
+  const statePatterns = ['state', 'province', 'st', 'region', 'state_code'];
+  for (const pattern of statePatterns) {
+    const index = lowerHeaders.findIndex(h => h === pattern || (h.includes('state') && !h.includes('statement')));
+    if (index !== -1 && !addressMapping.state) {
+      addressMapping.state = headers[index];
+      break;
+    }
+  }
+  
+  // Find zip/postal code field
+  const zipPatterns = ['zip', 'postal', 'postcode', 'zip code', 'postal code', 'zipcode', 'zip_code'];
+  for (const pattern of zipPatterns) {
+    const index = lowerHeaders.findIndex(h => h === pattern || h.includes('zip') || h.includes('postal'));
+    if (index !== -1 && !addressMapping.zip) {
+      addressMapping.zip = headers[index];
+      break;
+    }
+  }
+  
+  // Always set country to USA for Mastercard
+  addressMapping.country = 'USA';
+  
+  console.log('🗺️ Auto-detected address fields:', addressMapping);
+  return addressMapping;
+}
 
 // Global type for Mastercard results cache
 declare global {
@@ -403,15 +459,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Run field prediction analysis
-      let fieldPredictions: PredictionResult | null = null;
+      // Auto-detect address fields for Google validation
+      let addressFields: Record<string, string> = {};
       try {
-        console.log('🔍 Running field prediction analysis...');
-        fieldPredictions = await FieldPredictionService.predictFields(headers, sampleData);
-        console.log('✅ Field prediction completed successfully');
+        console.log('🔍 Auto-detecting address fields...');
+        addressFields = detectAddressFields(headers);
+        console.log('✅ Address fields detected:', addressFields);
       } catch (error) {
-        console.error('❌ Field prediction failed:', error);
-        // Continue without predictions if it fails
+        console.error('❌ Address field detection failed:', error);
+        // Continue without auto-detection if it fails
       }
 
       // Don't delete the temp file yet, we need it for processing
@@ -420,7 +476,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         headers,
         preview,
         tempFileName: req.file.filename,
-        fieldPredictions
+        addressFields // Send detected address fields
       });
     } catch (error) {
       console.error("Error previewing file:", error);

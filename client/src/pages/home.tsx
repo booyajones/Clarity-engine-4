@@ -116,8 +116,9 @@ export default function Home() {
   const [previewData, setPreviewData] = useState<{
     filename: string;
     headers: string[];
+    preview?: any[];
     tempFileName: string;
-    fieldPredictions?: PredictionResult;
+    addressFields?: Record<string, string>;
   } | null>(null);
   const [selectedColumn, setSelectedColumn] = useState<string>("");
   const [viewingBatchId, setViewingBatchId] = useState<number | null>(null);
@@ -182,29 +183,25 @@ export default function Home() {
         setSelectedColumn(found);
       }
       
-      // Smart field detection for Google Address Validation
-      if (matchingOptions.enableGoogleAddressValidation && data.headers) {
-        const detectedColumns = detectAddressColumns(data.headers, data.rows);
-        if (detectedColumns) {
-          setAddressColumns(detectedColumns);
-          const mappedFields = Object.entries(detectedColumns)
-            .filter(([_, value]) => value)
-            .map(([key, _]) => key);
-          if (mappedFields.length > 0) {
-            toast({
-              title: "Address Fields Auto-Detected",
-              description: `Mapped: ${mappedFields.join(', ')}. You can adjust if needed.`,
-            });
-          }
-        }
-      }
-
-      // Show field predictions if available
-      if (data.fieldPredictions) {
-        toast({
-          title: "Field Analysis Complete",
-          description: `${data.fieldPredictions.predictions.length} fields analyzed with ${data.fieldPredictions.overallConfidence}% confidence`,
+      // Auto-populate address fields from server detection
+      if (data.addressFields && Object.keys(data.addressFields).length > 0) {
+        setAddressColumns({
+          address: data.addressFields.address || "",
+          city: data.addressFields.city || "",
+          state: data.addressFields.state || "",
+          zip: data.addressFields.zip || ""
         });
+        
+        const mappedFields = Object.entries(data.addressFields)
+          .filter(([key, value]) => key !== 'country' && value)
+          .map(([key]) => key);
+        
+        if (mappedFields.length > 0) {
+          toast({
+            title: "Address Fields Auto-Detected",
+            description: `Automatically mapped ${mappedFields.length} address fields for Google validation.`,
+          });
+        }
       }
     },
     onError: (error: Error) => {
@@ -356,95 +353,7 @@ export default function Home() {
     });
   };
 
-  // Smart address field detection
-  const detectAddressColumns = (headers: string[], rows?: any[]) => {
-    const normalizeHeader = (header: string) => header.toLowerCase().replace(/[^a-z0-9]/g, '');
-    
-    const detected: any = {
-      address: "",
-      city: "",
-      state: "",
-      zip: "",
-      country: ""
-    };
-    
-    // Pattern matching for each field type
-    const patterns = {
-      address: [
-        'address', 'addr', 'street', 'address1', 'addr1', 'streetaddress', 
-        'mailingaddress', 'physicaladdress', 'location', 'addressline1',
-        'addressline', 'streetname', 'streetaddr'
-      ],
-      city: [
-        'city', 'town', 'municipality', 'locality', 'cityname', 'cities'
-      ],
-      state: [
-        'state', 'st', 'province', 'region', 'statecode', 'stateprovince',
-        'stateabbr', 'stateabbreviation'
-      ],
-      zip: [
-        'zip', 'zipcode', 'postal', 'postalcode', 'postcode', 'zip5', 
-        'zip4', 'zipcodepostalcode', 'postalzip', 'zips'
-      ],
-      country: [
-        'country', 'nation', 'countrycode', 'countryname', 'countries'
-      ]
-    };
-    
-    // Check headers against patterns
-    headers.forEach(header => {
-      const normalized = normalizeHeader(header);
-      
-      Object.entries(patterns).forEach(([field, fieldPatterns]) => {
-        if (!detected[field] && fieldPatterns.some(pattern => normalized.includes(pattern))) {
-          detected[field] = header;
-        }
-      });
-    });
-    
-    // If we have address2 but no address1, check for it
-    if (!detected.address) {
-      const address2Header = headers.find(h => normalizeHeader(h).includes('address2'));
-      if (address2Header) {
-        // Look for address1
-        const address1Header = headers.find(h => 
-          normalizeHeader(h).includes('address1') || 
-          normalizeHeader(h) === 'address'
-        );
-        if (address1Header) {
-          detected.address = address1Header;
-        }
-      }
-    }
-    
-    // Smart detection based on data patterns if headers aren't clear
-    if (rows && rows.length > 0 && (!detected.state || !detected.zip)) {
-      headers.forEach((header, index) => {
-        if (!detected.state || !detected.zip) {
-          // Sample first few rows for patterns
-          const samples = rows.slice(0, Math.min(5, rows.length)).map(row => {
-            const value = row[index] || row[header];
-            return value?.toString() || '';
-          });
-          
-          // Check for state codes (2 uppercase letters)
-          if (!detected.state && samples.some(s => /^[A-Z]{2}$/.test(s.trim()))) {
-            const validStates = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC'];
-            if (samples.some(s => validStates.includes(s.trim()))) {
-              detected.state = header;
-            }
-          }
-          
-          // Check for zip codes (5 digits or 5+4 format)
-          if (!detected.zip && samples.some(s => /^\d{5}(-\d{4})?$/.test(s.trim()))) {
-            detected.zip = header;
-          }
-        }
-      });
-    }
-    
-    return detected;
-  };
+
 
   const formatDuration = (start: string, end?: string) => {
     const startTime = new Date(start).getTime();
@@ -1117,69 +1026,7 @@ export default function Home() {
               </div>
             )}
             
-            {/* Field Predictions */}
-            {previewData?.fieldPredictions && (
-              <div className="border-t pt-4 mb-4">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <Brain className="h-4 w-4" />
-                  Intelligent Field Analysis
-                </h4>
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
-                      <span className="text-sm font-medium">
-                        Analysis Complete - {previewData.fieldPredictions.overallConfidence}% Overall Confidence
-                      </span>
-                    </div>
-                    <Badge variant="outline" className="text-xs">
-                      {previewData.fieldPredictions.predictions.length} fields analyzed
-                    </Badge>
-                  </div>
-                  
-                  {previewData.fieldPredictions.recommendedActions.length > 0 && (
-                    <div className="bg-white rounded-md p-3 mb-3">
-                      <h5 className="text-xs font-semibold text-gray-700 mb-2">Recommendations:</h5>
-                      <ul className="text-xs text-gray-600 space-y-1">
-                        {previewData.fieldPredictions.recommendedActions.map((action, idx) => (
-                          <li key={idx} className="flex items-start gap-2">
-                            <ArrowRight className="h-3 w-3 mt-0.5 text-blue-500 flex-shrink-0" />
-                            <span>{action}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {previewData.fieldPredictions.predictions.map((pred, idx) => (
-                      <div key={idx} className="bg-white rounded-md p-3 border border-gray-100">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="font-medium text-sm truncate">{pred.fieldName}</span>
-                          <Badge 
-                            variant={pred.confidence >= 80 ? "default" : pred.confidence >= 60 ? "secondary" : "outline"} 
-                            className="text-xs"
-                          >
-                            {pred.confidence}%
-                          </Badge>
-                        </div>
-                        <div className="text-xs text-gray-600 mb-1">
-                          <span className="font-semibold">Type:</span> {pred.predictedType}
-                        </div>
-                        <div className="text-xs text-gray-600 mb-1">
-                          <span className="font-semibold">Pattern:</span> {pred.dataPattern}
-                        </div>
-                        {pred.suggestedMapping && (
-                          <div className="text-xs text-blue-600">
-                            <span className="font-semibold">Mapping:</span> {pred.suggestedMapping}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
+
 
             {/* Column Selection */}
             {previewData && (
