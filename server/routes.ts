@@ -22,7 +22,7 @@ import { mastercardSearchRequests } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 import { mastercardApi } from "./services/mastercardApi";
 import apiGateway from "./apiGateway";
-import { fieldPredictionService, type PredictionResult } from "./services/fieldPredictionService";
+import { FieldPredictionService, type PredictionResult } from "./services/fieldPredictionService";
 
 // Global type for Mastercard results cache
 declare global {
@@ -407,7 +407,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let fieldPredictions: PredictionResult | null = null;
       try {
         console.log('🔍 Running field prediction analysis...');
-        fieldPredictions = await fieldPredictionService.predictFields(headers, sampleData);
+        fieldPredictions = await FieldPredictionService.predictFields(headers, sampleData);
         console.log('✅ Field prediction completed successfully');
       } catch (error) {
         console.error('❌ Field prediction failed:', error);
