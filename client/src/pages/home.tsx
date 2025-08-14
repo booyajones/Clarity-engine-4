@@ -288,7 +288,7 @@ export default function Home() {
   const cancelMutation = useMutation({
     mutationFn: async (batchId: number) => {
       const res = await fetch(`/api/upload/batches/${batchId}/cancel`, {
-        method: "POST",
+        method: "PATCH",
         credentials: "include",
       });
 
