@@ -769,16 +769,21 @@ export default function Home() {
                                 className={`${
                                   (latestBatch as any).finexioMatchingStatus === "completed" ? "bg-green-600" :
                                   (latestBatch as any).finexioMatchingStatus === "in_progress" ? "bg-green-400" :
+                                  (latestBatch as any).finexioMatchingStatus === "skipped" ? "bg-gray-300" :
                                   "bg-gray-400"
                                 } h-2 rounded-full transition-all`}
-                                style={{ width: `${(latestBatch as any).finexioMatchingStatus === "completed" ? ((latestBatch as any).finexioMatchPercentage || 0) : (latestBatch as any).finexioMatchingStatus === "in_progress" ? 50 : 0}%` }}
+                                style={{ width: `${
+                                  (latestBatch as any).finexioMatchingStatus === "completed" ? ((latestBatch as any).finexioMatchPercentage || 0) : 
+                                  (latestBatch as any).finexioMatchingStatus === "in_progress" ? 50 : 
+                                  (latestBatch as any).finexioMatchingStatus === "skipped" ? 100 : 0
+                                }%` }}
                               />
                             </div>
                           </div>
                         )}
                         
                         {/* Google Address Validation */}
-                        {latestBatch.processedRecords === latestBatch.totalRecords && (latestBatch as any).googleAddressStatus !== "skipped" && (
+                        {latestBatch.processedRecords === latestBatch.totalRecords && (
                           <div className="space-y-1">
                             <div className="flex justify-between text-sm">
                               <span className="font-medium">Google Address Validation</span>
@@ -797,11 +802,13 @@ export default function Home() {
                                 className={`${
                                   (latestBatch as any).googleAddressStatus === "completed" ? "bg-blue-600" :
                                   (latestBatch as any).googleAddressStatus === "in_progress" ? "bg-blue-400" :
+                                  (latestBatch as any).googleAddressStatus === "skipped" ? "bg-gray-300" :
                                   "bg-gray-400"
                                 } h-2 rounded-full transition-all`}
                                 style={{ 
                                   width: `${
                                     (latestBatch as any).googleAddressStatus === "completed" ? 100 :
+                                    (latestBatch as any).googleAddressStatus === "skipped" ? 100 :
                                     (latestBatch as any).googleAddressProgress || 0
                                   }%` 
                                 }}
@@ -817,7 +824,7 @@ export default function Home() {
                         )}
                         
                         {/* Mastercard Enrichment */}
-                        {latestBatch.processedRecords === latestBatch.totalRecords && latestBatch.mastercardEnrichmentStatus !== "skipped" && (
+                        {latestBatch.processedRecords === latestBatch.totalRecords && (
                           <div className="space-y-1">
                             <div className="flex justify-between text-sm">
                               <span className="font-medium">Mastercard Enrichment</span>
@@ -836,12 +843,14 @@ export default function Home() {
                                 className={`${
                                   latestBatch.mastercardEnrichmentStatus === "completed" ? "bg-purple-600" :
                                   latestBatch.mastercardEnrichmentStatus === "in_progress" ? "bg-purple-400" :
+                                  latestBatch.mastercardEnrichmentStatus === "skipped" ? "bg-gray-300" :
                                   "bg-gray-400"
                                 } h-2 rounded-full transition-all`}
                                 style={{ 
                                   width: `${
                                     latestBatch.mastercardEnrichmentStatus === "completed" ? 
                                       ((latestBatch.mastercardActualEnriched || 0) > 0 ? 100 : 0) :
+                                      latestBatch.mastercardEnrichmentStatus === "skipped" ? 100 :
                                       latestBatch.mastercardEnrichmentProgress || 0
                                   }%` 
                                 }}
@@ -857,7 +866,7 @@ export default function Home() {
                         )}
                         
                         {/* Akkio Predictions */}
-                        {latestBatch.processedRecords === latestBatch.totalRecords && (latestBatch as any).akkioPredictionStatus !== "skipped" && (
+                        {latestBatch.processedRecords === latestBatch.totalRecords && (
                           <div className="space-y-1">
                             <div className="flex justify-between text-sm">
                               <span className="font-medium">Akkio ML Predictions</span>
@@ -876,6 +885,7 @@ export default function Home() {
                                 className={`${
                                   (latestBatch as any).akkioPredictionStatus === "completed" ? "bg-orange-600" :
                                   (latestBatch as any).akkioPredictionStatus === "in_progress" ? "bg-orange-400" :
+                                  (latestBatch as any).akkioPredictionStatus === "skipped" ? "bg-gray-300" :
                                   "bg-gray-400"
                                 } h-2 rounded-full transition-all`}
                                 style={{ 
@@ -883,6 +893,7 @@ export default function Home() {
                                     (latestBatch as any).akkioPredictionStatus === "completed" ? 
                                       ((latestBatch as any).akkioPredictionSuccessful && latestBatch.totalRecords ? 
                                         Math.round(((latestBatch as any).akkioPredictionSuccessful / latestBatch.totalRecords) * 100) : 0) :
+                                      (latestBatch as any).akkioPredictionStatus === "skipped" ? 100 :
                                       (latestBatch as any).akkioPredictionProgress || 0
                                   }%` 
                                 }}
@@ -1164,20 +1175,70 @@ export default function Home() {
                                   <CheckCircle2 className="h-3 w-3 text-green-600" />
                                   <span className="text-xs text-green-600">Complete</span>
                                 </div>
-                                {batch.mastercardEnrichmentStatus === "in_progress" && (
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs text-muted-foreground">Mastercard:</span>
-                                    <div className="flex-1 bg-gray-200 rounded-full h-2">
-                                      <div 
-                                        className="bg-orange-600 h-2 rounded-full transition-all"
-                                        style={{ width: `${batch.mastercardEnrichmentProgress || 0}%` }}
-                                      />
-                                    </div>
-                                    <span className="text-xs text-muted-foreground">
-                                      {batch.mastercardEnrichmentProgress || 0}%
-                                    </span>
-                                  </div>
-                                )}
+                                {/* Finexio Matching */}
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">Finexio:</span>
+                                  {(batch as any).finexioMatchingStatus === "completed" ? (
+                                    <>
+                                      <CheckCircle2 className="h-3 w-3 text-green-600" />
+                                      <span className="text-xs text-green-600">{(batch as any).finexioMatchPercentage || 0}%</span>
+                                    </>
+                                  ) : (batch as any).finexioMatchingStatus === "in_progress" ? (
+                                    <span className="text-xs text-blue-600">Processing...</span>
+                                  ) : (batch as any).finexioMatchingStatus === "skipped" ? (
+                                    <span className="text-xs text-gray-500">Skipped</span>
+                                  ) : (
+                                    <span className="text-xs text-gray-500">Pending</span>
+                                  )}
+                                </div>
+                                {/* Google Address */}
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">Google:</span>
+                                  {(batch as any).googleAddressStatus === "completed" ? (
+                                    <>
+                                      <CheckCircle2 className="h-3 w-3 text-blue-600" />
+                                      <span className="text-xs text-blue-600">Complete</span>
+                                    </>
+                                  ) : (batch as any).googleAddressStatus === "in_progress" ? (
+                                    <span className="text-xs text-blue-600">{(batch as any).googleAddressProgress || 0}%</span>
+                                  ) : (batch as any).googleAddressStatus === "skipped" ? (
+                                    <span className="text-xs text-gray-500">Skipped</span>
+                                  ) : (
+                                    <span className="text-xs text-gray-500">Pending</span>
+                                  )}
+                                </div>
+                                {/* Mastercard Enrichment */}
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">Mastercard:</span>
+                                  {batch.mastercardEnrichmentStatus === "completed" ? (
+                                    <>
+                                      <CheckCircle2 className="h-3 w-3 text-purple-600" />
+                                      <span className="text-xs text-purple-600">{batch.mastercardActualEnriched || 0} enriched</span>
+                                    </>
+                                  ) : batch.mastercardEnrichmentStatus === "in_progress" ? (
+                                    <span className="text-xs text-purple-600">{batch.mastercardEnrichmentProgress || 0}%</span>
+                                  ) : batch.mastercardEnrichmentStatus === "skipped" ? (
+                                    <span className="text-xs text-gray-500">Skipped</span>
+                                  ) : (
+                                    <span className="text-xs text-gray-500">Pending</span>
+                                  )}
+                                </div>
+                                {/* Akkio Predictions */}
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">Akkio:</span>
+                                  {(batch as any).akkioPredictionStatus === "completed" ? (
+                                    <>
+                                      <CheckCircle2 className="h-3 w-3 text-orange-600" />
+                                      <span className="text-xs text-orange-600">{(batch as any).akkioPredictionSuccessful || 0} predicted</span>
+                                    </>
+                                  ) : (batch as any).akkioPredictionStatus === "in_progress" ? (
+                                    <span className="text-xs text-orange-600">{(batch as any).akkioPredictionProgress || 0}%</span>
+                                  ) : (batch as any).akkioPredictionStatus === "skipped" ? (
+                                    <span className="text-xs text-gray-500">Skipped</span>
+                                  ) : (
+                                    <span className="text-xs text-gray-500">Pending</span>
+                                  )}
+                                </div>
                               </>
                             )}
                           </div>
