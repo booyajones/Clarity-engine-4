@@ -1,12 +1,6 @@
-Name,Address,Amount
-"Apple Inc.",1 Apple Park Way,1000
-"APPLE INC",1 Apple Park Way,1500
-"Apple, Inc.",1 Apple Park Way,2000
-"Microsoft Corporation",1 Microsoft Way,3000
-"Microsoft Corp.",1 Microsoft Way,3500
-"John Smith",123 Main St,100
-"John Smith",123 Main Street,150
-"Jane Doe",456 Oak Ave,200
-"Jane Doe",456 Oak Avenue,250
-"City of San Francisco",1 Dr Carlton B Goodlett Pl,5000
-"CITY OF SAN FRANCISCO",1 Dr Carlton B Goodlett Pl,5500
+Payee Name,Amount,Date,Category
+Microsoft,1000,2024-01-01,Software
+Apple,2000,2024-01-02,Hardware
+Microsoft,1500,2024-01-03,Software
+Amazon,3000,2024-01-04,Cloud
+Apple,2500,2024-01-05,Hardware

@@ -1111,14 +1111,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.setHeader("Content-Type", "text/csv");
       res.setHeader("Content-Disposition", `attachment; filename="classified_${batch.originalFilename}"`);
       
-      // Simple CSV generation
-      const headers = Object.keys(csvData[0] || {});
+      // Collect all unique headers from all records to ensure consistency
+      const allHeaders = new Set<string>();
+      const clarityHeaders = new Set<string>();
+      
+      // First, collect all original data headers from all records
+      csvData.forEach(row => {
+        Object.keys(row).forEach(header => {
+          if (header.startsWith('clarity_')) {
+            clarityHeaders.add(header);
+          } else {
+            allHeaders.add(header);
+          }
+        });
+      });
+      
+      // Convert sets to arrays and sort for consistency
+      const originalHeaders = Array.from(allHeaders).sort();
+      const clarityHeadersArray = Array.from(clarityHeaders).sort();
+      
+      // Combine headers: original columns first, then clarity columns
+      const headers = [...originalHeaders, ...clarityHeadersArray];
+      
+      // Generate CSV content with consistent column order
       const csvContent = [
         headers.join(","),
         ...csvData.map(row => 
-          headers.map(header => 
-            JSON.stringify((row as any)[header] || "")
-          ).join(",")
+          headers.map(header => {
+            const value = (row as any)[header];
+            // Handle null, undefined, and empty values consistently
+            if (value === null || value === undefined) {
+              return '""';
+            }
+            // Properly escape and quote values
+            return JSON.stringify(String(value));
+          }).join(",")
         )
       ].join("\n");
 
