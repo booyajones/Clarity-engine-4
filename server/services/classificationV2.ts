@@ -1103,7 +1103,9 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
         finexioMatchingCompletedAt: new Date(),
         finexioMatchingProcessed: totalProcessed,
         finexioMatchingMatched: matchedCount,
-        finexioMatchingProgress: 100
+        finexioMatchingProgress: 100,
+        finexioMatchPercentage: matchPercentage,
+        finexioMatchedCount: matchedCount
       });
       
     } catch (error) {

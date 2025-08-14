@@ -29,6 +29,9 @@ export const uploadBatches = pgTable("upload_batches", {
   finexioMatchingCompletedAt: timestamp("finexio_matching_completed_at"),
   finexioMatchPercentage: integer("finexio_match_percentage").default(0), // Percentage of records matched
   finexioMatchedCount: integer("finexio_matched_count").default(0), // Number of records matched
+  finexioMatchingProcessed: integer("finexio_matching_processed").default(0), // Total records processed
+  finexioMatchingMatched: integer("finexio_matching_matched").default(0), // Number matched (duplicate of finexioMatchedCount for compatibility)
+  finexioMatchingProgress: integer("finexio_matching_progress").default(0), // Progress percentage
   // Google Address validation tracking
   googleAddressStatus: text("google_address_status").default("pending"), // pending, in_progress, completed, failed, skipped
   googleAddressStartedAt: timestamp("google_address_started_at"),
@@ -80,6 +83,10 @@ export const payeeClassifications = pgTable("payee_classifications", {
   fieldPredictions: jsonb("field_predictions"), // AI-detected field types and confidence
   isExcluded: boolean("is_excluded").default(false),
   exclusionKeyword: text("exclusion_keyword"),
+  // Finexio matching fields
+  finexioSupplierId: text("finexio_supplier_id"),
+  finexioSupplierName: text("finexio_supplier_name"),
+  finexioConfidence: real("finexio_confidence"),
   // Mastercard enrichment fields
   mastercardMatchStatus: text("mastercard_match_status"), // MATCH, NO_MATCH, MULTIPLE_MATCHES, EXACT_MATCH
   mastercardMatchConfidence: real("mastercard_match_confidence"), // Confidence score 0-100
