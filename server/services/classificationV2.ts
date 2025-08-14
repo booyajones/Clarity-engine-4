@@ -1156,21 +1156,43 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       // Check if Finexio matching is disabled
       if (this.matchingOptions.enableFinexio === false) {
         console.log(`Finexio/BigQuery matching disabled for batch ${batchId}`);
+        await storage.updateUploadBatch(batchId, {
+          finexioMatchingStatus: "skipped",
+          finexioMatchingCompletedAt: new Date()
+        });
         return;
       }
       
       console.log(`Starting BigQuery payee matching for batch ${batchId}`);
+      
+      // Update status to in_progress
+      await storage.updateUploadBatch(batchId, {
+        finexioMatchingStatus: "in_progress",
+        finexioMatchingStartedAt: new Date()
+      });
       
       // Run payee matching with options
       const result = await payeeMatchingService.matchBatchPayees(batchId, this.matchingOptions);
       
       console.log(`BigQuery matching completed for batch ${batchId}: ${result.totalMatched}/${result.totalProcessed} matches found`);
       
+      // Update status to completed
+      await storage.updateUploadBatch(batchId, {
+        finexioMatchingStatus: "completed",
+        finexioMatchingCompletedAt: new Date(),
+        finexioMatchPercentage: result.totalProcessed > 0 ? Math.round((result.totalMatched / result.totalProcessed) * 100) : 0,
+        finexioMatchedCount: result.totalMatched
+      });
+      
       if (result.errors > 0) {
         console.warn(`BigQuery matching encountered ${result.errors} errors`);
       }
     } catch (error) {
       console.error('BigQuery matching process failed:', error);
+      await storage.updateUploadBatch(batchId, {
+        finexioMatchingStatus: "failed",
+        finexioMatchingCompletedAt: new Date()
+      });
     }
   }
 
@@ -1180,17 +1202,31 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       // Check if Google Address Validation is disabled
       if (this.matchingOptions.enableGoogleAddressValidation !== true) {
         console.log(`Google Address Validation disabled for batch ${batchId}`);
+        await storage.updateUploadBatch(batchId, {
+          googleAddressStatus: "skipped",
+          googleAddressCompletedAt: new Date()
+        });
         return;
       }
 
       // Check if address columns are mapped
       if (!this.addressColumns || Object.keys(this.addressColumns).length === 0) {
         console.log(`No address columns mapped for batch ${batchId}, skipping address validation`);
+        await storage.updateUploadBatch(batchId, {
+          googleAddressStatus: "skipped",
+          googleAddressCompletedAt: new Date()
+        });
         return;
       }
 
       console.log(`Starting Google Address Validation for batch ${batchId}`);
       console.log(`Address columns mapping:`, this.addressColumns);
+
+      // Update status to in_progress
+      await storage.updateUploadBatch(batchId, {
+        googleAddressStatus: "in_progress",
+        googleAddressStartedAt: new Date()
+      });
 
       // Import address validation service
       const { addressValidationService } = await import('./addressValidationService');
@@ -1199,19 +1235,83 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       const classifications = await storage.getBatchClassifications(batchId);
       console.log(`Found ${classifications.length} classifications for address validation`);
 
+      // Update total count
+      await storage.updateUploadBatch(batchId, {
+        googleAddressTotal: classifications.length
+      });
+
       // Process address validation
       const result = await addressValidationService.validateBatchAddresses(batchId, classifications, this.addressColumns);
       
       console.log(`Address validation completed for batch ${batchId}: ${result.validatedCount}/${result.totalProcessed} addresses validated`);
+      
+      // Update status to completed
+      await storage.updateUploadBatch(batchId, {
+        googleAddressStatus: "completed",
+        googleAddressCompletedAt: new Date(),
+        googleAddressProcessed: result.totalProcessed,
+        googleAddressValidated: result.validatedCount,
+        googleAddressProgress: 100
+      });
       
       if (result.errors > 0) {
         console.warn(`Address validation encountered ${result.errors} errors`);
       }
     } catch (error) {
       console.error('Address validation process failed:', error);
+      await storage.updateUploadBatch(batchId, {
+        googleAddressStatus: "failed",
+        googleAddressCompletedAt: new Date()
+      });
     }
   }
 
+  // Check if all enrichment processes are complete
+  private async isAllEnrichmentComplete(batchId: number): Promise<boolean> {
+    const batch = await storage.getUploadBatch(batchId);
+    
+    if (!batch) {
+      console.log(`Batch ${batchId} not found`);
+      return true;
+    }
+    
+    // Check Finexio/BigQuery matching status
+    const finexioComplete = batch.finexioMatchingStatus === 'completed' || 
+                           batch.finexioMatchingStatus === 'failed' || 
+                           batch.finexioMatchingStatus === 'skipped' ||
+                           !this.matchingOptions.enableFinexio;
+    
+    // Check Google Address validation status  
+    const googleAddressComplete = batch.googleAddressStatus === 'completed' ||
+                                  batch.googleAddressStatus === 'failed' ||
+                                  batch.googleAddressStatus === 'skipped' ||
+                                  !this.matchingOptions.enableGoogleAddressValidation;
+    
+    // Check Mastercard enrichment status
+    const mastercardComplete = batch.mastercardEnrichmentStatus === 'completed' ||
+                              batch.mastercardEnrichmentStatus === 'failed' ||
+                              batch.mastercardEnrichmentStatus === 'skipped' ||
+                              !this.matchingOptions.enableMastercard;
+    
+    // Check Akkio prediction status
+    const akkioComplete = batch.akkioPredictionStatus === 'completed' ||
+                         batch.akkioPredictionStatus === 'failed' ||
+                         batch.akkioPredictionStatus === 'skipped' ||
+                         !this.matchingOptions.enableAkkio;
+    
+    const allComplete = finexioComplete && googleAddressComplete && mastercardComplete && akkioComplete;
+    
+    if (!allComplete) {
+      console.log(`Enrichment status for batch ${batchId}:
+        - Finexio: ${batch.finexioMatchingStatus || 'not started'} (complete: ${finexioComplete})
+        - Google Address: ${batch.googleAddressStatus || 'not started'} (complete: ${googleAddressComplete})
+        - Mastercard: ${batch.mastercardEnrichmentStatus || 'not started'} (complete: ${mastercardComplete})
+        - Akkio: ${batch.akkioPredictionStatus || 'not started'} (complete: ${akkioComplete})`);
+    }
+    
+    return allComplete;
+  }
+  
   // Wait for all enrichment processes to complete
   private async waitForEnrichmentCompletion(batchId: number): Promise<void> {
     // Poll for enrichment completion status
@@ -1220,26 +1320,12 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
     let waitedTime = 0;
     
     while (waitedTime < maxWaitTime) {
-      const batch = await storage.getUploadBatch(batchId);
+      const allComplete = await this.isAllEnrichmentComplete(batchId);
       
-      if (!batch) {
-        console.log(`Batch ${batchId} not found`);
-        return;
-      }
-      
-      // Check if Mastercard enrichment is complete
-      const mastercardComplete = 
-        batch.mastercardEnrichmentStatus === 'completed' ||
-        batch.mastercardEnrichmentStatus === 'failed' ||
-        batch.mastercardEnrichmentStatus === 'skipped' ||
-        !batch.mastercardEnrichmentStatus;
-      
-      if (mastercardComplete) {
+      if (allComplete) {
         console.log(`All enrichment processes completed for batch ${batchId}`);
         return;
       }
-      
-      console.log(`Waiting for enrichment to complete for batch ${batchId}... (${batch.mastercardEnrichmentStatus}, ${batch.mastercardEnrichmentProgress}%)`);
       
       // Wait before next check
       await new Promise(resolve => setTimeout(resolve, pollInterval));
@@ -1256,16 +1342,24 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       if (this.matchingOptions.enableAkkio !== true) {
         console.log(`Akkio predictions disabled for batch ${batchId}`);
         
-        // Wait for Mastercard enrichment to complete before marking batch as completed
+        await storage.updateUploadBatch(batchId, {
+          akkioPredictionStatus: "skipped",
+          akkioPredictionCompletedAt: new Date()
+        });
+        
+        // Wait for all enrichment to complete before marking batch as completed
         await this.waitForEnrichmentCompletion(batchId);
         
         // Now mark batch as completed since all processing is done
-        await storage.updateUploadBatch(batchId, {
-          status: "completed",
-          completedAt: new Date(),
-          currentStep: "All processing complete",
-          progressMessage: `Processing completed! Classification, Finexio matching, and Mastercard enrichment done.`
-        });
+        const allComplete = await this.isAllEnrichmentComplete(batchId);
+        if (allComplete) {
+          await storage.updateUploadBatch(batchId, {
+            status: "completed",
+            completedAt: new Date(),
+            currentStep: "All processing complete",
+            progressMessage: `Processing completed! Classification, Finexio matching, Google Address validation, and Mastercard enrichment done.`
+          });
+        }
         return;
       }
 
@@ -1273,16 +1367,24 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       if (!process.env.AKKIO_API_KEY) {
         console.log('Akkio API not configured, skipping predictions');
         
-        // Wait for Mastercard enrichment to complete before marking batch as completed
+        await storage.updateUploadBatch(batchId, {
+          akkioPredictionStatus: "skipped",
+          akkioPredictionCompletedAt: new Date()
+        });
+        
+        // Wait for all enrichment to complete before marking batch as completed
         await this.waitForEnrichmentCompletion(batchId);
         
         // Now mark batch as completed since all processing is done
-        await storage.updateUploadBatch(batchId, {
-          status: "completed",
-          completedAt: new Date(),
-          currentStep: "All processing complete",
-          progressMessage: `Processing completed! Classification, Finexio matching, and Mastercard enrichment done.`
-        });
+        const allComplete = await this.isAllEnrichmentComplete(batchId);
+        if (allComplete) {
+          await storage.updateUploadBatch(batchId, {
+            status: "completed",
+            completedAt: new Date(),
+            currentStep: "All processing complete",
+            progressMessage: `Processing completed! Classification, Finexio matching, Google Address validation, and Mastercard enrichment done.`
+          });
+        }
         return;
       }
 
@@ -1292,16 +1394,24 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       if (!activeModel) {
         console.log('No active Akkio model found, skipping predictions');
         
-        // Wait for Mastercard enrichment to complete before marking batch as completed
+        await storage.updateUploadBatch(batchId, {
+          akkioPredictionStatus: "skipped",
+          akkioPredictionCompletedAt: new Date()
+        });
+        
+        // Wait for all enrichment to complete before marking batch as completed
         await this.waitForEnrichmentCompletion(batchId);
         
         // Now mark batch as completed since all processing is done
-        await storage.updateUploadBatch(batchId, {
-          status: "completed",
-          completedAt: new Date(),
-          currentStep: "All processing complete",
-          progressMessage: `Processing completed! Classification, Finexio matching, and Mastercard enrichment done.`
-        });
+        const allComplete = await this.isAllEnrichmentComplete(batchId);
+        if (allComplete) {
+          await storage.updateUploadBatch(batchId, {
+            status: "completed",
+            completedAt: new Date(),
+            currentStep: "All processing complete",
+            progressMessage: `Processing completed! Classification, Finexio matching, Google Address validation, and Mastercard enrichment done.`
+          });
+        }
         return;
       }
 
@@ -1312,17 +1422,34 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       
       if (classificationsForPrediction.length === 0) {
         console.log('No classifications ready for Akkio predictions');
-        // Mark batch as completed since all other processing is done
+        
         await storage.updateUploadBatch(batchId, {
-          status: "completed",
-          completedAt: new Date(),
-          currentStep: "All processing complete",
-          progressMessage: `Processing completed! Classification, Finexio matching, and Mastercard enrichment done.`
+          akkioPredictionStatus: "skipped",
+          akkioPredictionCompletedAt: new Date()
         });
+        
+        // Wait for all enrichment to complete
+        await this.waitForEnrichmentCompletion(batchId);
+        
+        // Mark batch as completed since all processing is done
+        const allComplete = await this.isAllEnrichmentComplete(batchId);
+        if (allComplete) {
+          await storage.updateUploadBatch(batchId, {
+            status: "completed",
+            completedAt: new Date(),
+            currentStep: "All processing complete",
+            progressMessage: `Processing completed! Classification, Finexio matching, Google Address validation, and Mastercard enrichment done.`
+          });
+        }
         return;
       }
 
-      // Skip initial status update - columns don't exist in database
+      // Update status to in_progress
+      await storage.updateUploadBatch(batchId, {
+        akkioPredictionStatus: "in_progress",
+        akkioPredictionStartedAt: new Date(),
+        akkioPredictionTotal: classificationsForPrediction.length
+      });
 
       console.log(`Starting Akkio predictions for ${classificationsForPrediction.length} classifications`);
 
@@ -1391,23 +1518,43 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
 
         // Update progress
         const progress = Math.round((processedCount / classificationsForPrediction.length) * 100);
-        // Skip status update - columns don't exist in database
+        await storage.updateUploadBatch(batchId, {
+          akkioPredictionProgress: progress,
+          akkioPredictionProcessed: processedCount
+        });
         console.log(`Akkio prediction progress: ${progress}% (${processedCount}/${classificationsForPrediction.length})`);
       }
 
-      // Final update - mark batch as TRULY completed now that ALL processing is done
+      // Mark Akkio as completed
       await storage.updateUploadBatch(batchId, {
-        status: "completed",
-        completedAt: new Date(),
-        currentStep: "All processing complete",
-        progressMessage: `All processing completed! Classification, Finexio matching, Mastercard enrichment, and Akkio predictions done.`
+        akkioPredictionStatus: "completed",
+        akkioPredictionCompletedAt: new Date(),
+        akkioPredictionProcessed: processedCount,
+        akkioPredictionSuccessful: successCount
       });
+
+      // Wait for all enrichment to complete
+      await this.waitForEnrichmentCompletion(batchId);
+
+      // Final check - mark batch as TRULY completed now that ALL processing is done
+      const allComplete = await this.isAllEnrichmentComplete(batchId);
+      if (allComplete) {
+        await storage.updateUploadBatch(batchId, {
+          status: "completed",
+          completedAt: new Date(),
+          currentStep: "All processing complete",
+          progressMessage: `All processing completed! Classification, Finexio matching, Google Address validation, Mastercard enrichment, and Akkio predictions done.`
+        });
+      }
 
       console.log(`Akkio predictions completed for batch ${batchId}: ${successCount} successful, ${failureCount} failed out of ${processedCount} total`);
     } catch (error) {
       console.error('Akkio prediction process failed:', error);
       
-      // Skip error status update - columns don't exist in database
+      await storage.updateUploadBatch(batchId, {
+        akkioPredictionStatus: "failed",
+        akkioPredictionCompletedAt: new Date()
+      });
     }
   }
 

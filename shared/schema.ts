@@ -23,6 +23,20 @@ export const uploadBatches = pgTable("upload_batches", {
   progressMessage: text("progress_message"),
   accuracy: real("accuracy").default(0),
   userId: integer("user_id").notNull(),
+  // Finexio/BigQuery matching tracking
+  finexioMatchingStatus: text("finexio_matching_status").default("pending"), // pending, in_progress, completed, failed, skipped
+  finexioMatchingStartedAt: timestamp("finexio_matching_started_at"),
+  finexioMatchingCompletedAt: timestamp("finexio_matching_completed_at"),
+  finexioMatchPercentage: integer("finexio_match_percentage").default(0), // Percentage of records matched
+  finexioMatchedCount: integer("finexio_matched_count").default(0), // Number of records matched
+  // Google Address validation tracking
+  googleAddressStatus: text("google_address_status").default("pending"), // pending, in_progress, completed, failed, skipped
+  googleAddressStartedAt: timestamp("google_address_started_at"),
+  googleAddressCompletedAt: timestamp("google_address_completed_at"),
+  googleAddressProgress: integer("google_address_progress").default(0), // Percentage
+  googleAddressTotal: integer("google_address_total").default(0),
+  googleAddressProcessed: integer("google_address_processed").default(0),
+  googleAddressValidated: integer("google_address_validated").default(0),
   // Mastercard enrichment tracking
   mastercardEnrichmentStatus: text("mastercard_enrichment_status").default("pending"), // pending, in_progress, completed, failed, skipped
   mastercardEnrichmentStartedAt: timestamp("mastercard_enrichment_started_at"),
@@ -31,9 +45,14 @@ export const uploadBatches = pgTable("upload_batches", {
   mastercardEnrichmentTotal: integer("mastercard_enrichment_total").default(0),
   mastercardEnrichmentProcessed: integer("mastercard_enrichment_processed").default(0),
   mastercardActualEnriched: integer("mastercard_actual_enriched").default(0),
-  // Finexio match tracking
-  finexioMatchPercentage: integer("finexio_match_percentage").default(0), // Percentage of records matched
-  finexioMatchedCount: integer("finexio_matched_count").default(0), // Number of records matched
+  // Akkio prediction tracking
+  akkioPredictionStatus: text("akkio_prediction_status").default("pending"), // pending, in_progress, completed, failed, skipped
+  akkioPredictionStartedAt: timestamp("akkio_prediction_started_at"),
+  akkioPredictionCompletedAt: timestamp("akkio_prediction_completed_at"),
+  akkioPredictionProgress: integer("akkio_prediction_progress").default(0), // Percentage
+  akkioPredictionTotal: integer("akkio_prediction_total").default(0),
+  akkioPredictionProcessed: integer("akkio_prediction_processed").default(0),
+  akkioPredictionSuccessful: integer("akkio_prediction_successful").default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   completedAt: timestamp("completed_at"),
 });

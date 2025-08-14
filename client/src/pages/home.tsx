@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload as UploadIcon, Download, Loader2, X, FileSpreadsheet, CheckCircle2, XCircle, Clock, AlertCircle, Activity, ArrowRight, ClipboardList, Sparkles, Eye, Settings, Brain, Package, Database, TrendingUp, Users, Shield, MapPin, Zap, RefreshCw, BarChart3, Search } from "lucide-react";
+import { Upload as UploadIcon, Download, Loader2, X, FileSpreadsheet, CheckCircle2, XCircle, Clock, AlertCircle, Activity, ArrowRight, ClipboardList, Sparkles, Eye, Settings, Brain, Package, Database, TrendingUp, Users, Shield, MapPin, Zap, RefreshCw, BarChart3, Search, CreditCard } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -136,16 +136,37 @@ export default function Home() {
     zip: "",
   });
 
+  const [, forceUpdate] = useState({});
+
   const { data: batches, isLoading } = useQuery<UploadBatch[]>({
     queryKey: ["/api/upload/batches"],
     refetchInterval: (query) => {
       // Only poll when there are active processing or enriching batches
       const hasProcessingBatches = query.state.data?.some(
-        batch => batch.status === "processing" || (batch.status as string) === "enriching"
+        batch => batch.status === "processing" || (batch.status as string) === "enriching" || 
+        batch.status === "pending" || 
+        (!batch.completedAt && batch.status !== "failed" && batch.status !== "cancelled")
       );
       return hasProcessingBatches ? 5000 : false; // Poll every 5 seconds only when processing or enriching
     }
   });
+
+  // Force re-render every second for active batches to update duration display
+  useEffect(() => {
+    const hasActiveBatches = batches?.some(
+      batch => batch.status === "processing" || 
+      (batch.status as string) === "enriching" ||
+      (!batch.completedAt && batch.status !== "failed" && batch.status !== "cancelled")
+    );
+    
+    if (hasActiveBatches) {
+      const interval = setInterval(() => {
+        forceUpdate({}); // Force re-render to update duration display
+      }, 1000); // Update every second
+      
+      return () => clearInterval(interval);
+    }
+  }, [batches]);
 
   // Dashboard stats query
   const { data: dashboardStats } = useQuery<DashboardStats>({
@@ -736,15 +757,63 @@ export default function Home() {
                             <div className="flex justify-between text-sm">
                               <span className="font-medium">Finexio Matching</span>
                               <span className="text-muted-foreground">
-                                {(latestBatch as any).finexioMatchPercentage ? `${(latestBatch as any).finexioMatchPercentage}% matched` : "Processing..."}
+                                {(latestBatch as any).finexioMatchingStatus === "completed" ? 
+                                  `${(latestBatch as any).finexioMatchPercentage || 0}% matched` :
+                                  (latestBatch as any).finexioMatchingStatus === "in_progress" ? "Processing..." :
+                                  (latestBatch as any).finexioMatchingStatus === "skipped" ? "Skipped" :
+                                  "Pending"
+                                }
                               </span>
                             </div>
                             <div className="bg-gray-200 rounded-full h-2">
                               <div 
-                                className="bg-green-600 h-2 rounded-full transition-all"
-                                style={{ width: `${(latestBatch as any).finexioMatchPercentage || 0}%` }}
+                                className={`${
+                                  (latestBatch as any).finexioMatchingStatus === "completed" ? "bg-green-600" :
+                                  (latestBatch as any).finexioMatchingStatus === "in_progress" ? "bg-green-400 animate-pulse" :
+                                  "bg-gray-400"
+                                } h-2 rounded-full transition-all`}
+                                style={{ width: `${(latestBatch as any).finexioMatchingStatus === "completed" ? 100 : (latestBatch as any).finexioMatchingStatus === "in_progress" ? 50 : 0}%` }}
                               />
                             </div>
+                          </div>
+                        )}
+                        
+                        {/* Google Address Validation */}
+                        {latestBatch.processedRecords === latestBatch.totalRecords && (latestBatch as any).googleAddressStatus !== "skipped" && (
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <span className="font-medium">Google Address Validation</span>
+                              <span className="text-muted-foreground">
+                                {(latestBatch as any).googleAddressStatus === "completed" ? 
+                                  `${(latestBatch as any).googleAddressValidated || 0} validated` :
+                                  (latestBatch as any).googleAddressStatus === "in_progress" ?
+                                  `${(latestBatch as any).googleAddressProgress || 0}%` :
+                                  (latestBatch as any).googleAddressStatus === "skipped" ? "Skipped" :
+                                  "Pending"
+                                }
+                              </span>
+                            </div>
+                            <div className="bg-gray-200 rounded-full h-2">
+                              <div 
+                                className={`${
+                                  (latestBatch as any).googleAddressStatus === "completed" ? "bg-blue-600" :
+                                  (latestBatch as any).googleAddressStatus === "in_progress" ? "bg-blue-400 animate-pulse" :
+                                  "bg-gray-400"
+                                } h-2 rounded-full transition-all`}
+                                style={{ 
+                                  width: `${
+                                    (latestBatch as any).googleAddressStatus === "completed" ? 100 :
+                                    (latestBatch as any).googleAddressProgress || 0
+                                  }%` 
+                                }}
+                              />
+                            </div>
+                            {(latestBatch as any).googleAddressStatus === "completed" && (
+                              <div className="flex justify-between text-xs text-muted-foreground">
+                                <span>Complete</span>
+                                <MapPin className="h-3 w-3 text-blue-600" />
+                              </div>
+                            )}
                           </div>
                         )}
                         
@@ -758,7 +827,8 @@ export default function Home() {
                                   `${latestBatch.mastercardActualEnriched || 0} enriched` :
                                   latestBatch.mastercardEnrichmentStatus === "in_progress" ?
                                   `${latestBatch.mastercardEnrichmentProgress || 0}%` :
-                                  latestBatch.mastercardEnrichmentStatus
+                                  latestBatch.mastercardEnrichmentStatus === "skipped" ? "Skipped" :
+                                  "Pending"
                                 }
                               </span>
                             </div>
@@ -766,7 +836,7 @@ export default function Home() {
                               <div 
                                 className={`${
                                   latestBatch.mastercardEnrichmentStatus === "completed" ? "bg-purple-600" :
-                                  latestBatch.mastercardEnrichmentStatus === "in_progress" ? "bg-purple-400" :
+                                  latestBatch.mastercardEnrichmentStatus === "in_progress" ? "bg-purple-400 animate-pulse" :
                                   "bg-gray-400"
                                 } h-2 rounded-full transition-all`}
                                 style={{ 
@@ -780,7 +850,46 @@ export default function Home() {
                             {latestBatch.mastercardEnrichmentStatus === "completed" && (
                               <div className="flex justify-between text-xs text-muted-foreground">
                                 <span>Complete</span>
-                                <CheckCircle2 className="h-3 w-3 text-purple-600" />
+                                <CreditCard className="h-3 w-3 text-purple-600" />
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        {/* Akkio Predictions */}
+                        {latestBatch.processedRecords === latestBatch.totalRecords && (latestBatch as any).akkioPredictionStatus !== "skipped" && (
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <span className="font-medium">Akkio ML Predictions</span>
+                              <span className="text-muted-foreground">
+                                {(latestBatch as any).akkioPredictionStatus === "completed" ? 
+                                  `${(latestBatch as any).akkioPredictionSuccessful || 0} predicted` :
+                                  (latestBatch as any).akkioPredictionStatus === "in_progress" ?
+                                  `${(latestBatch as any).akkioPredictionProgress || 0}%` :
+                                  (latestBatch as any).akkioPredictionStatus === "skipped" ? "Skipped" :
+                                  "Pending"
+                                }
+                              </span>
+                            </div>
+                            <div className="bg-gray-200 rounded-full h-2">
+                              <div 
+                                className={`${
+                                  (latestBatch as any).akkioPredictionStatus === "completed" ? "bg-orange-600" :
+                                  (latestBatch as any).akkioPredictionStatus === "in_progress" ? "bg-orange-400 animate-pulse" :
+                                  "bg-gray-400"
+                                } h-2 rounded-full transition-all`}
+                                style={{ 
+                                  width: `${
+                                    (latestBatch as any).akkioPredictionStatus === "completed" ? 100 :
+                                    (latestBatch as any).akkioPredictionProgress || 0
+                                  }%` 
+                                }}
+                              />
+                            </div>
+                            {(latestBatch as any).akkioPredictionStatus === "completed" && (
+                              <div className="flex justify-between text-xs text-muted-foreground">
+                                <span>Complete</span>
+                                <Brain className="h-3 w-3 text-orange-600" />
                               </div>
                             )}
                           </div>
