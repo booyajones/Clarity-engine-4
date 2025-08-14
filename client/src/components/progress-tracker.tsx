@@ -32,7 +32,7 @@ export function ProgressTracker({ batch }: ProgressTrackerProps) {
         <Progress value={progress} className="h-2" />
       ) : (
         <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
-          <div className="h-full bg-primary animate-pulse" style={{ width: '100%' }} />
+          <div className="h-full bg-primary" style={{ width: '100%' }} />
         </div>
       )}
       {batch.progressMessage && (

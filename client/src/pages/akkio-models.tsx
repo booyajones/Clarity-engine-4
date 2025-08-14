@@ -132,7 +132,7 @@ export function AkkioModels() {
                 </>
               ) : isTraining ? (
                 <>
-                  <Clock className="h-4 w-4 mr-2 animate-pulse" />
+                  <Clock className="h-4 w-4 mr-2" />
                   Training in Progress
                 </>
               ) : (

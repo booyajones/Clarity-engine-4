@@ -722,7 +722,6 @@ export default function Home() {
                             latestBatch.status === "processing" ? "outline" :
                             latestBatch.status === "failed" ? "destructive" : "outline"
                           }
-                          className={isEnriching ? "animate-pulse" : ""}
                         >
                           {isEnriching ? "Enriching" : latestBatch.status}
                         </Badge>
@@ -769,7 +768,7 @@ export default function Home() {
                               <div 
                                 className={`${
                                   (latestBatch as any).finexioMatchingStatus === "completed" ? "bg-green-600" :
-                                  (latestBatch as any).finexioMatchingStatus === "in_progress" ? "bg-green-400 animate-pulse" :
+                                  (latestBatch as any).finexioMatchingStatus === "in_progress" ? "bg-green-400" :
                                   "bg-gray-400"
                                 } h-2 rounded-full transition-all`}
                                 style={{ width: `${(latestBatch as any).finexioMatchingStatus === "completed" ? 100 : (latestBatch as any).finexioMatchingStatus === "in_progress" ? 50 : 0}%` }}
@@ -797,7 +796,7 @@ export default function Home() {
                               <div 
                                 className={`${
                                   (latestBatch as any).googleAddressStatus === "completed" ? "bg-blue-600" :
-                                  (latestBatch as any).googleAddressStatus === "in_progress" ? "bg-blue-400 animate-pulse" :
+                                  (latestBatch as any).googleAddressStatus === "in_progress" ? "bg-blue-400" :
                                   "bg-gray-400"
                                 } h-2 rounded-full transition-all`}
                                 style={{ 
@@ -836,7 +835,7 @@ export default function Home() {
                               <div 
                                 className={`${
                                   latestBatch.mastercardEnrichmentStatus === "completed" ? "bg-purple-600" :
-                                  latestBatch.mastercardEnrichmentStatus === "in_progress" ? "bg-purple-400 animate-pulse" :
+                                  latestBatch.mastercardEnrichmentStatus === "in_progress" ? "bg-purple-400" :
                                   "bg-gray-400"
                                 } h-2 rounded-full transition-all`}
                                 style={{ 
@@ -875,7 +874,7 @@ export default function Home() {
                               <div 
                                 className={`${
                                   (latestBatch as any).akkioPredictionStatus === "completed" ? "bg-orange-600" :
-                                  (latestBatch as any).akkioPredictionStatus === "in_progress" ? "bg-orange-400 animate-pulse" :
+                                  (latestBatch as any).akkioPredictionStatus === "in_progress" ? "bg-orange-400" :
                                   "bg-gray-400"
                                 } h-2 rounded-full transition-all`}
                                 style={{ 

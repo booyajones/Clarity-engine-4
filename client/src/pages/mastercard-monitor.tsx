@@ -172,7 +172,7 @@ export default function MastercardMonitor() {
             <div className="relative">
               <Globe className="h-8 w-8 text-amber-600" />
               {activeSearches.length > 0 && (
-                <div className="absolute -top-1 -right-1 h-3 w-3 bg-amber-500 rounded-full animate-pulse" />
+                <div className="absolute -top-1 -right-1 h-3 w-3 bg-amber-500 rounded-full" />
               )}
             </div>
             <div>

@@ -44,20 +44,7 @@
 }
 
 /* Subtle pulse for active/processing items */
-@keyframes gentle-pulse {
-  0%, 100% { 
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% { 
-    opacity: 0.9;
-    transform: scale(1.01);
-  }
-}
-
-.pulse-gentle {
-  animation: gentle-pulse 3s ease-in-out infinite;
-}
+/* Removed pulsing animations as requested by user */
 
 /* ========================================
    3. CONSISTENT LOADING STATES
