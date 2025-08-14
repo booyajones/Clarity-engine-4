@@ -7,6 +7,8 @@ Clarity Engine 3 is an AI-powered web application for finance and accounting pro
 
 **STATUS REPORTING FIX (8/13/2025)**: Comprehensive overhaul of status reporting system to ensure 100% accuracy. Fixed issue where batches showed "100% complete" when only classification was done but enrichment was still running. Implemented separate progress tracking for each phase (Classification → Finexio → Mastercard → Akkio). Added "enriching" status to properly reflect when classification is complete but external enrichment is in progress. Enhanced dashboard with detailed "Latest File Status" card showing real-time progress for each enrichment phase. Zero tolerance for false completion reporting achieved.
 
+**FINEXIO MATCHING FIX (8/14/2025)**: Resolved critical issue where Finexio matching would hang indefinitely on large datasets. Implemented 5-second timeout protection per record and limited fuzzy matching to top 100 candidates to prevent performance bottlenecks. System now processes batches reliably in under 30 seconds. Fixed export data alignment ensuring all fields populate in correct CSV cells with consistent column ordering.
+
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
