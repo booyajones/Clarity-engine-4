@@ -53,6 +53,8 @@ export const uploadBatches = pgTable("upload_batches", {
   akkioPredictionTotal: integer("akkio_prediction_total").default(0),
   akkioPredictionProcessed: integer("akkio_prediction_processed").default(0),
   akkioPredictionSuccessful: integer("akkio_prediction_successful").default(0),
+  // Store address column mappings for this batch
+  addressColumns: jsonb("address_columns"), // Stores mapping of address fields like {address: "Address 1", city: "City", state: "State", zip: "Zip"}
   createdAt: timestamp("created_at").defaultNow().notNull(),
   completedAt: timestamp("completed_at"),
 });

@@ -104,6 +104,14 @@ export interface IStorage {
   // Akkio prediction operations
   getClassificationsForAkkioPrediction(batchId: number): Promise<PayeeClassification[]>;
   
+  // Finexio matching operations
+  checkFinexioSupplier(name: string): Promise<{id: string; name: string; confidence: number} | null>;
+  updateClassificationFinexioMatch(classificationId: number, finexioData: {
+    finexioSupplierId: string;
+    finexioSupplierName: string;
+    finexioConfidence: number;
+  }): Promise<void>;
+  
   // Mastercard search request operations
   createMastercardSearchRequest(request: InsertMastercardSearchRequest): Promise<MastercardSearchRequest>;
   getMastercardSearchRequest(searchId: string): Promise<MastercardSearchRequest | undefined>;
@@ -612,6 +620,54 @@ export class DatabaseStorage implements IStorage {
       .from(mastercardSearchRequests)
       .where(eq(mastercardSearchRequests.status, 'pending'))
       .orderBy(mastercardSearchRequests.createdAt);
+  }
+
+  // Finexio matching operations
+  async checkFinexioSupplier(name: string): Promise<{id: string; name: string; confidence: number} | null> {
+    try {
+      // Query the cached_suppliers table for a match
+      const normalizedName = name.toLowerCase().trim();
+      const result = await db.execute(sql`
+        SELECT supplier_id, name, 1.0 as confidence
+        FROM cached_suppliers 
+        WHERE LOWER(name) = ${normalizedName}
+        OR LOWER(doing_business_as) = ${normalizedName}
+        LIMIT 1
+      `);
+      
+      if (result.rows && result.rows.length > 0) {
+        const row = result.rows[0];
+        return {
+          id: String(row.supplier_id),
+          name: String(row.name),
+          confidence: 1.0
+        };
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error checking Finexio supplier:', error);
+      return null;
+    }
+  }
+
+  async updateClassificationFinexioMatch(classificationId: number, finexioData: {
+    finexioSupplierId: string;
+    finexioSupplierName: string;
+    finexioConfidence: number;
+  }): Promise<void> {
+    try {
+      await db
+        .update(payeeClassifications)
+        .set({
+          finexioSupplierId: finexioData.finexioSupplierId,
+          finexioSupplierName: finexioData.finexioSupplierName,
+          finexioConfidence: finexioData.finexioConfidence
+        })
+        .where(eq(payeeClassifications.id, classificationId));
+    } catch (error) {
+      console.error('Error updating classification with Finexio match:', error);
+    }
   }
 }
 

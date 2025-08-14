@@ -71,6 +71,13 @@ export class OptimizedClassificationService {
     this.matchingOptions = matchingOptions || {};
     this.addressColumns = addressColumns || {};
     
+    // Store addressColumns in the batch record for later retrieval
+    if (addressColumns && Object.keys(addressColumns).length > 0) {
+      await storage.updateUploadBatch(batchId, {
+        addressColumns: addressColumns as any
+      });
+    }
+    
     // Check if file exists
     if (!fs.existsSync(filePath)) {
       throw new Error(`File not found: ${filePath}`);
@@ -302,12 +309,12 @@ export class OptimizedClassificationService {
       });
       
       // Start enrichment processes with proper sequencing
-      // IMPORTANT: Address validation MUST happen BEFORE Mastercard enrichment for better enrichment scores
+      // Order: Finexio → Google Address → Mastercard → Akkio
       
-      // Start BigQuery matching and address validation in parallel since they're independent
+      // 1. Start Finexio matching first
       const enrichmentPromises = [
-        this.startBigQueryMatching(batchId).catch(error => {
-          console.error('Error starting BigQuery matching:', error);
+        this.startFinexioMatching(batchId).catch(error => {
+          console.error('Error starting Finexio matching:', error);
         })
       ];
       
@@ -997,7 +1004,84 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
     }
   }
 
-  // Start asynchronous enrichment process
+  // Start Finexio matching process
+  private async startFinexioMatching(batchId: number): Promise<void> {
+    try {
+      // Check if Finexio matching is disabled
+      if (this.matchingOptions?.enableFinexio === false) {
+        console.log(`Finexio matching disabled for batch ${batchId}`);
+        await storage.updateUploadBatch(batchId, {
+          finexioMatchingStatus: "skipped",
+          finexioMatchingCompletedAt: new Date()
+        });
+        return;
+      }
+
+      console.log(`Starting Finexio matching for batch ${batchId}`);
+      
+      // Update status to in_progress
+      await storage.updateUploadBatch(batchId, {
+        finexioMatchingStatus: "in_progress",
+        finexioMatchingStartedAt: new Date()
+      });
+
+      // Get all classifications for the batch
+      const classifications = await storage.getBatchClassifications(batchId);
+      console.log(`Found ${classifications.length} classifications for Finexio matching`);
+
+      let matchedCount = 0;
+      let totalProcessed = 0;
+
+      // Check each classification against Finexio suppliers
+      for (const classification of classifications) {
+        try {
+          // Check if this payee matches a Finexio supplier
+          const finexioMatch = await storage.checkFinexioSupplier(classification.cleanedName);
+          
+          if (finexioMatch) {
+            matchedCount++;
+            // Update the classification with Finexio match data
+            await storage.updateClassificationFinexioMatch(classification.id, {
+              finexioSupplierId: finexioMatch.id,
+              finexioSupplierName: finexioMatch.name,
+              finexioConfidence: finexioMatch.confidence || 1.0
+            });
+          }
+          
+          totalProcessed++;
+        } catch (error) {
+          console.error(`Error matching classification ${classification.id} with Finexio:`, error);
+        }
+      }
+
+      const matchPercentage = totalProcessed > 0 ? Math.round((matchedCount / totalProcessed) * 100) : 0;
+      console.log(`Finexio matching completed for batch ${batchId}: ${matchedCount}/${totalProcessed} matched (${matchPercentage}%)`);
+      
+      // Update status to completed
+      await storage.updateUploadBatch(batchId, {
+        finexioMatchingStatus: "completed",
+        finexioMatchingCompletedAt: new Date(),
+        finexioMatchingProcessed: totalProcessed,
+        finexioMatchingMatched: matchedCount,
+        finexioMatchingProgress: 100
+      });
+      
+    } catch (error) {
+      console.error('Finexio matching process failed:', error);
+      await storage.updateUploadBatch(batchId, {
+        finexioMatchingStatus: "failed",
+        finexioMatchingCompletedAt: new Date()
+      });
+    }
+  }
+
+  // Legacy BigQuery matching (kept for compatibility)
+  private async startBigQueryMatching(batchId: number): Promise<void> {
+    // Redirect to Finexio matching
+    return this.startFinexioMatching(batchId);
+  }
+
+  // Start asynchronous enrichment process (Mastercard)
   private async startEnrichmentProcess(batchId: number): Promise<void> {
     try {
       console.log(`🔍 Checking Mastercard enrichment for batch ${batchId}`);
@@ -1149,56 +1233,17 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       });
     }
   }
-  
-  // Start BigQuery payee matching process
-  private async startBigQueryMatching(batchId: number): Promise<void> {
-    try {
-      // Check if Finexio matching is disabled
-      if (this.matchingOptions.enableFinexio === false) {
-        console.log(`Finexio/BigQuery matching disabled for batch ${batchId}`);
-        await storage.updateUploadBatch(batchId, {
-          finexioMatchingStatus: "skipped",
-          finexioMatchingCompletedAt: new Date()
-        });
-        return;
-      }
-      
-      console.log(`Starting BigQuery payee matching for batch ${batchId}`);
-      
-      // Update status to in_progress
-      await storage.updateUploadBatch(batchId, {
-        finexioMatchingStatus: "in_progress",
-        finexioMatchingStartedAt: new Date()
-      });
-      
-      // Run payee matching with options
-      const result = await payeeMatchingService.matchBatchPayees(batchId, this.matchingOptions);
-      
-      console.log(`BigQuery matching completed for batch ${batchId}: ${result.totalMatched}/${result.totalProcessed} matches found`);
-      
-      // Update status to completed
-      await storage.updateUploadBatch(batchId, {
-        finexioMatchingStatus: "completed",
-        finexioMatchingCompletedAt: new Date(),
-        finexioMatchPercentage: result.totalProcessed > 0 ? Math.round((result.totalMatched / result.totalProcessed) * 100) : 0,
-        finexioMatchedCount: result.totalMatched
-      });
-      
-      if (result.errors > 0) {
-        console.warn(`BigQuery matching encountered ${result.errors} errors`);
-      }
-    } catch (error) {
-      console.error('BigQuery matching process failed:', error);
-      await storage.updateUploadBatch(batchId, {
-        finexioMatchingStatus: "failed",
-        finexioMatchingCompletedAt: new Date()
-      });
-    }
-  }
 
   // Start Google Address Validation process
   private async startAddressValidation(batchId: number): Promise<void> {
     try {
+      // Get batch details to retrieve addressColumns
+      const batch = await storage.getUploadBatch(batchId);
+      if (!batch) {
+        console.log(`Batch ${batchId} not found`);
+        return;
+      }
+      
       // Check if Google Address Validation is disabled
       if (this.matchingOptions.enableGoogleAddressValidation !== true) {
         console.log(`Google Address Validation disabled for batch ${batchId}`);
@@ -1209,8 +1254,11 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
         return;
       }
 
+      // Get address columns from batch record or from instance
+      const addressColumns = (batch.addressColumns as any) || this.addressColumns || {};
+      
       // Check if address columns are mapped
-      if (!this.addressColumns || Object.keys(this.addressColumns).length === 0) {
+      if (!addressColumns || Object.keys(addressColumns).length === 0) {
         console.log(`No address columns mapped for batch ${batchId}, skipping address validation`);
         await storage.updateUploadBatch(batchId, {
           googleAddressStatus: "skipped",
@@ -1220,7 +1268,7 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       }
 
       console.log(`Starting Google Address Validation for batch ${batchId}`);
-      console.log(`Address columns mapping:`, this.addressColumns);
+      console.log(`Address columns mapping:`, addressColumns);
 
       // Update status to in_progress
       await storage.updateUploadBatch(batchId, {
@@ -1241,7 +1289,7 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       });
 
       // Process address validation
-      const result = await addressValidationService.validateBatchAddresses(batchId, classifications, this.addressColumns);
+      const result = await addressValidationService.validateBatchAddresses(batchId, classifications, addressColumns);
       
       console.log(`Address validation completed for batch ${batchId}: ${result.validatedCount}/${result.totalProcessed} addresses validated`);
       
