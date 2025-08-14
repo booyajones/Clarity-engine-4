@@ -351,13 +351,31 @@ export class OptimizedClassificationService {
         
         enrichmentPromises.push(addressValidationPromise);
       } else {
-        // No address validation needed, so run Mastercard enrichment directly
-        console.log(`🎯 No address validation needed for batch ${batchId}, starting Mastercard enrichment directly`);
+        // No address validation needed - set status to skipped immediately
+        console.log(`🎯 No address validation needed for batch ${batchId}, marking as skipped`);
+        
+        // Set Google Address status to skipped since it's not enabled
+        if (!this.matchingOptions?.enableGoogleAddressValidation) {
+          await storage.updateUploadBatch(batchId, {
+            googleAddressStatus: "skipped",
+            googleAddressCompletedAt: new Date()
+          });
+        }
+        
+        // Run Mastercard enrichment directly
         enrichmentPromises.push(
           this.startEnrichmentProcess(batchId).catch(error => {
             console.error('Error starting Mastercard enrichment directly:', error);
           })
         );
+      }
+      
+      // Mark Akkio as skipped immediately if it's disabled
+      if (!this.matchingOptions?.enableAkkio) {
+        await storage.updateUploadBatch(batchId, {
+          akkioPredictionStatus: "skipped",
+          akkioPredictionCompletedAt: new Date()
+        });
       }
       
       // Wait for all enrichment processes to complete
