@@ -14,6 +14,7 @@ import { payeeMatchingService } from './payeeMatchingService';
 import { akkioService } from './akkioService';
 import { akkioModels } from "@shared/schema";
 import { eq, desc, and } from 'drizzle-orm';
+import { FuzzyMatcher } from './fuzzyMatcher';
 
 // Validate OpenAI API key
 if (!process.env.OPENAI_API_KEY) {
@@ -1025,27 +1026,61 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
         finexioMatchingStartedAt: new Date()
       });
 
+      // Initialize FuzzyMatcher for sophisticated matching
+      const fuzzyMatcher = new FuzzyMatcher();
+
       // Get all classifications for the batch
       const classifications = await storage.getBatchClassifications(batchId);
       console.log(`Found ${classifications.length} classifications for Finexio matching`);
 
+      // Get all Finexio suppliers for matching
+      const allSuppliers = await storage.getAllCachedSuppliers();
+      console.log(`Loaded ${allSuppliers.length} Finexio suppliers for matching`);
+
       let matchedCount = 0;
       let totalProcessed = 0;
 
-      // Check each classification against Finexio suppliers
+      // Check each classification against Finexio suppliers using sophisticated matching
       for (const classification of classifications) {
         try {
-          // Check if this payee matches a Finexio supplier
-          const finexioMatch = await storage.checkFinexioSupplier(classification.cleanedName);
-          
-          if (finexioMatch) {
+          let bestMatch = null;
+          let bestConfidence = 0;
+          let bestMatchDetails = null;
+
+          // Try to find the best match among all suppliers
+          for (const supplier of allSuppliers) {
+            // Use FuzzyMatcher for sophisticated cascading match logic
+            const matchResult = await fuzzyMatcher.matchPayee(
+              classification.cleanedName,
+              supplier.payee_name
+            );
+
+            // If this is a better match than what we've found so far
+            if (matchResult.isMatch && matchResult.confidence > bestConfidence) {
+              bestMatch = supplier;
+              bestConfidence = matchResult.confidence;
+              bestMatchDetails = matchResult;
+            }
+
+            // If we found a perfect match (confidence >= 0.95), no need to check further
+            if (bestConfidence >= 0.95) {
+              break;
+            }
+          }
+
+          // If we found a match with sufficient confidence
+          if (bestMatch && bestConfidence >= 0.5) {
             matchedCount++;
+            console.log(`✅ Matched "${classification.cleanedName}" to "${bestMatch.payee_name}" with ${(bestConfidence * 100).toFixed(1)}% confidence (${bestMatchDetails?.matchType})`);
+            
             // Update the classification with Finexio match data
             await storage.updateClassificationFinexioMatch(classification.id, {
-              finexioSupplierId: finexioMatch.id,
-              finexioSupplierName: finexioMatch.name,
-              finexioConfidence: finexioMatch.confidence || 1.0
+              finexioSupplierId: String(bestMatch.payee_id),
+              finexioSupplierName: bestMatch.payee_name,
+              finexioConfidence: bestConfidence
             });
+          } else {
+            console.log(`❌ No match found for "${classification.cleanedName}"`);
           }
           
           totalProcessed++;

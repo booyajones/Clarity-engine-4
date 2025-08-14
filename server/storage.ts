@@ -672,6 +672,22 @@ export class DatabaseStorage implements IStorage {
       console.error('Error creating Finexio match record:', error);
     }
   }
+
+  async getAllCachedSuppliers(): Promise<any[]> {
+    try {
+      // Get all cached suppliers for sophisticated matching
+      const result = await db.execute(sql`
+        SELECT payee_id, payee_name, normalized_name, confidence 
+        FROM cached_suppliers
+        ORDER BY payee_name
+      `);
+      
+      return result.rows || [];
+    } catch (error) {
+      console.error('Error getting all cached suppliers:', error);
+      return [];
+    }
+  }
 }
 
 export const storage = new DatabaseStorage();
