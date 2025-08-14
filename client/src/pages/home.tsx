@@ -405,14 +405,14 @@ export default function Home() {
         );
       case "processing":
         return (
-          <span className="badge-enhanced status-processing border pulse-gentle">
+          <span className="badge-enhanced status-processing border">
             <Loader2 className="h-3 w-3 mr-1 animate-spin" />
             Processing
           </span>
         );
       case "enriching":
         return (
-          <span className="badge-enhanced status-processing border pulse-gentle">
+          <span className="badge-enhanced status-processing border">
             <Loader2 className="h-3 w-3 mr-1 animate-spin" />
             Enriching
           </span>
@@ -771,7 +771,7 @@ export default function Home() {
                                   (latestBatch as any).finexioMatchingStatus === "in_progress" ? "bg-green-400" :
                                   "bg-gray-400"
                                 } h-2 rounded-full transition-all`}
-                                style={{ width: `${(latestBatch as any).finexioMatchingStatus === "completed" ? 100 : (latestBatch as any).finexioMatchingStatus === "in_progress" ? 50 : 0}%` }}
+                                style={{ width: `${(latestBatch as any).finexioMatchingStatus === "completed" ? ((latestBatch as any).finexioMatchPercentage || 0) : (latestBatch as any).finexioMatchingStatus === "in_progress" ? 50 : 0}%` }}
                               />
                             </div>
                           </div>
@@ -840,8 +840,9 @@ export default function Home() {
                                 } h-2 rounded-full transition-all`}
                                 style={{ 
                                   width: `${
-                                    latestBatch.mastercardEnrichmentStatus === "completed" ? 100 :
-                                    latestBatch.mastercardEnrichmentProgress || 0
+                                    latestBatch.mastercardEnrichmentStatus === "completed" ? 
+                                      ((latestBatch.mastercardActualEnriched || 0) > 0 ? 100 : 0) :
+                                      latestBatch.mastercardEnrichmentProgress || 0
                                   }%` 
                                 }}
                               />
@@ -879,8 +880,10 @@ export default function Home() {
                                 } h-2 rounded-full transition-all`}
                                 style={{ 
                                   width: `${
-                                    (latestBatch as any).akkioPredictionStatus === "completed" ? 100 :
-                                    (latestBatch as any).akkioPredictionProgress || 0
+                                    (latestBatch as any).akkioPredictionStatus === "completed" ? 
+                                      ((latestBatch as any).akkioPredictionSuccessful && latestBatch.totalRecords ? 
+                                        Math.round(((latestBatch as any).akkioPredictionSuccessful / latestBatch.totalRecords) * 100) : 0) :
+                                      (latestBatch as any).akkioPredictionProgress || 0
                                   }%` 
                                 }}
                               />
@@ -909,7 +912,7 @@ export default function Home() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => handleViewBatch(latestBatch.id)}
+                          onClick={() => setViewingBatchId(latestBatch.id)}
                           className="flex-1"
                         >
                           <Eye className="h-3 w-3 mr-1" />
@@ -919,7 +922,7 @@ export default function Home() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleDownloadBatch(latestBatch.id)}
+                            onClick={() => handleDownload(latestBatch.id, latestBatch.originalFilename)}
                             className="flex-1"
                           >
                             <Download className="h-3 w-3 mr-1" />
@@ -1050,7 +1053,7 @@ export default function Home() {
                 <div className="mt-2 flex items-center gap-2">
                   {processingBatches.length > 0 ? (
                     <>
-                      <Badge variant="default" className="text-xs animate-pulse">
+                      <Badge variant="default" className="text-xs">
                         Active
                       </Badge>
                       <span className="text-xs text-muted-foreground">
