@@ -128,6 +128,7 @@ export default function Home() {
     enableMastercard: true,
     enableGoogleAddressValidation: false,
     enableAddressNormalization: true,
+    enableAkkio: false,
   });
   const [addressColumns, setAddressColumns] = useState({
     address: "",
@@ -1487,6 +1488,22 @@ export default function Home() {
                           setMatchingOptions((prev) => ({ ...prev, enableMastercard: checked }))
                         }
                         className="data-[state=checked]:bg-orange-600"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Brain className="h-4 w-4 text-purple-600" />
+                        <Label htmlFor="akkio-toggle" className="text-sm cursor-pointer">
+                          Akkio Payment Predictions
+                        </Label>
+                      </div>
+                      <Switch
+                        id="akkio-toggle"
+                        checked={matchingOptions.enableAkkio}
+                        onCheckedChange={(checked) =>
+                          setMatchingOptions((prev) => ({ ...prev, enableAkkio: checked }))
+                        }
+                        className="data-[state=checked]:bg-purple-600"
                       />
                     </div>
                     {matchingOptions.enableGoogleAddressValidation && (
