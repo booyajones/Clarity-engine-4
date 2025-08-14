@@ -657,17 +657,7 @@ export class DatabaseStorage implements IStorage {
     finexioConfidence: number;
   }): Promise<void> {
     try {
-      // Update the classification with Finexio match data
-      await db
-        .update(payeeClassifications)
-        .set({
-          finexioSupplierId: finexioData.finexioSupplierId,
-          finexioSupplierName: finexioData.finexioSupplierName,
-          finexioConfidence: finexioData.finexioConfidence
-        })
-        .where(eq(payeeClassifications.id, classificationId));
-      
-      // Also create a payee_matches record for the Finexio match
+      // Create a payee_matches record for the Finexio match
       await db.insert(payeeMatches).values({
         classificationId: classificationId,
         bigQueryPayeeId: finexioData.finexioSupplierId,
@@ -679,7 +669,7 @@ export class DatabaseStorage implements IStorage {
         isConfirmed: true
       });
     } catch (error) {
-      console.error('Error updating classification with Finexio match:', error);
+      console.error('Error creating Finexio match record:', error);
     }
   }
 }
