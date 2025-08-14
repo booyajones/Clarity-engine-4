@@ -1213,21 +1213,41 @@ export default function Home() {
                         {new Date(batch.createdAt).toLocaleString()}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Badge 
-                        variant={
-                          batch.status === "completed" ? "default" : 
-                          (batch.status as string) === "enriching" ? "secondary" :
-                          batch.status === "processing" ? "outline" : 
-                          batch.status === "failed" ? "destructive" : "outline"
-                        }
-                        className={(batch.status as string) === "enriching" ? "animate-pulse" : ""}
-                      >
-                        {(batch.status as string) === "enriching" ? "Enriching" : batch.status}
-                      </Badge>
-                      <span className="text-sm font-medium">
-                        {batch.totalRecords} records
-                      </span>
+                    <div className="flex flex-col items-end gap-1">
+                      <div className="flex items-center gap-2">
+                        <Badge 
+                          variant={
+                            batch.status === "completed" ? "default" : 
+                            (batch.status as string) === "enriching" ? "secondary" :
+                            batch.status === "processing" ? "outline" : 
+                            batch.status === "failed" ? "destructive" : "outline"
+                          }
+                        >
+                          {(batch.status as string) === "enriching" ? "Enriching" : batch.status}
+                        </Badge>
+                        <span className="text-sm font-medium">
+                          {batch.totalRecords} records
+                        </span>
+                      </div>
+                      {/* Show enrichment details */}
+                      {(batch.status === "completed" || (batch.status as string) === "enriching") && (
+                        <div className="text-xs text-muted-foreground">
+                          {(batch as any).finexioMatchingStatus === "completed" && 
+                            `Finexio: ${(batch as any).finexioMatchPercentage || 0}% • `}
+                          {(batch as any).googleAddressStatus === "completed" && 
+                            `Address: ${(batch as any).googleAddressValidated || 0} • `}
+                          {(batch as any).googleAddressStatus === "skipped" && 
+                            `Address: Bypassed • `}
+                          {batch.mastercardEnrichmentStatus === "completed" && 
+                            `Mastercard: ${batch.mastercardActualEnriched || 0} • `}
+                          {batch.mastercardEnrichmentStatus === "skipped" && 
+                            `Mastercard: Bypassed • `}
+                          {(batch as any).akkioPredictionStatus === "completed" && 
+                            `Akkio: ${(batch as any).akkioPredictionSuccessful || 0}`}
+                          {(batch as any).akkioPredictionStatus === "skipped" && 
+                            `Akkio: Bypassed`}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )) || (
