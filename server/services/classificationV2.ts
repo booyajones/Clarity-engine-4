@@ -1044,8 +1044,8 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
         finexioMatchingStartedAt: new Date()
       });
 
-      // Initialize FuzzyMatcher for sophisticated matching
-      const fuzzyMatcher = new FuzzyMatcher();
+      // Import the supplier cache service for SUPER FAST lookups
+      const { supplierCacheService } = await import('./supplierCacheService');
 
       // Get all classifications for the batch
       const classifications = await storage.getBatchClassifications(batchId);
@@ -1054,78 +1054,28 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       let matchedCount = 0;
       let totalProcessed = 0;
 
-      // Process each classification with timeout protection
+      // Process each classification - should be SUPER FAST with cached suppliers
       for (const classification of classifications) {
         try {
-          // Add timeout protection for each classification (5 seconds max)
-          const matchPromise = (async () => {
-            // First try exact match in database
-            let finexioMatch = await storage.checkFinexioSupplier(classification.cleanedName);
+          let finexioMatch = null;
+          
+          // Use the SUPER FAST supplier cache service search
+          // This uses the accurate matching service with all 483,227 cached suppliers
+          const cachedSuppliers = await supplierCacheService.searchCachedSuppliers(classification.cleanedName, 5);
+          
+          if (cachedSuppliers && cachedSuppliers.length > 0) {
+            // Take the best match (first one, as they're sorted by confidence)
+            const bestMatch = cachedSuppliers[0];
+            finexioMatch = {
+              id: String(bestMatch.payeeId),
+              name: bestMatch.payeeName,
+              confidence: bestMatch.confidence || 1.0,
+              matchType: 'cached',
+              paymentType: bestMatch.paymentType
+            };
             
-            if (!finexioMatch) {
-              // If no exact match, try with FuzzyMatcher against a smaller subset
-              // Get potential matches based on first few characters for efficiency
-              const searchPrefix = classification.cleanedName.toLowerCase().substring(0, 3);
-              const potentialMatches = await storage.getFinexioSuppliersByPrefix(searchPrefix);
-              
-              // CRITICAL FIX: Limit the number of potential matches to prevent hanging
-              const maxMatchesToCheck = 100; // Only check top 100 matches
-              const matchesToCheck = potentialMatches.slice(0, maxMatchesToCheck);
-              
-              if (potentialMatches.length > maxMatchesToCheck) {
-                console.log(`⚠️ Limited fuzzy matching from ${potentialMatches.length} to ${maxMatchesToCheck} for "${classification.cleanedName}"`);
-              }
-              
-              let bestMatch = null;
-              let bestConfidence = 0;
-              let bestSupplier = null;
-
-              // Check against limited potential matches (much faster)
-              for (const supplier of matchesToCheck) {
-                const matchResult = await fuzzyMatcher.matchPayee(
-                  classification.cleanedName,
-                  supplier.payee_name
-                );
-
-                if (matchResult.isMatch && matchResult.confidence > bestConfidence) {
-                  bestMatch = matchResult;
-                  bestConfidence = matchResult.confidence;
-                  bestSupplier = supplier;
-                }
-
-                // Stop if we found a very high confidence match
-                if (bestConfidence >= 0.95) {
-                  break;
-                }
-              }
-
-              // If we found a good match through fuzzy matching
-              if (bestSupplier && bestConfidence >= 0.7) {
-                finexioMatch = {
-                  id: String(bestSupplier.payee_id),
-                  name: bestSupplier.payee_name,
-                  confidence: bestConfidence
-                };
-              }
-            }
-            
-            return finexioMatch;
-          })();
-
-          // Apply 5-second timeout to prevent hanging
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Finexio matching timeout')), 5000)
-          );
-
-          const finexioMatch = await Promise.race([matchPromise, timeoutPromise]).catch(error => {
-            console.error(`⚠️ Finexio matching failed/timeout for "${classification.cleanedName}": ${error.message}`);
-            return null;
-          });
-
-          // If we found any match (exact or fuzzy)
-          if (finexioMatch) {
             matchedCount++;
-            console.log(`✅ Matched "${classification.cleanedName}" to "${finexioMatch.name}" with ${(finexioMatch.confidence * 100).toFixed(1)}% confidence`);
+            console.log(`✅ Matched "${classification.cleanedName}" to "${bestMatch.payeeName}" (ID: ${bestMatch.payeeId}) with ${((bestMatch.confidence || 1) * 100).toFixed(1)}% confidence`);
             
             // Update the classification with Finexio match data
             await storage.updateClassificationFinexioMatch(classification.id, {
