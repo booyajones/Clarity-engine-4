@@ -688,6 +688,25 @@ export class DatabaseStorage implements IStorage {
       return [];
     }
   }
+
+  async getFinexioSuppliersByPrefix(prefix: string): Promise<any[]> {
+    try {
+      // Get suppliers matching the prefix for efficient fuzzy matching
+      const searchPattern = prefix.toLowerCase() + '%';
+      const result = await db.execute(sql`
+        SELECT payee_id, payee_name, normalized_name, confidence 
+        FROM cached_suppliers
+        WHERE LOWER(payee_name) LIKE ${searchPattern}
+        OR normalized_name LIKE ${searchPattern}
+        LIMIT 1000
+      `);
+      
+      return result.rows || [];
+    } catch (error) {
+      console.error('Error getting suppliers by prefix:', error);
+      return [];
+    }
+  }
 }
 
 export const storage = new DatabaseStorage();
