@@ -628,19 +628,19 @@ export class DatabaseStorage implements IStorage {
       // Query the cached_suppliers table for a match
       const normalizedName = name.toLowerCase().trim();
       const result = await db.execute(sql`
-        SELECT supplier_id, name, 1.0 as confidence
+        SELECT payee_id, payee_name, confidence
         FROM cached_suppliers 
-        WHERE LOWER(name) = ${normalizedName}
-        OR LOWER(doing_business_as) = ${normalizedName}
+        WHERE LOWER(payee_name) = ${normalizedName}
+        OR normalized_name = ${normalizedName}
         LIMIT 1
       `);
       
       if (result.rows && result.rows.length > 0) {
         const row = result.rows[0];
         return {
-          id: String(row.supplier_id),
-          name: String(row.name),
-          confidence: 1.0
+          id: String(row.payee_id),
+          name: String(row.payee_name),
+          confidence: parseFloat(row.confidence) || 1.0
         };
       }
       
@@ -657,6 +657,7 @@ export class DatabaseStorage implements IStorage {
     finexioConfidence: number;
   }): Promise<void> {
     try {
+      // Update the classification with Finexio match data
       await db
         .update(payeeClassifications)
         .set({
@@ -665,6 +666,18 @@ export class DatabaseStorage implements IStorage {
           finexioConfidence: finexioData.finexioConfidence
         })
         .where(eq(payeeClassifications.id, classificationId));
+      
+      // Also create a payee_matches record for the Finexio match
+      await db.insert(payeeMatches).values({
+        classificationId: classificationId,
+        bigQueryPayeeId: finexioData.finexioSupplierId,
+        bigQueryPayeeName: finexioData.finexioSupplierName,
+        matchConfidence: finexioData.finexioConfidence,
+        finexioMatchScore: finexioData.finexioConfidence * 100, // Convert to percentage
+        matchType: 'deterministic',
+        matchReasoning: 'Matched from Finexio supplier network',
+        isConfirmed: true
+      });
     } catch (error) {
       console.error('Error updating classification with Finexio match:', error);
     }
