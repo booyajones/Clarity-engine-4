@@ -110,10 +110,10 @@ export class OptimizedClassificationService {
         console.log(`📊 Converting Excel to CSV for processing...`);
         // Convert Excel to CSV first, then process as CSV
         const csvFilePath = await this.convertExcelToCsv(filePath);
-        payeeStream = this.createCsvStream(csvFilePath, payeeColumn);
+        payeeStream = this.createCsvStream(csvFilePath, payeeColumn, batchId);
       } else {
         console.log(`📊 Creating CSV stream for ${ext} file (or no extension)...`);
-        payeeStream = this.createCsvStream(filePath, payeeColumn);
+        payeeStream = this.createCsvStream(filePath, payeeColumn, batchId);
       }
       
       console.log(`Stream created, starting processPayeeStream...`);
@@ -142,10 +142,11 @@ export class OptimizedClassificationService {
     }
   }
   
-  private createCsvStream(filePath: string, payeeColumn?: string): Readable {
+  private createCsvStream(filePath: string, payeeColumn?: string, batchId?: number): Readable {
     const payeeStream = new Readable({ objectMode: true, read() {} });
     let rowIndex = 0;
     let totalRows = 0;
+    let detectedPayeeColumn: string | null = payeeColumn || null;
     
     console.log(`Creating CSV stream for file: ${filePath}, payeeColumn: "${payeeColumn}"`);
     
@@ -157,8 +158,105 @@ export class OptimizedClassificationService {
           strict: false
         }));
       
-      stream.on('headers', (headers) => {
+      stream.on('headers', async (headers) => {
         console.log('CSV headers detected:', headers);
+        
+        // Auto-detect payee column if not specified
+        if (!detectedPayeeColumn) {
+          const nameVariations = ['payee name', 'payee_name', 'payeename', 'vendor name', 'vendor_name', 'vendorname', 
+                                  'supplier name', 'supplier_name', 'suppliername', 'name', 'payee', 'vendor', 'supplier', 'company'];
+          
+          // First try exact match (case insensitive)
+          for (const variation of nameVariations) {
+            const found = headers.find((h: string) => h.toLowerCase().replace(/[^a-z]/g, '') === variation.replace(/[^a-z]/g, ''));
+            if (found) {
+              detectedPayeeColumn = found;
+              console.log(`Auto-detected payee column by exact match: ${found}`);
+              break;
+            }
+          }
+          
+          // Then try contains match
+          if (!detectedPayeeColumn) {
+            for (const variation of nameVariations) {
+              const found = headers.find((h: string) => h.toLowerCase().includes(variation.replace(/_/g, ' ')));
+              if (found) {
+                detectedPayeeColumn = found;
+                console.log(`Auto-detected payee column by partial match: ${found}`);
+                break;
+              }
+            }
+          }
+          
+          // Default to first column if no match found
+          if (!detectedPayeeColumn && headers.length > 0) {
+            detectedPayeeColumn = headers[0];
+            console.log(`Using first column as payee column: ${detectedPayeeColumn}`);
+          }
+        }
+        
+        // Detect address columns automatically
+        const addressColumns: any = {};
+        
+        // Check for address column
+        const addressVariations = ['address', 'address 1', 'address1', 'street', 'street address'];
+        for (const header of headers) {
+          if (addressVariations.some(v => header.toLowerCase().includes(v))) {
+            addressColumns.address = header;
+            break;
+          }
+        }
+        
+        // Check for city column
+        const cityVariations = ['city'];
+        for (const header of headers) {
+          if (cityVariations.some(v => header.toLowerCase() === v)) {
+            addressColumns.city = header;
+            break;
+          }
+        }
+        
+        // Check for state column
+        const stateVariations = ['state', 'province'];
+        for (const header of headers) {
+          if (stateVariations.some(v => header.toLowerCase() === v)) {
+            addressColumns.state = header;
+            break;
+          }
+        }
+        
+        // Check for zip column
+        const zipVariations = ['zip', 'zip_code', 'zipcode', 'postal', 'postal code', 'postal_code'];
+        for (const header of headers) {
+          if (zipVariations.some(v => header.toLowerCase().replace(/[^a-z]/g, '') === v.replace(/[^a-z]/g, ''))) {
+            addressColumns.zipCode = header;
+            break;
+          }
+        }
+        
+        // Store detected address columns if any were found
+        if (Object.keys(addressColumns).length > 0) {
+          console.log(`Detected address columns:`, addressColumns);
+          this.addressColumns = addressColumns;
+          
+          // Store in database for the batch
+          const batchIdMatch = filePath.match(/uploads\/[^\/]+$/);
+          if (batchIdMatch) {
+            try {
+              // Store address columns for the batch
+              if (batchId) {
+                await storage.updateUploadBatch(batchId, {
+                  addressColumns: addressColumns
+                });
+                console.log(`Stored address columns for batch ${batchId}`);
+              }
+            } catch (err) {
+              console.error('Failed to store address columns:', err);
+            }
+          }
+        } else {
+          console.log('No address columns detected in CSV');
+        }
       });
       
       stream.on('data', (row: Record<string, any>) => {
@@ -170,18 +268,35 @@ export class OptimizedClassificationService {
         }
         
         // Check if payee column exists in row
-        if (payeeColumn && row[payeeColumn]) {
+        if (detectedPayeeColumn && row[detectedPayeeColumn]) {
+          // Use detected address columns if available, otherwise fall back to common variations
+          const addressValue = this.addressColumns?.address ? 
+            row[this.addressColumns.address] : 
+            (row['Address 1'] || row.address || row.Address);
+            
+          const cityValue = this.addressColumns?.city ? 
+            row[this.addressColumns.city] : 
+            (row.City || row.city);
+            
+          const stateValue = this.addressColumns?.state ? 
+            row[this.addressColumns.state] : 
+            (row.State || row.state);
+            
+          const zipCodeValue = this.addressColumns?.zipCode ? 
+            row[this.addressColumns.zipCode] : 
+            (row.Zip || row.zip || row.ZIP || row.zip_code || row['zip_code']);
+          
           payeeStream.push({
-            originalName: row[payeeColumn],
-            address: row['Address 1'] || row.address || row.Address,
-            city: row.City || row.city,
-            state: row.State || row.state,
-            zipCode: row.Zip || row.zip || row.ZIP,
+            originalName: row[detectedPayeeColumn],
+            address: addressValue,
+            city: cityValue,
+            state: stateValue,
+            zipCode: zipCodeValue,
             originalData: row,
             index: rowIndex++
           });
         } else if (totalRows <= 3) {
-          console.log(`Column "${payeeColumn}" not found or empty in row ${totalRows}`);
+          console.log(`Column "${detectedPayeeColumn}" not found or empty in row ${totalRows}`);
           console.log(`Available columns:`, Object.keys(row));
         }
       });
@@ -1404,25 +1519,17 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
   
   // Wait for all enrichment processes to complete
   private async waitForEnrichmentCompletion(batchId: number): Promise<void> {
-    // Poll for enrichment completion status
-    let maxWaitTime = 30 * 60 * 1000; // 30 minutes max wait
-    const pollInterval = 5000; // 5 seconds
-    let waitedTime = 0;
+    // The batch enrichment monitor handles all enrichment processing now
+    // We just need to check once if everything is complete
+    const allComplete = await this.isAllEnrichmentComplete(batchId);
     
-    while (waitedTime < maxWaitTime) {
-      const allComplete = await this.isAllEnrichmentComplete(batchId);
-      
-      if (allComplete) {
-        console.log(`All enrichment processes completed for batch ${batchId}`);
-        return;
-      }
-      
-      // Wait before next check
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
-      waitedTime += pollInterval;
+    if (allComplete) {
+      console.log(`All enrichment processes completed for batch ${batchId}`);
+      return;
     }
     
-    console.warn(`Enrichment wait timeout for batch ${batchId} after ${maxWaitTime/1000} seconds`);
+    // Don't poll - let the batch enrichment monitor handle it
+    console.log(`Enrichment in progress for batch ${batchId}, will be handled by batch enrichment monitor`);
   }
 
   // Start Akkio predictions as the final enrichment step

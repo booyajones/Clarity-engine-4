@@ -553,9 +553,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "No file uploaded" });
       }
 
-      const payeeColumn = req.body.payeeColumn || 'payee';
+      const payeeColumn = req.body.payeeColumn; // Don't default, let auto-detection handle it
       const enableFinexio = req.body.enableFinexio !== 'false';
       const enableMastercard = req.body.enableMastercard !== 'false';
+      const enableGoogleAddressValidation = req.body.enableGoogleAddressValidation === 'true';
+      const enableAkkio = req.body.enableAkkio === 'true';
       
       const userId = 1; // TODO: Get from session/auth
       const batch = await storage.createUploadBatch({
@@ -568,7 +570,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Process file in background
       processFileAsync(req.file, batch.id, payeeColumn, {
         enableFinexio,
-        enableMastercard
+        enableMastercard,
+        enableGoogleAddressValidation,
+        enableAkkio
       });
 
       res.json({ 
