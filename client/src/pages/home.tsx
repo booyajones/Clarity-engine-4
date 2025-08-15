@@ -1084,67 +1084,12 @@ export default function Home() {
             </Card>
           </div>
 
-          {/* Job Performance Summary */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Job Breakdown */}
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-blue-600" />
-                  Job Performance (Last 7 Days)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {(() => {
-                    const sevenDaysAgo = new Date();
-                    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-                    const recentJobs = batches?.filter(b => new Date(b.createdAt) >= sevenDaysAgo) || [];
-                    const avgProcessingTime = recentJobs.filter(b => b.completedAt).reduce((sum, b) => {
-                      const duration = new Date(b.completedAt!).getTime() - new Date(b.createdAt).getTime();
-                      return sum + duration;
-                    }, 0) / (recentJobs.filter(b => b.completedAt).length || 1);
-                    const avgMinutes = Math.round(avgProcessingTime / 60000);
-                    
-                    return (
-                      <>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm">Jobs Processed</span>
-                          <span className="text-sm font-medium">{recentJobs.length}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm">Total Records</span>
-                          <span className="text-sm font-medium">
-                            {recentJobs.reduce((sum, b) => sum + b.totalRecords, 0).toLocaleString()}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm">Avg Processing Time</span>
-                          <span className="text-sm font-medium">{avgMinutes} min</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm">Avg Exclusion Rate</span>
-                          <span className="text-sm font-medium">
-                            {(() => {
-                              const totalRecords = recentJobs.reduce((sum, b) => sum + b.totalRecords, 0);
-                              const totalSkipped = recentJobs.reduce((sum, b) => sum + (b.skippedRecords || 0), 0);
-                              return totalRecords > 0 ? `${Math.round((totalSkipped / totalRecords) * 100)}%` : "0%";
-                            })()}
-                          </span>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Current Activity */}
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-green-600" />
-                  Current Activity
+          {/* Current Activity */}
+          <Card className="hover:shadow-lg transition-shadow mb-4">
+            <CardHeader>
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Activity className="h-4 w-4 text-green-600" />
+                Current Activity
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -1255,7 +1200,6 @@ export default function Home() {
                 </div>
               </CardContent>
             </Card>
-          </div>
 
           {/* Recent Activity */}
           <Card className="hover:shadow-lg transition-shadow">
