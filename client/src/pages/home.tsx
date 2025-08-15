@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload as UploadIcon, Download, Loader2, X, FileSpreadsheet, CheckCircle2, XCircle, Clock, AlertCircle, Activity, ArrowRight, ClipboardList, Sparkles, Eye, Settings, Brain, Package, Database, TrendingUp, Users, Shield, MapPin, Zap, RefreshCw, BarChart3, Search, CreditCard } from "lucide-react";
+import { Upload as UploadIcon, Download, Loader2, X, FileSpreadsheet, CheckCircle2, XCircle, Clock, AlertCircle, Activity, ArrowRight, ClipboardList, Sparkles, Eye, Settings, Brain, Package, Database, TrendingUp, Users, Shield, MapPin, Zap, RefreshCw, BarChart3, Search, CreditCard, Trash2 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -139,7 +139,7 @@ export default function Home() {
 
   const [, forceUpdate] = useState({});
 
-  const { data: batches, isLoading } = useQuery<UploadBatch[]>({
+  const { data: batches, isLoading, refetch: refetchBatches } = useQuery<UploadBatch[]>({
     queryKey: ["/api/upload/batches"],
     refetchInterval: (query) => {
       // Only poll when there are active processing or enriching batches
@@ -1311,6 +1311,63 @@ export default function Home() {
                         </div>
                       )}
                     </div>
+                    {/* Action buttons for stuck/in-progress jobs */}
+                    {(batch.status === "processing" || batch.status === "enriching") && (
+                      <div className="flex gap-2 mt-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={async () => {
+                            if (confirm(`Cancel ${batch.originalFilename}? This will stop all processing.`)) {
+                              try {
+                                await apiRequest(`/api/upload/batches/${batch.id}/cancel`, 'PATCH');
+                                toast({
+                                  title: "Job Cancelled",
+                                  description: `${batch.originalFilename} has been cancelled.`
+                                });
+                                refetchBatches();
+                              } catch (error) {
+                                toast({
+                                  title: "Error",
+                                  description: "Failed to cancel job",
+                                  variant: "destructive"
+                                });
+                              }
+                            }
+                          }}
+                          className="text-orange-600 hover:bg-orange-50"
+                        >
+                          <XCircle className="h-3 w-3 mr-1" />
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={async () => {
+                            if (confirm(`Delete ${batch.originalFilename}? This cannot be undone.`)) {
+                              try {
+                                await apiRequest(`/api/upload/batches/${batch.id}`, 'DELETE');
+                                toast({
+                                  title: "Job Deleted",
+                                  description: `${batch.originalFilename} has been deleted.`
+                                });
+                                refetchBatches();
+                              } catch (error) {
+                                toast({
+                                  title: "Error",
+                                  description: "Failed to delete job",
+                                  variant: "destructive"
+                                });
+                              }
+                            }
+                          }}
+                          className="text-red-600 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-3 w-3 mr-1" />
+                          Delete
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )) || (
                   <p className="text-sm text-muted-foreground">No recent activity</p>
