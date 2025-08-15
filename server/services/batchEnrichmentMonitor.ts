@@ -137,8 +137,18 @@ class BatchEnrichmentMonitor {
       if (enableGoogleAddress && batch.finexioMatchingStatus === 'completed' && 
           (!batch.googleAddressStatus || batch.googleAddressStatus === 'pending')) {
         console.log(`Starting Google Address validation for batch ${batchId}`);
+        
+        // Mark as processing immediately to prevent duplicate processing
+        await db.update(uploadBatches)
+          .set({ googleAddressStatus: 'processing' })
+          .where(eq(uploadBatches.id, batchId));
+        
         await this.processGoogleAddressValidation(batchId);
         return; // Process one phase at a time
+      } else if (enableGoogleAddress && batch.googleAddressStatus === 'processing') {
+        // Skip if already processing
+        console.log(`Google Address validation already in progress for batch ${batchId}, skipping...`);
+        return;
       }
 
       // 3. Process Mastercard if needed
@@ -248,11 +258,8 @@ class BatchEnrichmentMonitor {
    */
   private async processGoogleAddressValidation(batchId: number) {
     try {
-      // Update status to processing
-      await db.update(uploadBatches)
-        .set({ googleAddressStatus: 'processing' })
-        .where(eq(uploadBatches.id, batchId));
-
+      // Status already set to 'processing' before this function is called
+      
       // Get all classifications with addresses for this batch
       const classifications = await db.select()
         .from(payeeClassifications)
@@ -263,63 +270,117 @@ class BatchEnrichmentMonitor {
           )
         );
 
-      let validatedCount = 0;
-      let errorCount = 0;
-
-      // Process each classification with timeout protection
-      for (const classification of classifications) {
-        try {
-          // Set a timeout for address validation to prevent hanging
-          const validationPromise = addressValidationService.validateAddress(
-            classification.address || '',
-            classification.city,
-            classification.state,
-            classification.zipCode,
-            {
-              enableGoogleValidation: true,
-              payeeName: classification.originalName,
-              payeeType: classification.payeeType || 'Business'
-            }
-          );
-
-          // Timeout after 5 seconds to prevent hanging
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Address validation timeout')), 5000)
-          );
-
-          const result = await Promise.race([validationPromise, timeoutPromise]) as any;
-
-          if (result && result.success) {
-            await db.update(payeeClassifications)
-              .set({
-                googleAddressValidationStatus: 'validated',
-                googleFormattedAddress: result.formattedAddress || result.data?.result?.address?.formattedAddress,
-                googleAddressComponents: result.data?.result?.address || {}
-              })
-              .where(eq(payeeClassifications.id, classification.id));
-            validatedCount++;
-          }
-        } catch (error) {
-          console.error(`Error validating address for ${classification.originalName}:`, error);
-          errorCount++;
-        }
+      if (classifications.length === 0) {
+        // No addresses to validate, mark as skipped
+        await db.update(uploadBatches)
+          .set({ 
+            googleAddressStatus: 'skipped',
+            googleAddressValidated: 0,
+            googleAddressProcessed: 0
+          })
+          .where(eq(uploadBatches.id, batchId));
+        
+        console.log(`No addresses to validate for batch ${batchId}, skipping`);
+        return;
       }
 
-      // Update batch status
+      let validatedCount = 0;
+      let errorCount = 0;
+      let timeoutCount = 0;
+
+      // Process in smaller batches to avoid overwhelming the system
+      const batchSize = 5;
+      for (let i = 0; i < classifications.length; i += batchSize) {
+        const batch = classifications.slice(i, i + batchSize);
+        
+        // Process batch with parallel promises but with timeout protection
+        const promises = batch.map(async (classification) => {
+          try {
+            // Set a timeout for address validation to prevent hanging
+            const validationPromise = addressValidationService.validateAddress(
+              classification.address || '',
+              classification.city,
+              classification.state,
+              classification.zipCode,
+              {
+                enableGoogleValidation: true,
+                payeeName: classification.originalName,
+                payeeType: classification.payeeType || 'Business'
+              }
+            );
+
+            // Timeout after 10 seconds (increased from 5 to allow for OpenAI enhancement)
+            const timeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Address validation timeout')), 10000)
+            );
+
+            const result = await Promise.race([validationPromise, timeoutPromise]) as any;
+
+            if (result && result.success) {
+              await db.update(payeeClassifications)
+                .set({
+                  googleAddressValidationStatus: 'validated',
+                  googleFormattedAddress: result.formattedAddress || result.data?.result?.address?.formattedAddress,
+                  googleAddressComponents: result.data?.result?.address || {}
+                })
+                .where(eq(payeeClassifications.id, classification.id));
+              validatedCount++;
+            } else {
+              // Mark as failed if not successful
+              await db.update(payeeClassifications)
+                .set({
+                  googleAddressValidationStatus: 'failed'
+                })
+                .where(eq(payeeClassifications.id, classification.id));
+              errorCount++;
+            }
+          } catch (error: any) {
+            if (error.message === 'Address validation timeout') {
+              console.log(`Timeout validating address for ${classification.originalName}`);
+              timeoutCount++;
+              // Mark as skipped on timeout
+              await db.update(payeeClassifications)
+                .set({
+                  googleAddressValidationStatus: 'skipped'
+                })
+                .where(eq(payeeClassifications.id, classification.id));
+            } else {
+              console.error(`Error validating address for ${classification.originalName}:`, error.message);
+              errorCount++;
+              // Mark as failed on error
+              await db.update(payeeClassifications)
+                .set({
+                  googleAddressValidationStatus: 'failed'
+                })
+                .where(eq(payeeClassifications.id, classification.id));
+            }
+          }
+        });
+        
+        // Wait for all in this batch to complete
+        await Promise.allSettled(promises);
+      }
+
+      // Always mark the batch as completed, even if some validations failed
       await db.update(uploadBatches)
         .set({ 
           googleAddressStatus: 'completed',
           googleAddressValidated: validatedCount,
-          googleAddressProcessed: errorCount + validatedCount
+          googleAddressProcessed: classifications.length
         })
         .where(eq(uploadBatches.id, batchId));
 
-      console.log(`Google Address validation complete for batch ${batchId}: ${validatedCount} validated, ${errorCount} errors`);
+      console.log(`Google Address validation complete for batch ${batchId}: ${validatedCount} validated, ${timeoutCount} timed out, ${errorCount} errors`);
 
     } catch (error) {
       console.error(`Error in Google Address validation for batch ${batchId}:`, error);
+      // Mark as completed with errors rather than failed to allow process to continue
       await db.update(uploadBatches)
-        .set({ googleAddressStatus: 'failed' })
+        .set({ 
+          googleAddressStatus: 'completed',
+          googleAddressValidated: 0,
+          googleAddressProcessed: 0
+        })
         .where(eq(uploadBatches.id, batchId));
     }
   }
