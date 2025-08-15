@@ -6,6 +6,7 @@ import { mastercardApi } from "./services/mastercardApi";
 import { getMastercardWorker } from "./services/mastercardWorker";
 import memoryMonitor from './utils/memoryMonitor';
 import { optimizeDatabase, scheduleCleanup } from './utils/performanceOptimizer';
+import { batchEnrichmentMonitor } from './services/batchEnrichmentMonitor';
 
 const app = express();
 // Security and optimization middleware
@@ -49,6 +50,12 @@ app.use((req, res, next) => {
   try {
     // Initialize Mastercard service during startup
     console.log('🔧 Mastercard service initialized:', mastercardApi.isServiceConfigured() ? '✅ Ready' : '❌ Not configured');
+    
+    // Start batch enrichment monitor
+    setTimeout(() => {
+      console.log('🚀 Starting batch enrichment monitor...');
+      batchEnrichmentMonitor.start();
+    }, 3000); // Start after 3 seconds to allow services to initialize
     
     const server = await registerRoutes(app);
 
