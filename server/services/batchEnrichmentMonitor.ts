@@ -209,29 +209,62 @@ class BatchEnrichmentMonitor {
 
       let matchCount = 0;
       let errorCount = 0;
+      let timeoutCount = 0;
 
-      // Process each classification
-      for (const classification of classifications) {
-        try {
-          const matches = await supplierCacheService.searchCachedSuppliers(
-            classification.originalName,
-            1
-          );
+      console.log(`Starting Finexio matching for batch ${batchId}: ${classifications.length} records`);
 
-          if (matches && matches.length > 0) {
-            const bestMatch = matches[0];
-            await db.update(payeeClassifications)
-              .set({
-                finexioSupplierId: bestMatch.payeeId,
-                finexioSupplierName: bestMatch.payeeName,
-                finexioConfidence: bestMatch.confidence || 0
-              })
-              .where(eq(payeeClassifications.id, classification.id));
-            matchCount++;
+      // Process in batches of 10 for better performance
+      const batchSize = 10;
+      
+      for (let i = 0; i < classifications.length; i += batchSize) {
+        const batch = classifications.slice(i, i + batchSize);
+        
+        // Process batch with parallel promises but with timeout protection
+        const promises = batch.map(async (classification) => {
+          try {
+            // Create a promise for the supplier search
+            const searchPromise = supplierCacheService.searchCachedSuppliers(
+              classification.originalName,
+              1
+            );
+
+            // Create a timeout promise (5 seconds per record)
+            const timeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Finexio search timeout')), 5000)
+            );
+
+            // Race between search and timeout
+            const matches = await Promise.race([searchPromise, timeoutPromise]) as any;
+
+            if (matches && matches.length > 0) {
+              const bestMatch = matches[0];
+              await db.update(payeeClassifications)
+                .set({
+                  finexioSupplierId: bestMatch.payeeId,
+                  finexioSupplierName: bestMatch.payeeName,
+                  finexioConfidence: bestMatch.confidence || 0
+                })
+                .where(eq(payeeClassifications.id, classification.id));
+              matchCount++;
+            }
+          } catch (error: any) {
+            if (error.message === 'Finexio search timeout') {
+              console.warn(`Timeout matching ${classification.originalName}`);
+              timeoutCount++;
+            } else {
+              console.error(`Error matching ${classification.originalName}:`, error);
+              errorCount++;
+            }
           }
-        } catch (error) {
-          console.error(`Error matching ${classification.originalName}:`, error);
-          errorCount++;
+        });
+        
+        // Wait for all in this batch to complete
+        await Promise.allSettled(promises);
+        
+        // Log progress every 100 records for large batches
+        if (classifications.length > 100 && (i + batchSize) % 100 === 0) {
+          const processed = Math.min(i + batchSize, classifications.length);
+          console.log(`💼 Finexio Progress: ${processed}/${classifications.length} processed (${Math.round(processed * 100 / classifications.length)}%)`);
         }
       }
 
@@ -239,11 +272,12 @@ class BatchEnrichmentMonitor {
       await db.update(uploadBatches)
         .set({ 
           finexioMatchingStatus: 'completed',
-          finexioMatchedCount: matchCount
+          finexioMatchedCount: matchCount,
+          finexioMatchingCompletedAt: new Date()
         })
         .where(eq(uploadBatches.id, batchId));
 
-      console.log(`Finexio matching complete for batch ${batchId}: ${matchCount} matches, ${errorCount} errors`);
+      console.log(`Finexio matching complete for batch ${batchId}: ${matchCount} matches, ${errorCount} errors, ${timeoutCount} timeouts`);
 
     } catch (error) {
       console.error(`Error in Finexio matching for batch ${batchId}:`, error);
