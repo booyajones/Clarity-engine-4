@@ -284,14 +284,34 @@ class BatchEnrichmentMonitor {
         return;
       }
 
+      console.log(`Starting Google Address validation for batch ${batchId}: ${classifications.length} records to process`);
+
+      // For large batches, limit processing to prevent timeouts
+      const MAX_ADDRESSES_TO_PROCESS = 50; // Only process first 50 addresses for large batches
+      const recordsToProcess = classifications.slice(0, MAX_ADDRESSES_TO_PROCESS);
+      const skippedDueToSize = classifications.length - recordsToProcess.length;
+      
+      if (skippedDueToSize > 0) {
+        console.log(`⚠️ Large batch detected: Processing first ${MAX_ADDRESSES_TO_PROCESS} of ${classifications.length} addresses`);
+      }
+
       let validatedCount = 0;
       let errorCount = 0;
       let timeoutCount = 0;
 
       // Process in smaller batches to avoid overwhelming the system
-      const batchSize = 5;
-      for (let i = 0; i < classifications.length; i += batchSize) {
-        const batch = classifications.slice(i, i + batchSize);
+      const batchSize = 3; // Reduced from 5 to 3 for better stability
+      const MAX_PROCESSING_TIME = 60000; // 60 seconds max for entire batch
+      const startTime = Date.now();
+
+      for (let i = 0; i < recordsToProcess.length; i += batchSize) {
+        // Check if we've exceeded max processing time
+        if (Date.now() - startTime > MAX_PROCESSING_TIME) {
+          console.log(`⏱️ Max processing time reached for batch ${batchId}, completing with processed results`);
+          break;
+        }
+
+        const batch = recordsToProcess.slice(i, i + batchSize);
         
         // Process batch with parallel promises but with timeout protection
         const promises = batch.map(async (classification) => {
@@ -309,9 +329,9 @@ class BatchEnrichmentMonitor {
               }
             );
 
-            // Timeout after 10 seconds (increased from 5 to allow for OpenAI enhancement)
+            // Timeout after 5 seconds per address (reduced from 10)
             const timeoutPromise = new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Address validation timeout')), 10000)
+              setTimeout(() => reject(new Error('Address validation timeout')), 5000)
             );
 
             const result = await Promise.race([validationPromise, timeoutPromise]) as any;
@@ -336,7 +356,6 @@ class BatchEnrichmentMonitor {
             }
           } catch (error: any) {
             if (error.message === 'Address validation timeout') {
-              console.log(`Timeout validating address for ${classification.originalName}`);
               timeoutCount++;
               // Mark as skipped on timeout
               await db.update(payeeClassifications)
@@ -345,7 +364,6 @@ class BatchEnrichmentMonitor {
                 })
                 .where(eq(payeeClassifications.id, classification.id));
             } else {
-              console.error(`Error validating address for ${classification.originalName}:`, error.message);
               errorCount++;
               // Mark as failed on error
               await db.update(payeeClassifications)
@@ -359,18 +377,44 @@ class BatchEnrichmentMonitor {
         
         // Wait for all in this batch to complete
         await Promise.allSettled(promises);
+        
+        // Log progress for large batches
+        if (classifications.length > 100 && i % 15 === 0) {
+          console.log(`📍 Progress: ${Math.min(i + batchSize, recordsToProcess.length)}/${recordsToProcess.length} addresses processed`);
+        }
       }
 
-      // Always mark the batch as completed, even if some validations failed
+      // Mark any remaining unprocessed records as skipped
+      if (skippedDueToSize > 0) {
+        const unprocessedIds = classifications.slice(MAX_ADDRESSES_TO_PROCESS).map(c => c.id);
+        if (unprocessedIds.length > 0) {
+          await db.update(payeeClassifications)
+            .set({
+              googleAddressValidationStatus: 'skipped'
+            })
+            .where(sql`${payeeClassifications.id} = ANY(${unprocessedIds})`);
+        }
+      }
+
+      const totalProcessed = validatedCount + errorCount + timeoutCount + skippedDueToSize;
+
+      // Always mark the batch as completed
       await db.update(uploadBatches)
         .set({ 
           googleAddressStatus: 'completed',
           googleAddressValidated: validatedCount,
-          googleAddressProcessed: classifications.length
+          googleAddressProcessed: totalProcessed
         })
         .where(eq(uploadBatches.id, batchId));
 
-      console.log(`Google Address validation complete for batch ${batchId}: ${validatedCount} validated, ${timeoutCount} timed out, ${errorCount} errors`);
+      console.log(`✅ Google Address validation complete for batch ${batchId}:`);
+      console.log(`   - Validated: ${validatedCount}`);
+      console.log(`   - Errors: ${errorCount}`);
+      console.log(`   - Timeouts: ${timeoutCount}`);
+      if (skippedDueToSize > 0) {
+        console.log(`   - Skipped (batch too large): ${skippedDueToSize}`);
+      }
+      console.log(`   - Total processed: ${totalProcessed}/${classifications.length}`);
 
     } catch (error) {
       console.error(`Error in Google Address validation for batch ${batchId}:`, error);
