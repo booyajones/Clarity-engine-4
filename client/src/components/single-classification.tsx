@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Loader2, Search, Building2, User, Landmark, Shield, CreditCard, ArrowRightLeft, HelpCircle, Database, Globe, MapPin, Brain, X } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Loader2, Search, Building2, User, Landmark, Shield, CreditCard, ArrowRightLeft, HelpCircle, Database, Globe, MapPin, Brain, X, CheckCircle2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
 interface ClassificationResult {
@@ -127,6 +128,14 @@ export function SingleClassification() {
   const [enableMastercardMatching, setEnableMastercardMatching] = useState(true);
   const [enableAddressValidation, setEnableAddressValidation] = useState(false);
   const [enableAkkioMatching, setEnableAkkioMatching] = useState(false);
+  
+  // Create toolToggles object for progress tracking UI
+  const toolToggles = {
+    finexio: enableFinexioMatching,
+    mastercard: enableMastercardMatching,
+    googleAddress: enableAddressValidation,
+    akkio: enableAkkioMatching
+  };
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
@@ -514,11 +523,135 @@ export function SingleClassification() {
               )}
             </div>
             
-            {/* Show progressive status */}
+            {/* Enhanced Progress Tracking */}
             {(progressiveStatus || (isProcessing && !result)) && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground bg-secondary/20 px-3 py-2 rounded-md">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {progressiveStatus || 'Processing classification...'}
+              <div className="space-y-3 mt-4">
+                <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                      Processing Classification
+                    </h4>
+                    <Badge variant="outline" className="bg-blue-100 dark:bg-blue-900 text-xs">
+                      In Progress
+                    </Badge>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    {/* Classification Phase */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-blue-700 dark:text-blue-300">AI Classification</span>
+                        <span className="text-blue-600 dark:text-blue-400">
+                          {progressiveStatus?.includes('Classification complete') ? '✓ Complete' : 'Processing...'}
+                        </span>
+                      </div>
+                      <Progress 
+                        value={progressiveStatus?.includes('Classification complete') ? 100 : 50} 
+                        className="h-2"
+                      />
+                    </div>
+                    
+                    {/* Google Address Phase */}
+                    {toolToggles.googleAddress && (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className={progressiveStatus?.includes('address') 
+                            ? "text-blue-700 dark:text-blue-300" 
+                            : "text-gray-600 dark:text-gray-400"}>
+                            Address Validation
+                          </span>
+                          <span className={progressiveStatus?.includes('address') 
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-gray-500 dark:text-gray-500"}>
+                            {progressiveStatus?.includes('Address validation complete') ? '✓ Complete' :
+                             progressiveStatus?.includes('address') ? 'Processing...' : 'Pending'}
+                          </span>
+                        </div>
+                        <Progress 
+                          value={progressiveStatus?.includes('Address validation complete') ? 100 :
+                                progressiveStatus?.includes('address') ? 50 : 0} 
+                          className="h-2"
+                        />
+                      </div>
+                    )}
+                    
+                    {/* Finexio Phase */}
+                    {toolToggles.finexio && (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className={progressiveStatus?.includes('Finexio') 
+                            ? "text-blue-700 dark:text-blue-300" 
+                            : "text-gray-600 dark:text-gray-400"}>
+                            Finexio Matching
+                          </span>
+                          <span className={progressiveStatus?.includes('Finexio') 
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-gray-500 dark:text-gray-500"}>
+                            {progressiveStatus?.includes('Finexio complete') ? '✓ Complete' :
+                             progressiveStatus?.includes('Finexio') ? 'Processing...' : 'Pending'}
+                          </span>
+                        </div>
+                        <Progress 
+                          value={progressiveStatus?.includes('Finexio complete') ? 100 :
+                                progressiveStatus?.includes('Finexio') ? 50 : 0} 
+                          className="h-2"
+                        />
+                      </div>
+                    )}
+                    
+                    {/* Mastercard Phase */}
+                    {toolToggles.mastercard && (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className={progressiveStatus?.includes('Mastercard') || pendingMastercardSearchId
+                            ? "text-blue-700 dark:text-blue-300" 
+                            : "text-gray-600 dark:text-gray-400"}>
+                            Mastercard Enrichment
+                          </span>
+                          <span className={progressiveStatus?.includes('Mastercard') || pendingMastercardSearchId
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-gray-500 dark:text-gray-500"}>
+                            {progressiveStatus?.includes('Mastercard complete') ? '✓ Complete' :
+                             (progressiveStatus?.includes('Mastercard') || pendingMastercardSearchId) ? 'Processing...' : 'Pending'}
+                          </span>
+                        </div>
+                        <Progress 
+                          value={progressiveStatus?.includes('Mastercard complete') ? 100 :
+                                (progressiveStatus?.includes('Mastercard') || pendingMastercardSearchId) ? 50 : 0} 
+                          className="h-2"
+                        />
+                      </div>
+                    )}
+                    
+                    {/* Akkio Phase */}
+                    {toolToggles.akkio && (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className={progressiveStatus?.includes('Akkio') 
+                            ? "text-blue-700 dark:text-blue-300" 
+                            : "text-gray-600 dark:text-gray-400"}>
+                            Akkio Prediction
+                          </span>
+                          <span className={progressiveStatus?.includes('Akkio') 
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-gray-500 dark:text-gray-500"}>
+                            {progressiveStatus?.includes('Akkio complete') ? '✓ Complete' :
+                             progressiveStatus?.includes('Akkio') ? 'Processing...' : 'Pending'}
+                          </span>
+                        </div>
+                        <Progress 
+                          value={progressiveStatus?.includes('Akkio complete') ? 100 :
+                                progressiveStatus?.includes('Akkio') ? 50 : 0} 
+                          className="h-2"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="mt-3 text-xs text-blue-700 dark:text-blue-300">
+                    {progressiveStatus || 'Initializing classification...'}
+                  </div>
+                </div>
               </div>
             )}
             
@@ -623,13 +756,62 @@ export function SingleClassification() {
 
       {/* Status Tiles */}
       {result && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {/* Classification Status */}
-          <Card className="animate-fade-in-up">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Brain className="h-4 w-4 text-blue-600" />
-                Classification
+        <div className="space-y-4">
+          {/* Processing Complete Banner */}
+          <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-4 border border-green-200 dark:border-green-800 animate-fade-in-up">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                <h4 className="text-sm font-medium text-green-900 dark:text-green-100">
+                  Classification Complete
+                </h4>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {result.classification && (
+                  <Badge variant="outline" className="bg-green-100 dark:bg-green-900 text-xs">
+                    ✓ {result.classification}
+                  </Badge>
+                )}
+                {result.bigQueryMatch?.finexioSupplier && (
+                  <Badge variant="outline" className={
+                    (result.bigQueryMatch.finexioSupplier.finexioMatchScore >= 84 || 
+                     result.bigQueryMatch.finexioSupplier.confidence >= 84)
+                    ? "bg-purple-100 dark:bg-purple-900 text-xs"
+                    : "bg-orange-100 dark:bg-orange-900 text-xs"
+                  }>
+                    {(result.bigQueryMatch.finexioSupplier.finexioMatchScore >= 84 || 
+                      result.bigQueryMatch.finexioSupplier.confidence >= 84)
+                      ? '✓ Finexio Match' 
+                      : `Finexio ${Math.round(result.bigQueryMatch.finexioSupplier.finexioMatchScore || result.bigQueryMatch.finexioSupplier.confidence || 0)}%`}
+                  </Badge>
+                )}
+                {result.mastercardEnrichment?.searchCompleted && (
+                  <Badge variant="outline" className="bg-indigo-100 dark:bg-indigo-900 text-xs">
+                    ✓ Mastercard
+                  </Badge>
+                )}
+                {(result.addressValidation?.status === 'validated' || result.googleAddressValidation?.success) && (
+                  <Badge variant="outline" className="bg-blue-100 dark:bg-blue-900 text-xs">
+                    ✓ Address Valid
+                  </Badge>
+                )}
+                {result.akkioPrediction && (
+                  <Badge variant="outline" className="bg-cyan-100 dark:bg-cyan-900 text-xs">
+                    ✓ Akkio
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+          
+          {/* Status Tiles Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Classification Status */}
+            <Card className="animate-fade-in-up">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Brain className="h-4 w-4 text-blue-600" />
+                  Classification
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
@@ -743,6 +925,7 @@ export function SingleClassification() {
               )}
             </CardContent>
           </Card>
+        </div>
         </div>
       )}
 
