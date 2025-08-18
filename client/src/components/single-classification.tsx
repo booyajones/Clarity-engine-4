@@ -654,14 +654,25 @@ export function SingleClassification() {
             </CardHeader>
             <CardContent className="pt-0">
               <Badge 
-                variant={result.bigQueryMatch?.matched || result.finexioMatch?.matched ? 'default' : 'secondary'} 
+                variant={
+                  (result.bigQueryMatch?.finexioSupplier?.finexioMatchScore >= 84 || 
+                   result.bigQueryMatch?.finexioSupplier?.confidence >= 84 ||
+                   result.bigQueryMatch?.matched || 
+                   result.finexioMatch?.matched) ? 'default' : 
+                  result.bigQueryMatch?.finexioSupplier ? 'outline' : 'secondary'
+                } 
                 className="w-full justify-center"
               >
-                {(result.bigQueryMatch?.matched || result.finexioMatch?.matched) ? '✓ Matched' : '✗ No Match'}
+                {(result.bigQueryMatch?.finexioSupplier?.finexioMatchScore >= 84 || 
+                  result.bigQueryMatch?.finexioSupplier?.confidence >= 84 ||
+                  result.bigQueryMatch?.matched || 
+                  result.finexioMatch?.matched) ? '✓ Matched' : 
+                 result.bigQueryMatch?.finexioSupplier ? `${Math.round(result.bigQueryMatch.finexioSupplier.finexioMatchScore || result.bigQueryMatch.finexioSupplier.confidence || 0)}% Score` : 
+                 '✗ No Match'}
               </Badge>
-              {(result.bigQueryMatch?.finexioSupplier?.paymentMethodDefault || result.finexioMatch?.paymentType) && (
+              {(result.bigQueryMatch?.finexioSupplier?.paymentType || result.finexioMatch?.paymentType) && (
                 <p className="text-xs text-muted-foreground mt-2 text-center">
-                  {result.bigQueryMatch?.finexioSupplier?.paymentMethodDefault || result.finexioMatch?.paymentType}
+                  {result.bigQueryMatch?.finexioSupplier?.paymentType || result.finexioMatch?.paymentType}
                 </p>
               )}
             </CardContent>
@@ -799,51 +810,72 @@ export function SingleClassification() {
               </p>
             </div>
 
-            {/* Finexio Match - Show if confidence is 85% or higher */}
+            {/* Finexio Match - Show ALL scores, mark >= 84% as matches */}
             {result.bigQueryMatch && result.bigQueryMatch.finexioSupplier && (
               <div className={`p-4 rounded-lg space-y-3 border ${
-                (result.bigQueryMatch.finexioSupplier.finexioMatchScore >= 85 || result.bigQueryMatch.finexioSupplier.confidence >= 85)
+                (result.bigQueryMatch.finexioSupplier.finexioMatchScore >= 84 || result.bigQueryMatch.finexioSupplier.confidence >= 84)
                   ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800' 
-                  : 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800'
+                  : 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800'
               }`}>
                 <div className="flex items-center justify-between">
                   <p className={`text-sm font-medium ${
-                    (result.bigQueryMatch.finexioSupplier.finexioMatchScore >= 85 || result.bigQueryMatch.finexioSupplier.confidence >= 85)
+                    (result.bigQueryMatch.finexioSupplier.finexioMatchScore >= 84 || result.bigQueryMatch.finexioSupplier.confidence >= 84)
                       ? 'text-purple-800 dark:text-purple-200' 
-                      : 'text-gray-600 dark:text-gray-400'
+                      : 'text-orange-700 dark:text-orange-300'
                   }`}>
-                    {(result.bigQueryMatch.finexioSupplier.finexioMatchScore >= 85 || result.bigQueryMatch.finexioSupplier.confidence >= 85) ? '✓ Finexio Network Match' : 'Finexio Network - Below Threshold'}
+                    {(result.bigQueryMatch.finexioSupplier.finexioMatchScore >= 84 || result.bigQueryMatch.finexioSupplier.confidence >= 84) 
+                      ? '✓ Finexio Network Match' 
+                      : '⚠ Finexio Score Below 84% Threshold'}
                   </p>
                   <Badge className={
-                    (result.bigQueryMatch.finexioSupplier.finexioMatchScore >= 85 || result.bigQueryMatch.finexioSupplier.confidence >= 85)
+                    (result.bigQueryMatch.finexioSupplier.finexioMatchScore >= 84 || result.bigQueryMatch.finexioSupplier.confidence >= 84)
                       ? 'bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-100' 
-                      : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100'
+                      : 'bg-orange-100 text-orange-800 dark:bg-orange-800 dark:text-orange-100'
                   }>
-                    {Math.round(result.bigQueryMatch.finexioSupplier.finexioMatchScore || result.bigQueryMatch.finexioSupplier.confidence || 0)}% Match
+                    {Math.round(result.bigQueryMatch.finexioSupplier.finexioMatchScore || result.bigQueryMatch.finexioSupplier.confidence || 0)}% Score
                   </Badge>
                 </div>
-                {(result.bigQueryMatch.finexioSupplier.finexioMatchScore >= 85 || result.bigQueryMatch.finexioSupplier.confidence >= 85) ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <label className="text-xs font-medium text-purple-700 dark:text-purple-300">Supplier Name</label>
-                      <p className="text-purple-900 dark:text-purple-100">{result.bigQueryMatch.finexioSupplier.name}</p>
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-purple-700 dark:text-purple-300">Payment Type</label>
-                      <p className="text-purple-900 dark:text-purple-100">{result.bigQueryMatch.finexioSupplier.paymentType}</p>
-                    </div>
-                    <div className="col-span-2">
-                      <label className="text-xs font-medium text-purple-700 dark:text-purple-300">Match Reasoning</label>
-                      <p className="text-purple-900 dark:text-purple-100 text-xs bg-purple-100/50 dark:bg-purple-800/50 p-2 rounded mt-1">
-                        {result.bigQueryMatch.finexioSupplier.matchReasoning}
-                      </p>
-                    </div>
+                {/* Always show match details regardless of score */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <label className={`text-xs font-medium ${
+                      (result.bigQueryMatch.finexioSupplier.finexioMatchScore >= 84 || result.bigQueryMatch.finexioSupplier.confidence >= 84)
+                        ? 'text-purple-700 dark:text-purple-300'
+                        : 'text-orange-700 dark:text-orange-300'
+                    }`}>Supplier Name</label>
+                    <p className={
+                      (result.bigQueryMatch.finexioSupplier.finexioMatchScore >= 84 || result.bigQueryMatch.finexioSupplier.confidence >= 84)
+                        ? 'text-purple-900 dark:text-purple-100'
+                        : 'text-orange-900 dark:text-orange-100'
+                    }>{result.bigQueryMatch.finexioSupplier.name}</p>
                   </div>
-                ) : (
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    {result.bigQueryMatch.finexioSupplier.matchReasoning}
+                  <div>
+                    <label className={`text-xs font-medium ${
+                      (result.bigQueryMatch.finexioSupplier.finexioMatchScore >= 84 || result.bigQueryMatch.finexioSupplier.confidence >= 84)
+                        ? 'text-purple-700 dark:text-purple-300'
+                        : 'text-orange-700 dark:text-orange-300'
+                    }`}>Payment Type</label>
+                    <p className={
+                      (result.bigQueryMatch.finexioSupplier.finexioMatchScore >= 84 || result.bigQueryMatch.finexioSupplier.confidence >= 84)
+                        ? 'text-purple-900 dark:text-purple-100'
+                        : 'text-orange-900 dark:text-orange-100'
+                    }>{result.bigQueryMatch.finexioSupplier.paymentType}</p>
                   </div>
-                )}
+                  <div className="col-span-2">
+                    <label className={`text-xs font-medium ${
+                      (result.bigQueryMatch.finexioSupplier.finexioMatchScore >= 84 || result.bigQueryMatch.finexioSupplier.confidence >= 84)
+                        ? 'text-purple-700 dark:text-purple-300'
+                        : 'text-orange-700 dark:text-orange-300'
+                    }`}>Match Reasoning</label>
+                    <p className={`text-xs p-2 rounded mt-1 ${
+                      (result.bigQueryMatch.finexioSupplier.finexioMatchScore >= 84 || result.bigQueryMatch.finexioSupplier.confidence >= 84)
+                        ? 'text-purple-900 dark:text-purple-100 bg-purple-100/50 dark:bg-purple-800/50'
+                        : 'text-orange-900 dark:text-orange-100 bg-orange-100/50 dark:bg-orange-800/50'
+                    }`}>
+                      {result.bigQueryMatch.finexioSupplier.matchReasoning}
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
 

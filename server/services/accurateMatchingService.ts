@@ -7,7 +7,8 @@ import type { CachedSupplier } from '@shared/schema';
  * Implements sophisticated matching algorithms with strict confidence thresholds
  */
 export class AccurateMatchingService {
-  private readonly MIN_CONFIDENCE_THRESHOLD = 0.85; // Only return matches above 85%
+  private readonly MIN_CONFIDENCE_THRESHOLD = 0.84; // Consider matches at 84% or higher
+  private readonly MIN_DISPLAY_THRESHOLD = 0.60; // Show all matches above 60% for transparency
   private readonly EXACT_MATCH_SCORE = 1.0;
   private readonly PREFIX_MATCH_SCORE = 0.95;
   private readonly CONTAINS_MATCH_SCORE = 0.7;
@@ -131,12 +132,75 @@ export class AccurateMatchingService {
       }
     }
     
-    // No good matches found
-    console.log(`[AccurateMatching] No high-confidence matches found for "${payeeName}"`);
+    // Stage 5: Return ALL scored matches above display threshold for transparency
+    // Even if no matches meet the 84% threshold, we still show the best attempts
+    const allScoredMatches: Array<{
+      supplier: CachedSupplier;
+      score: number;
+      matchType: string;
+      reasoning: string;
+    }> = [];
+    
+    // Re-collect all matches with scores for display
+    if (prefixMatches.length > 0) {
+      prefixMatches.forEach(supplier => {
+        const supplierName = supplier.payeeName || supplier.payee_name || '';
+        const lengthRatio = supplierName ? cleanInput.length / supplierName.length : 0;
+        const score = this.PREFIX_MATCH_SCORE * Math.max(0.8, lengthRatio);
+        if (score >= this.MIN_DISPLAY_THRESHOLD) {
+          allScoredMatches.push({
+            supplier,
+            score,
+            matchType: 'prefix',
+            reasoning: `Name starts with "${cleanInput}" (${Math.round(score * 100)}% confidence)`
+          });
+        }
+      });
+    }
+    
+    if (smartMatches.length > 0) {
+      smartMatches.forEach(supplier => {
+        const supplierName = supplier.payeeName || supplier.payee_name || '';
+        const score = this.calculateSmartMatchScore(cleanInput, supplierName);
+        if (score >= this.MIN_DISPLAY_THRESHOLD) {
+          allScoredMatches.push({
+            supplier,
+            score,
+            matchType: 'smart_partial',
+            reasoning: `Smart match for "${cleanInput}" (${Math.round(score * 100)}% confidence)`
+          });
+        }
+      });
+    }
+    
+    if (containsMatches.length > 0) {
+      containsMatches.forEach(supplier => {
+        const supplierName = supplier.payeeName || supplier.payee_name || '';
+        const score = this.calculateContainsScore(cleanInput, supplierName);
+        if (score >= this.MIN_DISPLAY_THRESHOLD) {
+          allScoredMatches.push({
+            supplier,
+            score,
+            matchType: 'contains',
+            reasoning: `Partial match for "${cleanInput}" (${Math.round(score * 100)}% confidence)`
+          });
+        }
+      });
+    }
+    
+    // Sort by score and take top results
+    allScoredMatches.sort((a, b) => b.score - a.score);
+    const topMatches = allScoredMatches.slice(0, limit);
+    
+    // Best match is only considered if it meets the 84% threshold
+    const bestMatch = topMatches.find(m => m.score >= this.MIN_CONFIDENCE_THRESHOLD);
+    
+    console.log(`[AccurateMatching] Found ${topMatches.length} scored matches, ${topMatches.filter(m => m.score >= this.MIN_CONFIDENCE_THRESHOLD).length} meet 84% threshold`);
+    
     return {
-      matches: [],
-      bestMatch: null,
-      confidence: 0
+      matches: topMatches,
+      bestMatch: bestMatch ? bestMatch.supplier : null,
+      confidence: bestMatch ? bestMatch.score : (topMatches.length > 0 ? topMatches[0].score : 0)
     };
   }
   
