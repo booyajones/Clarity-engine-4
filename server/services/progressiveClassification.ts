@@ -273,13 +273,24 @@ export class ProgressiveClassificationService {
       if (options.enableMastercard) {
         job.stage = 'mastercard';
         job.updatedAt = Date.now();
-        console.log(`Job ${jobId}: Starting Mastercard search...`);
         
-        try {
-          const mastercardApi = new MastercardApiService();
+        // Skip Mastercard enrichment if payee name is null or empty
+        if (!payeeName || payeeName.trim() === '') {
+          console.log(`Job ${jobId}: Skipping Mastercard - no payee name available`);
+          job.result.mastercardEnrichment = {
+            enriched: false,
+            status: 'error',
+            error: 'No payee name available for Mastercard enrichment',
+            message: 'Cannot enrich without a payee name'
+          };
+        } else {
+          console.log(`Job ${jobId}: Starting Mastercard search for "${payeeName}"...`);
           
-          // Check if the service is configured
-          if (mastercardApi.isServiceConfigured()) {
+          try {
+            const mastercardApi = new MastercardApiService();
+            
+            // Check if the service is configured
+            if (mastercardApi.isServiceConfigured()) {
             // Use the best available address - prioritize validated address if available
             let bestAddress = job.result.address;
             let addressDetails: any = {
@@ -354,14 +365,15 @@ export class ProgressiveClassificationService {
               message: 'Mastercard service not configured'
             };
           }
-        } catch (error) {
-          console.error(`Job ${jobId}: Mastercard search error:`, error);
-          job.result.mastercardEnrichment = {
-            enriched: false,
-            status: 'error',
-            error: (error as Error).message,
-            message: 'Mastercard search failed'
-          };
+          } catch (error) {
+            console.error(`Job ${jobId}: Mastercard search error:`, error);
+            job.result.mastercardEnrichment = {
+              enriched: false,
+              status: 'error',
+              error: (error as Error).message,
+              message: 'Mastercard search failed'
+            };
+          }
         }
       }
       
