@@ -2032,8 +2032,9 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
   app.post("/api/classifications/batch/:batchId/enrich-mastercard", async (req, res) => {
     try {
       const batchId = parseInt(req.params.batchId);
+      const { fullBatch } = req.body; // Allow full batch processing
       
-      console.log(`📍 Manual Mastercard enrichment triggered for batch ${batchId}`);
+      console.log(`📍 Manual Mastercard enrichment triggered for batch ${batchId}${fullBatch ? ' (FULL BATCH)' : ''}`);
       
       // Get business classifications
       const businessClassifications = await storage.getBusinessClassificationsForEnrichment(batchId);
@@ -2050,8 +2051,9 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
       // Import the optimized batch service
       const { mastercardBatchOptimizedService } = await import('./services/mastercardBatchOptimized');
       
-      // Prepare payees for enrichment
-      const payeesForEnrichment = businessClassifications.slice(0, 3).map(c => ({
+      // Prepare payees for enrichment - process all or just 3 based on fullBatch flag
+      const recordsToProcess = fullBatch ? businessClassifications : businessClassifications.slice(0, 3);
+      const payeesForEnrichment = recordsToProcess.map(c => ({
         id: c.id.toString(),
         name: c.cleanedName || c.originalName,
         address: c.address || undefined,
@@ -2060,7 +2062,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
         zipCode: c.zipCode || undefined,
       }));
       
-      console.log('Testing with first 3 payees:', payeesForEnrichment.map(p => p.name));
+      console.log(`Processing ${payeesForEnrichment.length} payees${fullBatch ? ' (full batch)' : ' (test mode)'}`);
       
       // Run enrichment
       const enrichmentResults = await mastercardBatchOptimizedService.enrichBatch(payeesForEnrichment);
@@ -2073,7 +2075,8 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
       res.json({ 
         success: true, 
         message: `Enriched ${enrichmentResults.size} records`,
-        results: Array.from(enrichmentResults.entries()).map(([id, result]) => ({
+        totalProcessed: payeesForEnrichment.length,
+        results: Array.from(enrichmentResults.entries()).slice(0, 10).map(([id, result]) => ({
           id,
           enriched: result.enriched,
           status: result.status,
