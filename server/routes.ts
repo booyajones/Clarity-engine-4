@@ -1091,11 +1091,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           clarity_mastercard_data_quality_level: c.mastercardDataQualityLevel || "",
           clarity_mastercard_source: c.mastercardSource || "",
           // BigQuery/Finexio enrichment fields
-          clarity_finexio_match_score: firstMatch?.finexioMatchScore ? Math.round(firstMatch.finexioMatchScore) + "%" : "",
+          clarity_finexio_match_score: firstMatch?.finexioMatchScore ? Math.round(firstMatch.finexioMatchScore) + "%" : "0%",
+          clarity_finexio_match_status: (firstMatch?.finexioMatchScore || 0) >= 85 ? "Match" : "No Match",
           clarity_finexio_match_name: firstMatch?.bigQueryPayeeName || "",
-          clarity_finexio_match_type: firstMatch?.matchType || "",
+          clarity_finexio_match_methodology: firstMatch?.matchType === 'exact' ? 'Deterministic' :
+            firstMatch?.matchType === 'ai_enhanced' ? 'AI Enhanced (OpenAI)' :
+            firstMatch?.matchType === 'prefix' ? 'Deterministic Prefix' :
+            firstMatch?.matchType === 'smart_partial' ? 'Smart Partial' :
+            firstMatch?.matchType === 'contains' ? 'Contains' :
+            firstMatch?.matchType || "",
           clarity_payment_type: firstMatch ? (firstMatch.matchDetails as any)?.paymentType || "" : "",
-          clarity_match_reasoning: firstMatch?.matchReasoning || "",
+          clarity_finexio_match_reasoning: firstMatch?.matchReasoning || (firstMatch ? "" : "No matching supplier found in Finexio network"),
           // Google Address Validation fields  
           clarity_google_validation_status: c.googleAddressValidationStatus || "",
           clarity_google_confidence: c.googleAddressConfidence ? Math.round(c.googleAddressConfidence * 100) + "%" : "",

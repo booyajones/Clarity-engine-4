@@ -312,7 +312,8 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
 
     const headers = [
       "Original Name", "Cleaned Name", "Type", "Confidence", "Excluded", "Exclusion Keyword", 
-      "SIC Code", "SIC Description", "Finexio Match Score", "Finexio Match Name", "Finexio Match Type",
+      "SIC Code", "SIC Description", 
+      "Finexio Match Score", "Finexio Match Status", "Finexio Match Name", "Finexio Match Methodology", "Finexio Match Reasoning",
       "Address", "City", "State", "ZIP", "Reasoning",
       // Mastercard enrichment fields
       "MC Status", "MC Business Name", "MC Tax ID", "MC MCC Code", "MC MCC Description",
@@ -333,8 +334,15 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
         `"${classification.sicCode || ""}"`,
         `"${classification.sicDescription || ""}"`,
         `"${classification.payeeMatches?.[0]?.finexioMatchScore || 0}%"`,
+        `"${(classification.payeeMatches?.[0]?.finexioMatchScore || 0) >= 85 ? 'Match' : 'No Match'}"`,
         `"${classification.payeeMatches?.[0]?.bigQueryPayeeName || ""}"`,
-        `"${classification.payeeMatches?.[0]?.matchType || ""}"`,
+        `"${classification.payeeMatches?.[0]?.matchType === 'exact' ? 'Deterministic' : 
+            classification.payeeMatches?.[0]?.matchType === 'ai_enhanced' ? 'AI Enhanced (OpenAI)' :
+            classification.payeeMatches?.[0]?.matchType === 'prefix' ? 'Deterministic Prefix' :
+            classification.payeeMatches?.[0]?.matchType === 'smart_partial' ? 'Smart Partial' :
+            classification.payeeMatches?.[0]?.matchType === 'contains' ? 'Contains' :
+            classification.payeeMatches?.[0]?.matchType || ''}"`,
+        `"${classification.payeeMatches?.[0]?.matchReasoning || ''}"`,
         `"${classification.address || ""}"`,
         `"${classification.city || ""}"`,
         `"${classification.state || ""}"`,
@@ -1075,24 +1083,37 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                         <div className="flex flex-col items-start">
                           {classification.payeeMatches?.[0] ? (
                             <>
-                              <span className={`text-sm font-medium ${
-                                classification.payeeMatches[0].finexioMatchScore >= 90 ? 'text-green-600' :
-                                classification.payeeMatches[0].finexioMatchScore >= 70 ? 'text-yellow-600' :
-                                'text-red-600'
-                              }`}>
-                                {classification.payeeMatches[0].finexioMatchScore}%
-                              </span>
+                              <div className="flex items-center gap-1">
+                                <span className={`text-sm font-medium ${
+                                  classification.payeeMatches[0].finexioMatchScore >= 85 ? 'text-green-600' :
+                                  classification.payeeMatches[0].finexioMatchScore >= 70 ? 'text-yellow-600' :
+                                  'text-orange-600'
+                                }`}>
+                                  {classification.payeeMatches[0].finexioMatchScore}%
+                                </span>
+                                <Badge variant={classification.payeeMatches[0].finexioMatchScore >= 85 ? "default" : "secondary"} className="text-xs">
+                                  {classification.payeeMatches[0].finexioMatchScore >= 85 ? 'Match' : 'No Match'}
+                                </Badge>
+                              </div>
                               <span className="text-xs text-gray-500 truncate max-w-[150px]" title={classification.payeeMatches[0].bigQueryPayeeName}>
                                 {classification.payeeMatches[0].bigQueryPayeeName}
                               </span>
-                              {classification.payeeMatches[0].paymentType && (
+                              {classification.payeeMatches[0].matchType && (
                                 <Badge variant="outline" className="text-xs mt-1">
-                                  {classification.payeeMatches[0].paymentType}
+                                  {classification.payeeMatches[0].matchType === 'exact' ? 'Deterministic' :
+                                   classification.payeeMatches[0].matchType === 'ai_enhanced' ? 'AI Enhanced' :
+                                   classification.payeeMatches[0].matchType}
                                 </Badge>
                               )}
                             </>
                           ) : (
-                            <span className="text-sm text-gray-400">No match</span>
+                            <div className="flex flex-col">
+                              <div className="flex items-center gap-1">
+                                <span className="text-sm font-medium text-gray-500">0%</span>
+                                <Badge variant="secondary" className="text-xs">No Match</Badge>
+                              </div>
+                              <span className="text-xs text-gray-400">No supplier found</span>
+                            </div>
                           )}
                         </div>
                       </TableCell>
@@ -1267,7 +1288,7 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                   
                                   return (
                                     <div className={`p-4 rounded-lg space-y-3 border ${
-                                      finexioScore >= 84
+                                      finexioScore >= 85
                                         ? 'bg-green-50 border-green-200'
                                         : finexioScore > 0
                                         ? 'bg-orange-50 border-orange-200'
@@ -1276,14 +1297,14 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                       <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                           <Building2 className={`h-5 w-5 ${
-                                            finexioScore >= 84
+                                            finexioScore >= 85
                                               ? 'text-green-700'
                                               : finexioScore > 0
                                               ? 'text-orange-700'
                                               : 'text-gray-700'
                                           }`} />
                                           <label className={`text-sm font-medium ${
-                                            finexioScore >= 84
+                                            finexioScore >= 85
                                               ? 'text-green-900'
                                               : finexioScore > 0
                                               ? 'text-orange-900'
@@ -1291,13 +1312,13 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                           }`}>Finexio Supplier Match</label>
                                         </div>
                                         <Badge className={`text-xs ${
-                                          finexioScore >= 84
+                                          finexioScore >= 85
                                             ? 'bg-green-100 text-green-800'
                                             : finexioScore > 0
                                             ? 'bg-orange-100 text-orange-800'
                                             : 'bg-gray-100 text-gray-800'
                                         }`}>
-                                          {finexioScore >= 84
+                                          {finexioScore >= 85
                                             ? `✓ Matched - ${finexioScore}%`
                                             : finexioScore > 0
                                             ? `Below Threshold - ${finexioScore}%`
@@ -1310,12 +1331,12 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                         <div>
                                           <label className={`text-xs font-medium ${
                                             finexioScore > 0
-                                              ? finexioScore >= 84 ? 'text-green-700' : 'text-orange-700'
+                                              ? finexioScore >= 85 ? 'text-green-700' : 'text-orange-700'
                                               : 'text-gray-700'
                                           }`}>Searched For</label>
                                           <p className={`${
                                             finexioScore > 0
-                                              ? finexioScore >= 84 ? 'text-green-900' : 'text-orange-900'
+                                              ? finexioScore >= 85 ? 'text-green-900' : 'text-orange-900'
                                               : 'text-gray-900'
                                           }`}>{selectedClassification.cleanedName}</p>
                                         </div>
@@ -1324,14 +1345,14 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                         <div>
                                           <label className={`text-xs font-medium ${
                                             finexioScore > 0
-                                              ? finexioScore >= 84 ? 'text-green-700' : 'text-orange-700'
+                                              ? finexioScore >= 85 ? 'text-green-700' : 'text-orange-700'
                                               : 'text-gray-700'
                                           }`}>Match Confidence</label>
                                           <div className="flex items-center gap-2 mt-1">
                                             <div className="flex-1 bg-gray-200 rounded-full h-2">
                                               <div 
                                                 className={`h-2 rounded-full transition-all duration-300 ${
-                                                  finexioScore >= 84
+                                                  finexioScore >= 85
                                                     ? 'bg-gradient-to-r from-green-500 to-green-600'
                                                     : finexioScore > 0
                                                     ? 'bg-gradient-to-r from-orange-400 to-orange-500'
@@ -1341,7 +1362,7 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                               />
                                             </div>
                                             <span className={`text-sm font-medium ${
-                                              finexioScore >= 84
+                                              finexioScore >= 85
                                                 ? 'text-green-800'
                                                 : finexioScore > 0
                                                 ? 'text-orange-800'
@@ -1350,9 +1371,9 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                               {finexioScore}%
                                             </span>
                                           </div>
-                                          {finexioScore < 84 && finexioScore > 0 && (
+                                          {finexioScore < 85 && finexioScore > 0 && (
                                             <p className="text-xs text-orange-700 mt-1">
-                                              Minimum 84% required for a valid match
+                                              Minimum 85% required for a valid match
                                             </p>
                                           )}
                                         </div>
@@ -1362,31 +1383,38 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                       <>
                                         <div>
                                           <label className={`text-xs font-medium ${
-                                            selectedClassification.payeeMatches[0].finexioMatchScore >= 84 ? 'text-green-700' : 'text-orange-700'
+                                            selectedClassification.payeeMatches[0].finexioMatchScore >= 85 ? 'text-green-700' : 'text-orange-700'
                                           }`}>Matched Supplier</label>
                                           <p className={`font-medium ${
-                                            selectedClassification.payeeMatches[0].finexioMatchScore >= 84 ? 'text-green-900' : 'text-orange-900'
+                                            selectedClassification.payeeMatches[0].finexioMatchScore >= 85 ? 'text-green-900' : 'text-orange-900'
                                           }`}>{selectedClassification.payeeMatches[0].bigQueryPayeeName}</p>
                                         </div>
                                         
                                         {selectedClassification.payeeMatches[0].matchType && (
                                           <div>
                                             <label className={`text-xs font-medium ${
-                                              selectedClassification.payeeMatches[0].finexioMatchScore >= 84 ? 'text-green-700' : 'text-orange-700'
-                                            }`}>Match Type</label>
+                                              selectedClassification.payeeMatches[0].finexioMatchScore >= 85 ? 'text-green-700' : 'text-orange-700'
+                                            }`}>Match Methodology</label>
                                             <p className={`${
-                                              selectedClassification.payeeMatches[0].finexioMatchScore >= 84 ? 'text-green-900' : 'text-orange-900'
-                                            }`}>{selectedClassification.payeeMatches[0].matchType}</p>
+                                              selectedClassification.payeeMatches[0].finexioMatchScore >= 85 ? 'text-green-900' : 'text-orange-900'
+                                            }`}>
+                                              {selectedClassification.payeeMatches[0].matchType === 'exact' ? 'Deterministic Match' :
+                                               selectedClassification.payeeMatches[0].matchType === 'ai_enhanced' ? 'AI Enhanced (OpenAI Fallback)' :
+                                               selectedClassification.payeeMatches[0].matchType === 'prefix' ? 'Deterministic Prefix Match' :
+                                               selectedClassification.payeeMatches[0].matchType === 'smart_partial' ? 'Smart Partial Match' :
+                                               selectedClassification.payeeMatches[0].matchType === 'contains' ? 'Contains Match' :
+                                               selectedClassification.payeeMatches[0].matchType}
+                                            </p>
                                           </div>
                                         )}
                                         
                                         {selectedClassification.payeeMatches[0].matchReasoning && (
                                           <div>
                                             <label className={`text-xs font-medium ${
-                                              selectedClassification.payeeMatches[0].finexioMatchScore >= 84 ? 'text-green-700' : 'text-orange-700'
+                                              selectedClassification.payeeMatches[0].finexioMatchScore >= 85 ? 'text-green-700' : 'text-orange-700'
                                             }`}>Match Reasoning</label>
                                             <div className={`p-2 rounded text-xs mt-1 ${
-                                              selectedClassification.payeeMatches[0].finexioMatchScore >= 84 
+                                              selectedClassification.payeeMatches[0].finexioMatchScore >= 85 
                                                 ? 'bg-green-100 text-green-800'
                                                 : 'bg-orange-100 text-orange-800'
                                             }`}>
@@ -1401,10 +1429,10 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                     {!selectedClassification.payeeMatches && selectedClassification.matchReasoning && (
                                       <div>
                                         <label className={`text-xs font-medium ${
-                                          selectedClassification.finexioMatchScore && selectedClassification.finexioMatchScore >= 84 ? 'text-green-700' : 'text-orange-700'
+                                          selectedClassification.finexioMatchScore && selectedClassification.finexioMatchScore >= 85 ? 'text-green-700' : 'text-orange-700'
                                         }`}>Match Reasoning</label>
                                         <div className={`p-2 rounded text-xs mt-1 ${
-                                          selectedClassification.finexioMatchScore && selectedClassification.finexioMatchScore >= 84 
+                                          selectedClassification.finexioMatchScore && selectedClassification.finexioMatchScore >= 85 
                                             ? 'bg-green-100 text-green-800'
                                             : 'bg-orange-100 text-orange-800'
                                         }`}>

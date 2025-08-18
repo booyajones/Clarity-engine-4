@@ -178,12 +178,12 @@ export class DatabaseStorage implements IStorage {
     // Calculate Finexio match percentage based on actual data
     for (const batch of batches) {
       if (batch.processedRecords > 0) {
-        // Get count of records with VALID Finexio matches (>=84% confidence)
+        // Get count of records with VALID Finexio matches (>=85% confidence threshold)
         const result = await db.execute(sql`
           SELECT COUNT(DISTINCT pm.classification_id) as matched_count
           FROM payee_matches pm
           JOIN payee_classifications pc ON pm.classification_id = pc.id
-          WHERE pc.batch_id = ${batch.id} AND pm.finexio_match_score >= 84
+          WHERE pc.batch_id = ${batch.id} AND pm.finexio_match_score >= 85
         `);
         
         const matchedCount = parseInt(result.rows[0]?.matched_count || '0');
