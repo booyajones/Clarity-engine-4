@@ -127,7 +127,7 @@ export default function Home() {
     enableFinexio: true,
     enableMastercard: true,
     enableGoogleAddressValidation: false,
-    enableAddressNormalization: true,
+    enableAddressNormalization: true, // Always enabled, no toggle needed
     enableAkkio: false,
   });
   const [addressColumns, setAddressColumns] = useState({
@@ -1390,24 +1390,6 @@ export default function Home() {
                         className="data-[state=checked]:bg-purple-600"
                       />
                     </div>
-                    {matchingOptions.enableGoogleAddressValidation && (
-                      <div className="flex items-center justify-between pl-6 opacity-90">
-                        <div className="flex items-center gap-2">
-                          <Sparkles className="h-3 w-3 text-purple-600" />
-                          <Label htmlFor="address-norm-toggle" className="text-xs cursor-pointer">
-                            Smart Address Enhancement
-                          </Label>
-                        </div>
-                        <Switch
-                          id="address-norm-toggle"
-                          checked={matchingOptions.enableAddressNormalization}
-                          onCheckedChange={(checked) =>
-                            setMatchingOptions((prev) => ({ ...prev, enableAddressNormalization: checked }))
-                          }
-                          className="data-[state=checked]:bg-purple-600 scale-90"
-                        />
-                      </div>
-                    )}
                   </div>
                 </div>
                 

@@ -342,22 +342,20 @@ export class AddressValidationService {
     if (!classification.address || !options.enableGoogleValidation) {
       await storage.updatePayeeClassification(classification.id, {
         googleAddressValidationStatus: 'skipped',
-        addressNormalizationApplied: options.enableAddressNormalization || false,
+        addressNormalizationApplied: true, // Always mark as applied since we always normalize
       });
       return;
     }
 
     try {
-      // Apply normalization if enabled
-      if (options.enableAddressNormalization) {
-        await storage.updatePayeeClassification(classification.id, {
-          address: this.normalizeAddress(classification.address),
-          city: classification.city ? this.normalizeAddress(classification.city) : null,
-          state: classification.state ? this.normalizeAddress(classification.state) : null,
-          zipCode: classification.zipCode ? this.normalizeAddress(classification.zipCode) : null,
-          addressNormalizationApplied: true,
-        });
-      }
+      // Always apply address normalization for better matching
+      await storage.updatePayeeClassification(classification.id, {
+        address: this.normalizeAddress(classification.address),
+        city: classification.city ? this.normalizeAddress(classification.city) : null,
+        state: classification.state ? this.normalizeAddress(classification.state) : null,
+        zipCode: classification.zipCode ? this.normalizeAddress(classification.zipCode) : null,
+        addressNormalizationApplied: true,
+      });
 
       // Validate with Google and intelligent enhancement
       const result = await this.validateAddress(
