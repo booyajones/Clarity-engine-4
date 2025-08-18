@@ -174,20 +174,30 @@ export class MastercardApiService {
   }
 
   private initializeCredentials(): boolean {
+    console.log('🔐 Initializing Mastercard credentials...');
+    
     if (!config.consumerKey) {
+      console.error('❌ No consumer key found in environment');
       return false;
     }
+    
+    console.log('✓ Consumer key found:', config.consumerKey.substring(0, 20) + '...');
 
     // First try to use direct private key if available
     if (config.privateKey) {
       this.privateKey = config.privateKey;
+      console.log('✅ Using private key from environment variable');
       return true;
     }
 
     // Then try to load from extracted PEM file
-    if (fs.existsSync((config as any).privateKeyPath)) {
+    const pemPath = (config as any).privateKeyPath || './mastercard-private-key.pem';
+    console.log('📄 Checking for PEM file at:', pemPath);
+    
+    if (fs.existsSync(pemPath)) {
       try {
-        const pemContent = fs.readFileSync((config as any).privateKeyPath, 'utf8');
+        const pemContent = fs.readFileSync(pemPath, 'utf8');
+        console.log('📄 PEM file loaded, length:', pemContent.length);
         
         // Extract the actual private key from the PEM content
         // The file might contain Bag Attributes and other metadata
@@ -196,16 +206,21 @@ export class MastercardApiService {
         
         if (privateKeyMatch) {
           this.privateKey = privateKeyMatch[0];
-          console.log('✅ Mastercard private key loaded from PEM file successfully');
+          console.log('✅ Mastercard private key extracted from PEM file successfully');
+          console.log('   Key type:', privateKeyMatch[1] ? 'RSA PRIVATE KEY' : 'PRIVATE KEY');
+          console.log('   Key length:', this.privateKey.length, 'characters');
           return true;
         } else {
           console.error('❌ Could not find private key in PEM file');
+          console.error('   PEM content preview:', pemContent.substring(0, 100));
           return false;
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         console.error('❌ Failed to load Mastercard private key from PEM file:', errorMessage);
       }
+    } else {
+      console.error('❌ PEM file not found at:', pemPath);
     }
 
     // Fallback: try to extract from P12 certificate
@@ -291,31 +306,48 @@ export class MastercardApiService {
     body?: string
   ): string {
     if (!config.consumerKey || !this.privateKey) {
+      console.error('❌ Mastercard OAuth Error:', {
+        hasConsumerKey: !!config.consumerKey,
+        hasPrivateKey: !!this.privateKey,
+        privateKeyLength: this.privateKey ? this.privateKey.length : 0
+      });
       throw new Error('Mastercard API credentials not configured');
     }
 
-    // Use the patched OAuth library for all requests
-    // For GET requests, pass undefined payload to avoid body hash (will be removed by our patch)
-    // For POST requests, pass the actual body
-    const payload = method.toUpperCase() === 'POST' ? body : undefined;
-    
-    console.log('OAuth generation:', {
-      method,
-      url,
-      hasPayload: !!payload,
-      consumerKey: config.consumerKey.substring(0, 20) + '...'
-    });
-    
-    const authHeader = oauth.getAuthorizationHeader(url, method, payload, config.consumerKey, this.privateKey);
-    
-    // Log full OAuth header for GET requests to debug
-    if (method.toUpperCase() === 'GET') {
-      console.log('Full OAuth header for GET:', authHeader);
-    } else {
-      console.log(`Generated OAuth header for ${method}:`, authHeader.substring(0, 100) + '...');
+    try {
+      // Use the patched OAuth library for all requests
+      // For GET requests, pass undefined payload to avoid body hash (will be removed by our patch)
+      // For POST requests, pass the actual body
+      const payload = method.toUpperCase() === 'POST' ? body : undefined;
+      
+      console.log('OAuth generation:', {
+        method,
+        url,
+        hasPayload: !!payload,
+        consumerKey: config.consumerKey.substring(0, 20) + '...'
+      });
+      
+      const authHeader = oauth.getAuthorizationHeader(url, method, payload, config.consumerKey, this.privateKey);
+      
+      // Log full OAuth header for GET requests to debug
+      if (method.toUpperCase() === 'GET') {
+        console.log('Full OAuth header for GET:', authHeader);
+      } else {
+        console.log(`Generated OAuth header for ${method}:`, authHeader.substring(0, 100) + '...');
+      }
+      
+      return authHeader;
+    } catch (error) {
+      console.error('❌ Mastercard OAuth signature generation failed:', error);
+      console.error('OAuth error details:', {
+        method,
+        url,
+        hasConsumerKey: !!config.consumerKey,
+        hasPrivateKey: !!this.privateKey,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      throw new Error(`OAuth signature generation failed: ${error instanceof Error ? error.message : String(error)}`);
     }
-    
-    return authHeader;
   }
 
   // Submit a bulk search request
