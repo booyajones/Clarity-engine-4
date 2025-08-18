@@ -1258,96 +1258,104 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                 )}
                                 
                                 {/* Finexio Match Information - Always Show */}
-                                <div className={`p-4 rounded-lg space-y-3 border ${
-                                  selectedClassification.finexioMatchScore && selectedClassification.finexioMatchScore >= 84
-                                    ? 'bg-green-50 border-green-200'
-                                    : selectedClassification.finexioMatchScore && selectedClassification.finexioMatchScore > 0
-                                    ? 'bg-orange-50 border-orange-200'
-                                    : 'bg-gray-50 border-gray-200'
-                                }`}>
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                      <Building2 className={`h-5 w-5 ${
-                                        selectedClassification.finexioMatchScore && selectedClassification.finexioMatchScore >= 84
-                                          ? 'text-green-700'
-                                          : selectedClassification.finexioMatchScore && selectedClassification.finexioMatchScore > 0
-                                          ? 'text-orange-700'
-                                          : 'text-gray-700'
-                                      }`} />
-                                      <label className={`text-sm font-medium ${
-                                        selectedClassification.finexioMatchScore && selectedClassification.finexioMatchScore >= 84
-                                          ? 'text-green-900'
-                                          : selectedClassification.finexioMatchScore && selectedClassification.finexioMatchScore > 0
-                                          ? 'text-orange-900'
-                                          : 'text-gray-900'
-                                      }`}>Finexio Supplier Match</label>
-                                    </div>
-                                    <Badge className={`text-xs ${
-                                      selectedClassification.finexioMatchScore && selectedClassification.finexioMatchScore >= 84
-                                        ? 'bg-green-100 text-green-800'
-                                        : selectedClassification.finexioMatchScore && selectedClassification.finexioMatchScore > 0
-                                        ? 'bg-orange-100 text-orange-800'
-                                        : 'bg-gray-100 text-gray-800'
-                                    }`}>
-                                      {selectedClassification.finexioMatchScore && selectedClassification.finexioMatchScore >= 84
-                                        ? `✓ Matched - ${selectedClassification.finexioMatchScore}%`
-                                        : selectedClassification.finexioMatchScore && selectedClassification.finexioMatchScore > 0
-                                        ? `Below Threshold - ${selectedClassification.finexioMatchScore}%`
-                                        : 'No Match - 0%'}
-                                    </Badge>
-                                  </div>
+                                {(() => {
+                                  // Use payeeMatches data if available, otherwise fall back to finexioMatchScore
+                                  const finexioScore = selectedClassification.payeeMatches?.[0]?.finexioMatchScore ?? 
+                                                      selectedClassification.finexioMatchScore ?? 0;
+                                  const matchedSupplier = selectedClassification.payeeMatches?.[0]?.bigQueryPayeeName ?? 
+                                                         selectedClassification.finexioSupplierName;
                                   
-                                  <div className="space-y-2 text-sm">
-                                    {/* Always show search info */}
-                                    <div>
-                                      <label className={`text-xs font-medium ${
-                                        selectedClassification.finexioMatchScore && selectedClassification.finexioMatchScore > 0
-                                          ? selectedClassification.finexioMatchScore >= 84 ? 'text-green-700' : 'text-orange-700'
-                                          : 'text-gray-700'
-                                      }`}>Searched For</label>
-                                      <p className={`${
-                                        selectedClassification.finexioMatchScore && selectedClassification.finexioMatchScore > 0
-                                          ? selectedClassification.finexioMatchScore >= 84 ? 'text-green-900' : 'text-orange-900'
-                                          : 'text-gray-900'
-                                      }`}>{selectedClassification.cleanedName}</p>
-                                    </div>
-                                    
-                                    {/* Show match confidence bar */}
-                                    <div>
-                                      <label className={`text-xs font-medium ${
-                                        selectedClassification.finexioMatchScore && selectedClassification.finexioMatchScore > 0
-                                          ? selectedClassification.finexioMatchScore >= 84 ? 'text-green-700' : 'text-orange-700'
-                                          : 'text-gray-700'
-                                      }`}>Match Confidence</label>
-                                      <div className="flex items-center gap-2 mt-1">
-                                        <div className="flex-1 bg-gray-200 rounded-full h-2">
-                                          <div 
-                                            className={`h-2 rounded-full transition-all duration-300 ${
-                                              selectedClassification.finexioMatchScore && selectedClassification.finexioMatchScore >= 84
-                                                ? 'bg-gradient-to-r from-green-500 to-green-600'
-                                                : selectedClassification.finexioMatchScore && selectedClassification.finexioMatchScore > 0
-                                                ? 'bg-gradient-to-r from-orange-400 to-orange-500'
-                                                : 'bg-gray-400'
-                                            }`}
-                                            style={{ width: `${selectedClassification.finexioMatchScore || 0}%` }}
-                                          />
+                                  return (
+                                    <div className={`p-4 rounded-lg space-y-3 border ${
+                                      finexioScore >= 84
+                                        ? 'bg-green-50 border-green-200'
+                                        : finexioScore > 0
+                                        ? 'bg-orange-50 border-orange-200'
+                                        : 'bg-gray-50 border-gray-200'
+                                    }`}>
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                          <Building2 className={`h-5 w-5 ${
+                                            finexioScore >= 84
+                                              ? 'text-green-700'
+                                              : finexioScore > 0
+                                              ? 'text-orange-700'
+                                              : 'text-gray-700'
+                                          }`} />
+                                          <label className={`text-sm font-medium ${
+                                            finexioScore >= 84
+                                              ? 'text-green-900'
+                                              : finexioScore > 0
+                                              ? 'text-orange-900'
+                                              : 'text-gray-900'
+                                          }`}>Finexio Supplier Match</label>
                                         </div>
-                                        <span className={`text-sm font-medium ${
-                                          selectedClassification.finexioMatchScore && selectedClassification.finexioMatchScore >= 84
-                                            ? 'text-green-800'
-                                            : selectedClassification.finexioMatchScore && selectedClassification.finexioMatchScore > 0
-                                            ? 'text-orange-800'
-                                            : 'text-gray-800'
+                                        <Badge className={`text-xs ${
+                                          finexioScore >= 84
+                                            ? 'bg-green-100 text-green-800'
+                                            : finexioScore > 0
+                                            ? 'bg-orange-100 text-orange-800'
+                                            : 'bg-gray-100 text-gray-800'
                                         }`}>
-                                          {selectedClassification.finexioMatchScore || 0}%
-                                        </span>
+                                          {finexioScore >= 84
+                                            ? `✓ Matched - ${finexioScore}%`
+                                            : finexioScore > 0
+                                            ? `Below Threshold - ${finexioScore}%`
+                                            : 'No Match - 0%'}
+                                        </Badge>
                                       </div>
-                                      {selectedClassification.finexioMatchScore && selectedClassification.finexioMatchScore < 84 && selectedClassification.finexioMatchScore > 0 && (
-                                        <p className="text-xs text-orange-700 mt-1">
-                                          Minimum 84% required for a valid match
-                                        </p>
-                                      )}
-                                    </div>
+                                      
+                                      <div className="space-y-2 text-sm">
+                                        {/* Always show search info */}
+                                        <div>
+                                          <label className={`text-xs font-medium ${
+                                            finexioScore > 0
+                                              ? finexioScore >= 84 ? 'text-green-700' : 'text-orange-700'
+                                              : 'text-gray-700'
+                                          }`}>Searched For</label>
+                                          <p className={`${
+                                            finexioScore > 0
+                                              ? finexioScore >= 84 ? 'text-green-900' : 'text-orange-900'
+                                              : 'text-gray-900'
+                                          }`}>{selectedClassification.cleanedName}</p>
+                                        </div>
+                                        
+                                        {/* Show match confidence bar */}
+                                        <div>
+                                          <label className={`text-xs font-medium ${
+                                            finexioScore > 0
+                                              ? finexioScore >= 84 ? 'text-green-700' : 'text-orange-700'
+                                              : 'text-gray-700'
+                                          }`}>Match Confidence</label>
+                                          <div className="flex items-center gap-2 mt-1">
+                                            <div className="flex-1 bg-gray-200 rounded-full h-2">
+                                              <div 
+                                                className={`h-2 rounded-full transition-all duration-300 ${
+                                                  finexioScore >= 84
+                                                    ? 'bg-gradient-to-r from-green-500 to-green-600'
+                                                    : finexioScore > 0
+                                                    ? 'bg-gradient-to-r from-orange-400 to-orange-500'
+                                                    : 'bg-gray-400'
+                                                }`}
+                                                style={{ width: `${finexioScore}%` }}
+                                              />
+                                            </div>
+                                            <span className={`text-sm font-medium ${
+                                              finexioScore >= 84
+                                                ? 'text-green-800'
+                                                : finexioScore > 0
+                                                ? 'text-orange-800'
+                                                : 'text-gray-800'
+                                            }`}>
+                                              {finexioScore}%
+                                            </span>
+                                          </div>
+                                          {finexioScore < 84 && finexioScore > 0 && (
+                                            <p className="text-xs text-orange-700 mt-1">
+                                              Minimum 84% required for a valid match
+                                            </p>
+                                          )}
+                                        </div>
                                     
                                     {/* Show match details from payeeMatches if available */}
                                     {selectedClassification.payeeMatches && selectedClassification.payeeMatches[0] && (
@@ -1410,8 +1418,10 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                         No matching supplier found in the Finexio network. This payee may be new or not yet registered with Finexio.
                                       </div>
                                     )}
-                                  </div>
-                                </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
 
                                 {/* Akkio Payment Prediction */}
                                 {selectedClassification.akkioPrediction && (
