@@ -125,7 +125,7 @@ export function SingleClassification() {
   const [payeeName, setPayeeName] = useState("");
   const [result, setResult] = useState<ClassificationResult | null>(null);
   const [enableFinexioMatching, setEnableFinexioMatching] = useState(true);
-  const [enableMastercardMatching, setEnableMastercardMatching] = useState(true);
+  const [enableMastercardMatching, setEnableMastercardMatching] = useState(false);
   const [enableAddressValidation, setEnableAddressValidation] = useState(false);
   const [enableAkkioMatching, setEnableAkkioMatching] = useState(false);
   

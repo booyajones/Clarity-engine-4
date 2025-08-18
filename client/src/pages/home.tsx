@@ -125,7 +125,7 @@ export default function Home() {
   const [currentView, setCurrentView] = useState<"dashboard" | "upload" | "keywords" | "single">("dashboard");
   const [matchingOptions, setMatchingOptions] = useState({
     enableFinexio: true,
-    enableMastercard: true,
+    enableMastercard: false,
     enableGoogleAddressValidation: false,
     enableAddressNormalization: true, // Always enabled, no toggle needed
     enableAkkio: false,

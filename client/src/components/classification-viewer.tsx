@@ -1257,6 +1257,52 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                   </div>
                                 )}
                                 
+                                {/* Finexio Match Information */}
+                                {(selectedClassification.finexioSupplierName || selectedClassification.finexioConfidence !== null) && (
+                                  <div className="bg-green-50 p-4 rounded-lg space-y-3 border border-green-200">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <Building2 className="h-5 w-5 text-green-700" />
+                                        <label className="text-sm font-medium text-green-900">Finexio Supplier Match</label>
+                                      </div>
+                                      {selectedClassification.finexioConfidence !== null && (
+                                        <Badge className={`text-xs ${
+                                          selectedClassification.finexioConfidence >= 84 
+                                            ? 'bg-green-100 text-green-800' 
+                                            : 'bg-orange-100 text-orange-800'
+                                        }`}>
+                                          {selectedClassification.finexioConfidence >= 84 ? '✓ Matched' : 'Below Threshold'} - {selectedClassification.finexioConfidence}%
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    
+                                    <div className="space-y-2 text-sm">
+                                      {selectedClassification.finexioSupplierName && (
+                                        <div>
+                                          <label className="text-xs font-medium text-green-700">Matched Supplier</label>
+                                          <p className="text-green-900 font-medium">{selectedClassification.finexioSupplierName}</p>
+                                        </div>
+                                      )}
+                                      
+                                      {selectedClassification.finexioSupplierId && (
+                                        <div>
+                                          <label className="text-xs font-medium text-green-700">Supplier ID</label>
+                                          <p className="text-green-900">{selectedClassification.finexioSupplierId}</p>
+                                        </div>
+                                      )}
+                                      
+                                      {selectedClassification.finexioMatchReasoning && (
+                                        <div>
+                                          <label className="text-xs font-medium text-green-700">Match Reasoning</label>
+                                          <div className="bg-green-100 p-2 rounded text-xs text-green-800 mt-1">
+                                            {selectedClassification.finexioMatchReasoning}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+
                                 {/* Akkio Payment Prediction */}
                                 {selectedClassification.akkioPrediction && (
                                   <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-lg space-y-3 border border-indigo-200">
