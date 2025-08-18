@@ -693,7 +693,7 @@ export default function Home() {
       {currentView === "dashboard" && (
         <div className="space-y-6 animate-fade-in-up">
           {/* Latest File Status - Most prominent card */}
-          {batches && batches.length > 0 && (
+          {batches && batches.length > 0 && false && (
             <Card className="mb-6 hover:shadow-lg transition-shadow border-2 border-blue-100 bg-gradient-to-br from-blue-50 to-white">
               <CardHeader>
                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
