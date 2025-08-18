@@ -1551,7 +1551,13 @@ export default function Home() {
                       Cancel
                     </Button>
                   </div>
-                  <ProgressTracker batch={batch} />
+                  <ProgressTracker batch={{
+                    ...batch,
+                    finexioMatchingStatus: (batch as any).finexioMatchingStatus,
+                    googleAddressStatus: (batch as any).googleAddressStatus,
+                    mastercardEnrichmentStatus: batch.mastercardEnrichmentStatus,
+                    akkioPredictionStatus: (batch as any).akkioPredictionStatus
+                  }} />
                 </div>
               ))}
             </div>
