@@ -799,29 +799,30 @@ export function SingleClassification() {
               </p>
             </div>
 
+            {/* Finexio Match - Show if confidence is 85% or higher */}
             {result.bigQueryMatch && result.bigQueryMatch.finexioSupplier && (
               <div className={`p-4 rounded-lg space-y-3 border ${
-                result.bigQueryMatch.matched 
+                (result.bigQueryMatch.finexioSupplier.finexioMatchScore >= 85 || result.bigQueryMatch.finexioSupplier.confidence >= 85)
                   ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800' 
                   : 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800'
               }`}>
                 <div className="flex items-center justify-between">
                   <p className={`text-sm font-medium ${
-                    result.bigQueryMatch.matched 
+                    (result.bigQueryMatch.finexioSupplier.finexioMatchScore >= 85 || result.bigQueryMatch.finexioSupplier.confidence >= 85)
                       ? 'text-purple-800 dark:text-purple-200' 
                       : 'text-gray-600 dark:text-gray-400'
                   }`}>
-                    {result.bigQueryMatch.matched ? '✓ Finexio Network Match' : 'Finexio Network Search'}
+                    {(result.bigQueryMatch.finexioSupplier.finexioMatchScore >= 85 || result.bigQueryMatch.finexioSupplier.confidence >= 85) ? '✓ Finexio Network Match' : 'Finexio Network - Below Threshold'}
                   </p>
                   <Badge className={
-                    result.bigQueryMatch.matched 
+                    (result.bigQueryMatch.finexioSupplier.finexioMatchScore >= 85 || result.bigQueryMatch.finexioSupplier.confidence >= 85)
                       ? 'bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-100' 
                       : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100'
                   }>
-                    {Math.round(result.bigQueryMatch.finexioSupplier.finexioMatchScore)}% Match
+                    {Math.round(result.bigQueryMatch.finexioSupplier.finexioMatchScore || result.bigQueryMatch.finexioSupplier.confidence || 0)}% Match
                   </Badge>
                 </div>
-                {result.bigQueryMatch.matched ? (
+                {(result.bigQueryMatch.finexioSupplier.finexioMatchScore >= 85 || result.bigQueryMatch.finexioSupplier.confidence >= 85) ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                     <div>
                       <label className="text-xs font-medium text-purple-700 dark:text-purple-300">Supplier Name</label>
@@ -841,6 +842,65 @@ export function SingleClassification() {
                 ) : (
                   <div className="text-sm text-gray-600 dark:text-gray-400">
                     {result.bigQueryMatch.finexioSupplier.matchReasoning}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Google Address Validation Results */}
+            {(result.addressValidation || result.googleAddressValidation) && (
+              <div className={`p-4 rounded-lg space-y-3 border ${
+                (result.addressValidation?.status === 'validated' || result.googleAddressValidation?.success)
+                  ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+                  : 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <p className={`text-sm font-medium flex items-center gap-2 ${
+                    (result.addressValidation?.status === 'validated' || result.googleAddressValidation?.success)
+                      ? 'text-blue-800 dark:text-blue-200'
+                      : 'text-gray-600 dark:text-gray-400'
+                  }`}>
+                    <MapPin className="h-4 w-4" />
+                    Address Information
+                  </p>
+                  <Badge className={
+                    (result.addressValidation?.status === 'validated' || result.googleAddressValidation?.success)
+                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100'
+                      : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100'
+                  }>
+                    {(result.addressValidation?.status === 'validated' || result.googleAddressValidation?.success) ? '✓ Validated' : 'Not Validated'}
+                  </Badge>
+                </div>
+                
+                {/* Show cleaned/validated address */}
+                {(result.addressValidation?.formattedAddress || result.googleAddressValidation?.data?.result?.address?.formattedAddress) && (
+                  <div>
+                    <label className="text-xs font-medium text-blue-700 dark:text-blue-300">Cleaned Address</label>
+                    <p className="text-blue-900 dark:text-blue-100 text-sm">
+                      {result.addressValidation?.formattedAddress || result.googleAddressValidation?.data?.result?.address?.formattedAddress}
+                    </p>
+                  </div>
+                )}
+                
+                {/* Show confidence score */}
+                {(result.addressValidation?.confidence || result.googleAddressValidation?.data?.result?.verdict?.validationGranularity) && (
+                  <div>
+                    <label className="text-xs font-medium text-blue-700 dark:text-blue-300">Validation Confidence</label>
+                    <p className="text-blue-900 dark:text-blue-100 text-sm">
+                      {result.addressValidation?.confidence 
+                        ? `${(result.addressValidation.confidence * 100).toFixed(0)}%`
+                        : result.googleAddressValidation?.data?.result?.verdict?.validationGranularity?.toLowerCase()}
+                    </p>
+                  </div>
+                )}
+                
+                {/* Show intelligent enhancement if used */}
+                {result.addressValidation?.intelligentEnhancement?.used && (
+                  <div className="bg-blue-100/50 dark:bg-blue-800/50 p-2 rounded">
+                    <label className="text-xs font-medium text-blue-700 dark:text-blue-300">AI Enhancement Applied</label>
+                    <p className="text-blue-900 dark:text-blue-100 text-xs">
+                      {result.addressValidation.intelligentEnhancement.reason}
+                    </p>
                   </div>
                 )}
               </div>

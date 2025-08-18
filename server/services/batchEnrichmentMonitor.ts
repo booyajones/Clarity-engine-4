@@ -3,8 +3,8 @@
  * 
  * This service continuously monitors upload batches and orchestrates the sequential
  * enrichment flow after classification completes:
- * 1. Finexio matching
- * 2. Google Address validation 
+ * 1. Google Address validation (if enabled - for better Finexio matching)
+ * 2. Finexio matching (uses cleaned addresses for better accuracy)
  * 3. Mastercard enrichment
  * 4. Akkio prediction
  * 
@@ -65,39 +65,10 @@ class BatchEnrichmentMonitor {
   private async monitorBatches() {
     try {
       // Get all batches that need enrichment processing
+      // Simply get all batches in 'enriching' status and let the processing logic determine what to do
       const batches = await db.select()
         .from(uploadBatches)
-        .where(
-          and(
-            eq(uploadBatches.status, 'enriching'),
-            or(
-              // Finexio complete but Google Address not started
-              and(
-                eq(uploadBatches.finexioMatchingStatus, 'completed'),
-                or(
-                  eq(uploadBatches.googleAddressStatus, 'pending'),
-                  isNull(uploadBatches.googleAddressStatus)
-                )
-              ),
-              // Google Address complete but Mastercard not started
-              and(
-                eq(uploadBatches.googleAddressStatus, 'completed'),
-                or(
-                  eq(uploadBatches.mastercardEnrichmentStatus, 'pending'),
-                  isNull(uploadBatches.mastercardEnrichmentStatus)
-                )
-              ),
-              // Mastercard complete but Akkio not started
-              and(
-                eq(uploadBatches.mastercardEnrichmentStatus, 'completed'),
-                or(
-                  eq(uploadBatches.akkioPredictionStatus, 'pending'),
-                  isNull(uploadBatches.akkioPredictionStatus)
-                )
-              )
-            )
-          )
-        );
+        .where(eq(uploadBatches.status, 'enriching'));
 
       for (const batch of batches) {
         await this.processBatchEnrichment(batch);
@@ -125,18 +96,10 @@ class BatchEnrichmentMonitor {
       const enableMastercard = batch.toolsConfig?.enableMastercard !== false;
       const enableAkkio = batch.toolsConfig?.enableAkkio !== false;
 
-      // 1. Process Finexio if needed
-      if (enableFinexio && 
-          (!batch.finexioMatchingStatus || batch.finexioMatchingStatus === 'pending')) {
-        console.log(`Starting Finexio matching for batch ${batchId}`);
-        await this.processFinexioMatching(batchId);
-        return; // Process one phase at a time
-      }
-
-      // 2. Process Google Address if needed
-      if (enableGoogleAddress && batch.finexioMatchingStatus === 'completed' && 
+      // 1. Process Google Address FIRST if needed (for better Finexio matching)
+      if (enableGoogleAddress && 
           (!batch.googleAddressStatus || batch.googleAddressStatus === 'pending')) {
-        console.log(`Starting Google Address validation for batch ${batchId}`);
+        console.log(`Starting Google Address validation for batch ${batchId} (before Finexio for better matching)`);
         
         // Mark as processing immediately to prevent duplicate processing
         await db.update(uploadBatches)
@@ -151,9 +114,18 @@ class BatchEnrichmentMonitor {
         return;
       }
 
+      // 2. Process Finexio AFTER address validation (uses cleaned addresses for better matching)
+      if (enableFinexio && 
+          (batch.googleAddressStatus === 'completed' || batch.googleAddressStatus === 'skipped' || !enableGoogleAddress) &&
+          (!batch.finexioMatchingStatus || batch.finexioMatchingStatus === 'pending')) {
+        console.log(`Starting Finexio matching for batch ${batchId} (using cleaned addresses)`);
+        await this.processFinexioMatching(batchId);
+        return; // Process one phase at a time
+      }
+
       // 3. Process Mastercard if needed
       if (enableMastercard && 
-          (batch.googleAddressStatus === 'completed' || batch.googleAddressStatus === 'skipped' || !enableGoogleAddress) &&
+          (batch.finexioMatchingStatus === 'completed' || batch.finexioMatchingStatus === 'skipped' || !enableFinexio) &&
           (!batch.mastercardEnrichmentStatus || batch.mastercardEnrichmentStatus === 'pending')) {
         console.log(`Starting Mastercard enrichment for batch ${batchId}`);
         await this.processMastercardEnrichment(batchId);
@@ -222,9 +194,13 @@ class BatchEnrichmentMonitor {
         // Process batch with parallel promises but with timeout protection
         const promises = batch.map(async (classification) => {
           try {
+            // Use the best available name for searching (cleaned or original)
+            // Google-validated address will be used by Finexio for better matching
+            const searchName = classification.cleanedName || classification.originalName;
+            
             // Create a promise for the supplier search
             const searchPromise = supplierCacheService.searchCachedSuppliers(
-              classification.originalName,
+              searchName,
               1
             );
 
@@ -236,16 +212,22 @@ class BatchEnrichmentMonitor {
             // Race between search and timeout
             const matches = await Promise.race([searchPromise, timeoutPromise]) as any;
 
-            if (matches && matches.length > 0) {
+            // Accept matches with 85%+ confidence (not just 100%)
+            if (matches && matches.length > 0 && matches[0].confidence >= 85) {
               const bestMatch = matches[0];
               await db.update(payeeClassifications)
                 .set({
                   finexioSupplierId: bestMatch.payeeId,
                   finexioSupplierName: bestMatch.payeeName,
-                  finexioConfidence: bestMatch.confidence || 0
+                  finexioConfidence: bestMatch.confidence || 0,
+                  finexioMatchReasoning: bestMatch.reasoning || `Matched with ${bestMatch.confidence}% confidence`
                 })
                 .where(eq(payeeClassifications.id, classification.id));
               matchCount++;
+              
+              if (bestMatch.confidence < 100) {
+                console.log(`💼 Finexio: Matched "${classification.originalName}" to "${bestMatch.payeeName}" (${bestMatch.confidence}% confidence)`);
+              }
             }
           } catch (error: any) {
             if (error.message === 'Finexio search timeout') {

@@ -87,6 +87,7 @@ export const payeeClassifications = pgTable("payee_classifications", {
   finexioSupplierId: text("finexio_supplier_id"),
   finexioSupplierName: text("finexio_supplier_name"),
   finexioConfidence: real("finexio_confidence"),
+  finexioMatchReasoning: text("finexio_match_reasoning"),
   // Mastercard enrichment fields
   mastercardMatchStatus: text("mastercard_match_status"), // MATCH, NO_MATCH, MULTIPLE_MATCHES, EXACT_MATCH
   mastercardMatchConfidence: real("mastercard_match_confidence"), // Confidence score 0-100
