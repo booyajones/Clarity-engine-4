@@ -1309,7 +1309,7 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       // Prepare all payees for enrichment
       const payeesForEnrichment = businessClassifications.map(c => ({
         id: c.id.toString(),
-        name: c.cleanedName,
+        name: c.cleanedName || c.originalName, // Use cleanedName if available, fallback to originalName
         address: c.address || undefined,
         city: c.city || undefined,
         state: c.state || undefined,

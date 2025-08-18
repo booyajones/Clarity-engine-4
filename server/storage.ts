@@ -28,7 +28,7 @@ import {
   type InsertMastercardSearchRequest
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, lt, count, sql, inArray } from "drizzle-orm";
+import { eq, desc, and, lt, count, sql, inArray, or } from "drizzle-orm";
 
 export interface IStorage {
   // User operations
@@ -483,7 +483,10 @@ export class DatabaseStorage implements IStorage {
       .where(and(
         eq(payeeClassifications.batchId, batchId),
         eq(payeeClassifications.payeeType, 'Business'),
-        sql`${payeeClassifications.mastercardMatchStatus} IS NULL`
+        or(
+          sql`${payeeClassifications.mastercardMatchStatus} IS NULL`,
+          eq(payeeClassifications.mastercardMatchStatus, 'error') // Also include error records for retry
+        )
       ))
       .limit(limit);
   }
