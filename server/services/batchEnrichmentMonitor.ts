@@ -12,7 +12,7 @@
  */
 
 import { db } from '../db';
-import { uploadBatches, payeeClassifications } from '../../shared/schema';
+import { uploadBatches, payeeClassifications, mastercardSearchRequests } from '../../shared/schema';
 import { eq, and, or, isNull, sql } from 'drizzle-orm';
 import { addressValidationService } from './addressValidationService';
 import { MastercardApiService } from './mastercardApi';
@@ -447,14 +447,41 @@ class BatchEnrichmentMonitor {
       const { MastercardAsyncService } = await import('./mastercardAsyncService');
       const mastercardService = new MastercardAsyncService();
       
-      // Get all business classifications that need Mastercard enrichment
+      // Get all business classifications for Mastercard enrichment
+      // We process ALL Business records, not just those with NULL status
+      // This ensures we actually call Mastercard even if status was incorrectly set
       const classifications = await db.select()
         .from(payeeClassifications)
         .where(
           and(
             eq(payeeClassifications.batchId, batchId),
-            eq(payeeClassifications.payeeType, 'Business'),
-            isNull(payeeClassifications.mastercardMatchStatus)
+            eq(payeeClassifications.payeeType, 'Business')
+          )
+        );
+      
+      // Check if we already have valid Mastercard searches for this batch
+      const existingSearches = await db.select()
+        .from(mastercardSearchRequests)
+        .where(eq(mastercardSearchRequests.batchId, batchId));
+      
+      if (existingSearches.length > 0) {
+        console.log(`✅ Found ${existingSearches.length} existing Mastercard searches for batch ${batchId} - worker will handle polling`);
+        // Let the worker handle these existing searches
+        return;
+      }
+      
+      // Clear any false "no_match" statuses that were set without actually calling Mastercard
+      console.log(`🔄 Resetting false Mastercard statuses for batch ${batchId}`);
+      await db.update(payeeClassifications)
+        .set({ 
+          mastercardMatchStatus: null,
+          mastercardBusinessName: null,
+          mastercardMatchConfidence: null
+        })
+        .where(
+          and(
+            eq(payeeClassifications.batchId, batchId),
+            eq(payeeClassifications.payeeType, 'Business')
           )
         );
       
