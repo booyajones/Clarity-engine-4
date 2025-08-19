@@ -7,7 +7,7 @@
 
 import { db } from "../db";
 import { payeeClassifications, uploadBatches } from "@shared/schema";
-import { eq, and, isNull, isNotNull } from "drizzle-orm";
+import { eq, and, isNull, isNotNull, or } from "drizzle-orm";
 import { MastercardAsyncService } from "./mastercardAsyncService";
 
 export class MastercardVerificationService {
@@ -77,6 +77,26 @@ export class MastercardVerificationService {
         );
 
       for (const batch of incompleteBatches) {
+        // CRITICAL: First check if there are already active searches for this batch
+        const { mastercardSearchRequests } = await import('@shared/schema');
+        const activeSearches = await db
+          .select()
+          .from(mastercardSearchRequests)
+          .where(
+            and(
+              eq(mastercardSearchRequests.batchId, batch.batchId),
+              or(
+                eq(mastercardSearchRequests.status, 'submitted'),
+                eq(mastercardSearchRequests.status, 'polling')
+              )
+            )
+          );
+
+        if (activeSearches.length > 0) {
+          // Skip if there are already active searches - don't create duplicates!
+          continue;
+        }
+
         // Find unprocessed Business records in this batch
         const unprocessedRecords = await db
           .select()
@@ -97,7 +117,7 @@ export class MastercardVerificationService {
           const waitTime = Date.now() - new Date(oldestRecord.createdAt).getTime();
           const waitMinutes = Math.floor(waitTime / 60000);
           
-          // If records have been waiting more than 5 minutes, resubmit them
+          // If records have been waiting more than 5 minutes AND no active searches exist
           if (waitMinutes > 5) {
             console.log(`🔄 Resubmitting ${unprocessedRecords.length} records that have been waiting ${waitMinutes} minutes`);
             

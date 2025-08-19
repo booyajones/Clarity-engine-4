@@ -7,7 +7,7 @@
 
 import { db } from "../db";
 import { mastercardSearchRequests, payeeClassifications } from "@shared/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, or } from "drizzle-orm";
 import { MastercardApiService } from "./mastercardApi";
 import { storage } from "../storage";
 
@@ -39,6 +39,28 @@ export class MastercardAsyncService {
     }
 
     console.log(`📤 Submitting ${payees.length} payees for async Mastercard enrichment (batch ${batchId})`);
+
+    // CRITICAL FIX: Check if there are already active searches for this batch
+    const existingSearches = await db
+      .select()
+      .from(mastercardSearchRequests)
+      .where(
+        and(
+          eq(mastercardSearchRequests.batchId, batchId),
+          or(
+            eq(mastercardSearchRequests.status, 'submitted'),
+            eq(mastercardSearchRequests.status, 'polling')
+          )
+        )
+      );
+    
+    if (existingSearches.length > 0) {
+      console.log(`⚠️ Batch ${batchId} already has ${existingSearches.length} active searches - skipping duplicate submission`);
+      return {
+        searchIds: existingSearches.map(s => s.searchId),
+        message: `Using existing ${existingSearches.length} search(es) already in progress`
+      };
+    }
 
     const searchIds: string[] = [];
     const MAX_BATCH_SIZE = 100; // Mastercard's limit per batch
