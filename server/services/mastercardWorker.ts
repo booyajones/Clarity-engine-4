@@ -6,8 +6,8 @@ import { MastercardApiService } from "./mastercardApi";
 export class MastercardWorker {
   private mastercardService: MastercardApiService;
   private isRunning = false;
-  private pollInterval = 10000; // 10 seconds
-  private maxRetries = 60; // 10 minutes of retries
+  private pollInterval = 30000; // 30 seconds - less aggressive to avoid rate limits
+  // NO MAX RETRIES - jobs can run forever until completed
 
   constructor() {
     this.mastercardService = new MastercardApiService();
@@ -45,30 +45,31 @@ export class MastercardWorker {
     }
   }
 
-  // Process all pending searches
+  // Process all pending searches - NO TIMEOUT LIMITS
   private async processPendingSearches() {
     try {
-      // Find searches that need polling
+      // Find searches that need polling - NO MAX ATTEMPTS CHECK
       const pendingSearches = await db
         .select()
         .from(mastercardSearchRequests)
         .where(
           and(
             or(
+              eq(mastercardSearchRequests.status, "pending"),
               eq(mastercardSearchRequests.status, "submitted"),
               eq(mastercardSearchRequests.status, "polling")
             ),
-            lt(mastercardSearchRequests.pollAttempts, mastercardSearchRequests.maxPollAttempts),
+            // NO CHECK FOR MAX POLL ATTEMPTS - can run forever
             or(
               isNull(mastercardSearchRequests.lastPolledAt),
               lt(
                 mastercardSearchRequests.lastPolledAt,
-                new Date(Date.now() - 30000) // Poll again after 30 seconds to avoid rate limits
+                new Date(Date.now() - 60000) // Poll again after 60 seconds to avoid rate limits
               )
             )
           )
         )
-        .limit(10); // Process up to 10 searches at a time
+        .limit(5); // Process fewer at a time to avoid rate limits
 
       for (const search of pendingSearches) {
         await this.processSearch(search);
@@ -78,10 +79,26 @@ export class MastercardWorker {
     }
   }
 
-  // Process a single search
+  // Process a single search - NO TIMEOUTS, can poll indefinitely
   private async processSearch(search: typeof mastercardSearchRequests.$inferSelect) {
     try {
-      console.log(`Polling Mastercard search ${search.searchId} (attempt ${search.pollAttempts + 1}/${search.maxPollAttempts})`);
+      // Calculate how long this search has been running
+      const minutesRunning = Math.floor((Date.now() - new Date(search.submittedAt).getTime()) / 60000);
+      const hoursRunning = Math.floor(minutesRunning / 60);
+      
+      const timeString = hoursRunning > 0 
+        ? `${hoursRunning}h ${minutesRunning % 60}m`
+        : `${minutesRunning}m`;
+      
+      console.log(`Polling Mastercard search ${search.searchId} (attempt ${search.pollAttempts + 1}, running for ${timeString})`);
+
+      // Handle pending searches that need initial submission
+      if (search.status === "pending" && search.searchId.startsWith("pending_")) {
+        console.log(`Retrying submission for pending search ${search.searchId}`);
+        // The async service will handle resubmission
+        // For now, skip this search
+        return;
+      }
 
       // Update status to polling and increment attempts
       await db
@@ -93,12 +110,11 @@ export class MastercardWorker {
         })
         .where(eq(mastercardSearchRequests.id, search.id));
 
-      // Try to get results - but with no internal retries since we're already polling
-      // We'll call with maxRetries=1 to just check once per poll cycle
+      // Try to get results - just check once per poll cycle
       const results = await this.mastercardService.getSearchResults(
         search.searchId, 
-        search.searchId,  // Use searchId as the search_request_id
-        1  // Only try once per poll cycle - the worker handles retrying
+        search.searchId,
+        1  // Only try once per poll cycle
       );
 
       if (results) {
@@ -112,12 +128,11 @@ export class MastercardWorker {
           })
           .where(eq(mastercardSearchRequests.id, search.id));
 
-        console.log(`✅ Mastercard search ${search.searchId} completed successfully`);
+        console.log(`✅ Mastercard search ${search.searchId} completed successfully after ${timeString}`);
 
-        // If this search is linked to a payee classification, update it
-        if (search.payeeClassificationId && results.results && results.results.length > 0) {
-          await this.updatePayeeClassification(search.payeeClassificationId, results.results[0]);
-        }
+        // Process the results using the async service
+        const { mastercardAsyncService } = await import('./mastercardAsyncService');
+        await mastercardAsyncService.processSearchResults(search.searchId, results);
       }
     } catch (error: any) {
       console.error(`Error processing search ${search.searchId}:`, error);
@@ -135,30 +150,27 @@ export class MastercardWorker {
           .where(eq(mastercardSearchRequests.id, search.id));
 
         console.log(`✅ Mastercard search ${search.searchId} completed with no results`);
+        
+        // Process empty results
+        const { mastercardAsyncService } = await import('./mastercardAsyncService');
+        await mastercardAsyncService.processSearchResults(search.searchId, { results: [] });
         return;
       }
 
-      // Check if we've exceeded max attempts
-      if (search.pollAttempts + 1 >= search.maxPollAttempts) {
-        await db
-          .update(mastercardSearchRequests)
-          .set({
-            status: "timeout",
-            error: `Search timed out after ${search.maxPollAttempts} attempts`,
-            completedAt: new Date(),
-          })
-          .where(eq(mastercardSearchRequests.id, search.id));
-
-        console.log(`⏱️ Mastercard search ${search.searchId} timed out`);
-      } else {
-        // Update error but keep trying
-        await db
-          .update(mastercardSearchRequests)
-          .set({
-            error: error.message,
-            lastPolledAt: new Date(),
-          })
-          .where(eq(mastercardSearchRequests.id, search.id));
+      // NO TIMEOUT CHECK - just log error and keep trying forever
+      // Update error but keep trying indefinitely
+      await db
+        .update(mastercardSearchRequests)
+        .set({
+          error: error.message,
+          lastPolledAt: new Date(),
+        })
+        .where(eq(mastercardSearchRequests.id, search.id));
+      
+      // Log every 10 attempts to avoid spam
+      if (search.pollAttempts % 10 === 0) {
+        const minutesRunning = Math.floor((Date.now() - new Date(search.submittedAt).getTime()) / 60000);
+        console.log(`⏳ Search ${search.searchId} still processing after ${minutesRunning} minutes...`);
       }
     }
   }

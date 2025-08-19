@@ -63,8 +63,26 @@ class MastercardModule implements PipelineModule {
         zipCode: c.zipCode || undefined
       }));
 
-      // Use the batch optimized service for efficient processing
-      const enrichmentMap = await mastercardBatchOptimizedService.enrichBatch(payeesForEnrichment);
+      // Use the ASYNC service - submit and forget, worker handles polling
+      const { mastercardAsyncService } = await import('../mastercardAsyncService');
+      const { searchIds, message } = await mastercardAsyncService.submitBatchForEnrichment(
+        batchId,
+        payeesForEnrichment
+      );
+      
+      console.log(`📤 ${message}`);
+      
+      // Create a dummy enrichmentMap for compatibility
+      // The actual enrichment happens asynchronously
+      const enrichmentMap = new Map();
+      payeesForEnrichment.forEach(p => {
+        enrichmentMap.set(p.id, {
+          enriched: false,
+          status: 'processing',
+          message: 'Mastercard enrichment submitted - processing asynchronously',
+          source: 'api'
+        });
+      });
 
       // Update final status
       let successCount = 0;
@@ -95,7 +113,7 @@ class MastercardModule implements PipelineModule {
         progressMessage: `Error: ${error.message}`
       });
       
-      throw new Error(error instanceof Error ? error.message : 'Unknown error');
+      throw new Error(error instanceof Error ? error.message : String(error));
     }
   }
 }

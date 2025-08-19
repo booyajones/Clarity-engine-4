@@ -273,22 +273,23 @@ export const akkioPredictionLogs = pgTable("akkio_prediction_logs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Track Mastercard bulk search requests
+// Track Mastercard bulk search requests - ASYNC with NO TIMEOUTS
 export const mastercardSearchRequests = pgTable("mastercard_search_requests", {
   id: serial("id").primaryKey(),
   searchId: text("search_id").notNull().unique(), // Mastercard's bulkSearchId
   batchId: integer("batch_id"), // Optional link to upload batch
   payeeClassificationId: integer("payee_classification_id"), // Optional link to specific payee
-  status: text("status").notNull().default("pending"), // pending, submitted, polling, completed, failed, timeout
+  status: text("status").notNull().default("pending"), // pending, submitted, polling, completed, failed, no_match
   searchType: text("search_type").notNull().default("bulk"), // bulk or single
   requestPayload: jsonb("request_payload").notNull(), // Original request data
   responsePayload: jsonb("response_payload"), // Response data when available
-  pollAttempts: integer("poll_attempts").notNull().default(0),
-  maxPollAttempts: integer("max_poll_attempts").notNull().default(20), // Increased for longer searches
+  pollAttempts: integer("poll_attempts").notNull().default(0), // Track attempts but NO LIMIT
+  maxPollAttempts: integer("max_poll_attempts").notNull().default(999999), // Effectively unlimited
   lastPolledAt: timestamp("last_polled_at"),
   submittedAt: timestamp("submitted_at").defaultNow().notNull(),
   completedAt: timestamp("completed_at"),
   error: text("error"),
+  searchIdMapping: jsonb("search_id_mapping"), // Maps searchRequestIds to payee IDs
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
