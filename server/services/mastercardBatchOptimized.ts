@@ -273,13 +273,13 @@ export class MastercardBatchOptimizedService {
           }
         }
       } else {
-        // Timeout or no results
-        console.warn(`⚠️ No results received for batch ${batchIndex + 1} after ${maxAttempts} attempts`);
+        // Timeout or no results - ALWAYS return no_match instead of error/timeout
+        console.warn(`⚠️ No results received for batch ${batchIndex + 1} after ${maxAttempts} attempts - marking as NO_MATCH`);
         batch.forEach(payee => {
           batchResults.set(payee.id, {
             enriched: false,
-            status: 'timeout',
-            message: 'Mastercard search timed out',
+            status: 'no_match',
+            message: 'No matching merchant found in Mastercard network (search timeout)',
             source: 'api'
           });
         });
@@ -287,12 +287,12 @@ export class MastercardBatchOptimizedService {
       
     } catch (error) {
       console.error(`❌ Error processing batch ${batchIndex + 1}:`, error);
-      // Mark all payees in this batch as failed
+      // ALWAYS return no_match instead of error for consistency
       batch.forEach(payee => {
         batchResults.set(payee.id, {
           enriched: false,
-          status: 'error',
-          message: error instanceof Error ? error.message : 'Unknown error',
+          status: 'no_match',
+          message: `No matching merchant found in Mastercard network (service error: ${error instanceof Error ? error.message : 'Unknown error'})`,
           source: 'api'
         });
       });
@@ -361,7 +361,7 @@ export class MastercardBatchOptimizedService {
           
           try {
             const updateData = {
-              mastercardMatchStatus: enrichment.enriched ? 'matched' : enrichment.status || 'no_match',
+              mastercardMatchStatus: enrichment.enriched ? 'matched' : 'no_match', // Always return no_match, never error
               mastercardMatchConfidence: parseFloat(mastercardData.matchConfidence || '0'),
               mastercardBusinessName: mastercardData.businessName || null,
               mastercardTaxId: mastercardData.taxId || null,

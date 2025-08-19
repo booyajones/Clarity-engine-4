@@ -1,10 +1,11 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload as UploadIcon, Download, Loader2, X, FileSpreadsheet, CheckCircle2, XCircle, Clock, AlertCircle, Activity, ArrowRight, ClipboardList, Sparkles, Eye, Settings, Brain, Package, Database, TrendingUp, Users, Shield, MapPin, Zap, RefreshCw, BarChart3, Search, CreditCard, Trash2, Layers, Building2, Calendar, Heart } from "lucide-react";
+import { Upload as UploadIcon, Download, Loader2, X, FileSpreadsheet, CheckCircle2, XCircle, Clock, AlertCircle, Activity, ArrowRight, ClipboardList, Sparkles, Eye, Settings, Brain, Package, Database, TrendingUp, Users, Shield, MapPin, Zap, RefreshCw, BarChart3, Search, CreditCard, Trash2, Layers, Building2, Calendar, Heart, AlertTriangle } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Link } from "wouter";
 import {
   Table,
@@ -608,6 +609,30 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Critical Mastercard Error Alert */}
+      {batches?.some(batch => 
+        batch.mastercardEnrichmentStatus === 'error' || 
+        batch.mastercardEnrichmentStatus === 'failed' ||
+        (batch.currentStep && batch.currentStep.toLowerCase().includes('mastercard') && 
+         batch.currentStep.toLowerCase().includes('error'))
+      ) && (
+        <Alert className="mx-8 mt-4 border-red-500 bg-red-50">
+          <AlertTriangle className="h-4 w-4 text-red-600" />
+          <AlertTitle className="text-red-800">Mastercard Track™ Enrichment</AlertTitle>
+          <AlertDescription className="text-red-700">
+            <span className="font-semibold">✗ Error</span>
+            <br />
+            Unable to enrich with Mastercard data. The enrichment service encountered an error.
+            <br />
+            <span className="text-sm">Source api</span>
+            <br />
+            <span className="text-xs mt-1 text-red-600">
+              0 records enriched - All records marked as "No Match" for consistency
+            </span>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="bg-white border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-8 py-8">
           <div className="flex items-center justify-between">
