@@ -1684,6 +1684,11 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                     selectedClassification.mastercardBusinessName !== 'None' &&
                                     selectedClassification.mastercardBusinessName !== null;
                                   
+                                  // Check if enrichment was performed (either matched or no match)
+                                  const wasEnriched = selectedClassification.mastercardMatchStatus === 'matched' || 
+                                                     selectedClassification.mastercardMatchStatus === 'NO_MATCH' ||
+                                                     hasMastercardData;
+                                  
                                   const hasAnyMastercardFields = hasMastercardData ||
                                     selectedClassification.mastercardTaxId ||
                                     selectedClassification.mastercardAddress ||
@@ -1720,14 +1725,13 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                         </div>
                                         <Badge className={`text-xs ${
                                           hasMastercardData ? 'bg-green-100 text-green-800' :
+                                          wasEnriched ? 'bg-yellow-100 text-yellow-800' :
                                           selectedClassification.mastercardMatchStatus === 'error' ? 'bg-red-100 text-red-800' :
-                                          selectedClassification.mastercardMatchStatus === 'NO_MATCH' ? 'bg-gray-100 text-gray-800' :
-                                          selectedClassification.mastercardMatchStatus === 'matched' ? 'bg-yellow-100 text-yellow-800' :
                                           'bg-gray-100 text-gray-800'
                                         }`}>
-                                          {hasMastercardData ? '✓ Enriched' :
+                                          {hasMastercardData ? '✓ Matched' :
+                                           wasEnriched ? '✓ Enriched (No Match)' :
                                            selectedClassification.mastercardMatchStatus === 'error' ? '✗ Error' :
-                                           selectedClassification.mastercardMatchStatus === 'NO_MATCH' ? 'No Match' :
                                            selectedClassification.mastercardMatchStatus === 'matched' ? 'Processing' :
                                            'Not Enriched'}
                                         </Badge>

@@ -1138,7 +1138,11 @@ export function SingleClassification() {
                   </p>
                   {result.mastercardEnrichment.enriched ? (
                     <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-800 dark:text-amber-100">
-                      ✓ Enriched {result.mastercardEnrichment.data?.matchConfidence ? `(${result.mastercardEnrichment.data.matchConfidence} confidence)` : ''}
+                      ✓ Matched {result.mastercardEnrichment.data?.matchConfidence ? `(${result.mastercardEnrichment.data.matchConfidence} confidence)` : ''}
+                    </Badge>
+                  ) : result.mastercardEnrichment.status === "no_match" ? (
+                    <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100">
+                      ✓ Enriched (No Match)
                     </Badge>
                   ) : result.mastercardEnrichment.status === "not_configured" ? (
                     <Badge className="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100">
