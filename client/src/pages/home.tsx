@@ -6,6 +6,16 @@ import { useState, useRef, useEffect } from "react";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Link } from "wouter";
 import {
   Table,
@@ -124,6 +134,7 @@ export default function Home() {
   const [selectedColumn, setSelectedColumn] = useState<string>("");
   const [viewingBatchId, setViewingBatchId] = useState<number | null>(null);
   const [currentView, setCurrentView] = useState<"dashboard" | "upload" | "keywords" | "single">("dashboard");
+  const [showClearAllDialog, setShowClearAllDialog] = useState(false);
   const [matchingOptions, setMatchingOptions] = useState({
     enableFinexio: true,
     enableMastercard: false,
@@ -336,6 +347,37 @@ export default function Home() {
         title: "Deleted",
         description: "Batch has been deleted.",
       });
+      queryClient.invalidateQueries({ queryKey: ["/api/upload/batches"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const clearAllMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/upload/batches", {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        const text = await res.text() || res.statusText;
+        throw new Error(`${res.status}: ${text}`);
+      }
+      
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "All Cleared",
+        description: `Deleted ${data.deletedCount || 'all'} batches from classification history.`,
+      });
+      setShowClearAllDialog(false);
       queryClient.invalidateQueries({ queryKey: ["/api/upload/batches"] });
     },
     onError: (error: Error) => {
@@ -1851,11 +1893,24 @@ export default function Home() {
                 }
               </CardDescription>
             </div>
-            {batches && batches.length > 0 && (
-              <Badge variant="secondary" className="text-xs">
-                {completedBatches.length} completed
-              </Badge>
-            )}
+            <div className="flex items-center gap-2">
+              {batches && batches.length > 0 && (
+                <>
+                  <Badge variant="secondary" className="text-xs">
+                    {completedBatches.length} completed
+                  </Badge>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowClearAllDialog(true)}
+                    className="hover:bg-red-50 hover:text-red-600 transition-colors"
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Clear All
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -2022,6 +2077,28 @@ export default function Home() {
           )}
         </CardContent>
       </Card>
+
+      {/* Clear All Confirmation Dialog */}
+      <AlertDialog open={showClearAllDialog} onOpenChange={setShowClearAllDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete all {batches?.length || 0} batches from your classification history. 
+              This action cannot be undone. All classification data, results, and exports associated with these batches will be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => clearAllMutation.mutate()}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Delete All Batches
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       </div>
     </div>
   );
