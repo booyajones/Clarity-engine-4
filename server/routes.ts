@@ -15,6 +15,7 @@ import healthRoutes from "./routes/health";
 import akkioRoutes from "./routes/akkio";
 import batchJobRoutes from "./routes/batch-jobs";
 import monitoringRoutes from "./routes/monitoring";
+import pipelineRoutes from "./routes/pipelineRoutes";
 import { AppError, errorHandler, notFoundHandler, asyncHandler } from "./middleware/errorHandler";
 import { generalLimiter, uploadLimiter, classificationLimiter, expensiveLimiter } from "./middleware/rateLimiter";
 import { db } from "./db";
@@ -222,6 +223,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Batch job management routes for large-scale processing
   app.use('/api/batch-jobs', batchJobRoutes);
+  
+  // Modular pipeline routes for independent module execution
+  app.use('/api/pipeline', pipelineRoutes);
   
   // System monitoring and performance routes
   app.use('/api/monitoring', monitoringRoutes);
