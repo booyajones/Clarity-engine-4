@@ -733,7 +733,144 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
       </div>
 
       <div className="max-w-7xl mx-auto p-8 space-y-6">
-        {/* Beautiful Modular Dashboard Tiles */}
+        {/* Processing Stage Tiles - Matching Main Dashboard Design */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+          {/* Classification Stage */}
+          <div className="bg-gradient-to-br from-blue-500 to-blue-700 rounded-lg p-4 text-white shadow-lg hover:shadow-xl transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <Brain className="h-8 w-8 text-white/80" />
+              <CheckCircle2 className="h-5 w-5 text-white/60" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-3xl font-bold">{data.summary.total}</p>
+              <p className="text-xs text-white/80">AI Classification</p>
+            </div>
+            <div className="mt-3 bg-white/10 rounded-full h-1.5">
+              <div className="bg-white/50 h-1.5 rounded-full" style={{ width: '100%' }}></div>
+            </div>
+            <p className="text-xs text-white/60 mt-2">Complete</p>
+          </div>
+
+          {/* Finexio Matching Stage */}
+          <div className="bg-gradient-to-br from-green-500 to-green-700 rounded-lg p-4 text-white shadow-lg hover:shadow-xl transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <Building2 className="h-8 w-8 text-white/80" />
+              <span className="text-xs text-white/80 font-semibold">
+                {(() => {
+                  const matched = data.classifications?.filter(c => 
+                    (c.payeeMatches?.[0]?.finexioMatchScore || c.finexioMatchScore || 0) >= 85
+                  ).length || 0;
+                  return Math.round((matched / data.summary.total) * 100);
+                })()}%
+              </span>
+            </div>
+            <div className="space-y-1">
+              <p className="text-3xl font-bold">
+                {data.classifications?.filter(c => 
+                  (c.payeeMatches?.[0]?.finexioMatchScore || c.finexioMatchScore || 0) >= 85
+                ).length || 0}
+              </p>
+              <p className="text-xs text-white/80">Finexio Matches</p>
+            </div>
+            <div className="mt-3 bg-white/10 rounded-full h-1.5">
+              <div 
+                className="bg-white/50 h-1.5 rounded-full transition-all" 
+                style={{ 
+                  width: `${Math.round((data.classifications?.filter(c => 
+                    (c.payeeMatches?.[0]?.finexioMatchScore || c.finexioMatchScore || 0) >= 85
+                  ).length || 0) / data.summary.total * 100)}%` 
+                }}
+              ></div>
+            </div>
+            <p className="text-xs text-white/60 mt-2">≥85% Score</p>
+          </div>
+
+          {/* Mastercard Enrichment Stage */}
+          <div className="bg-gradient-to-br from-amber-500 to-amber-700 rounded-lg p-4 text-white shadow-lg hover:shadow-xl transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <CreditCard className="h-8 w-8 text-white/80" />
+              <span className="text-xs text-white/80 font-semibold">
+                {(() => {
+                  const enriched = data.classifications?.filter(c => c.mastercardBusinessName).length || 0;
+                  return Math.round((enriched / data.summary.business) * 100);
+                })()}%
+              </span>
+            </div>
+            <div className="space-y-1">
+              <p className="text-3xl font-bold">
+                {data.classifications?.filter(c => c.mastercardBusinessName).length || 0}
+              </p>
+              <p className="text-xs text-white/80">MC Enriched</p>
+            </div>
+            <div className="mt-3 bg-white/10 rounded-full h-1.5">
+              <div 
+                className="bg-white/50 h-1.5 rounded-full transition-all" 
+                style={{ 
+                  width: `${Math.round((data.classifications?.filter(c => c.mastercardBusinessName).length || 0) / data.summary.business * 100)}%` 
+                }}
+              ></div>
+            </div>
+            <p className="text-xs text-white/60 mt-2">Business Data</p>
+          </div>
+
+          {/* Google Address Validation Stage */}
+          <div className="bg-gradient-to-br from-purple-500 to-purple-700 rounded-lg p-4 text-white shadow-lg hover:shadow-xl transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <MapPin className="h-8 w-8 text-white/80" />
+              <span className="text-xs text-white/80 font-semibold">
+                {(() => {
+                  const validated = data.classifications?.filter(c => c.addressValidationResult?.validated).length || 0;
+                  return Math.round((validated / data.summary.total) * 100);
+                })()}%
+              </span>
+            </div>
+            <div className="space-y-1">
+              <p className="text-3xl font-bold">
+                {data.classifications?.filter(c => c.addressValidationResult?.validated).length || 0}
+              </p>
+              <p className="text-xs text-white/80">Google Validated</p>
+            </div>
+            <div className="mt-3 bg-white/10 rounded-full h-1.5">
+              <div 
+                className="bg-white/50 h-1.5 rounded-full transition-all" 
+                style={{ 
+                  width: `${Math.round((data.classifications?.filter(c => c.addressValidationResult?.validated).length || 0) / data.summary.total * 100)}%` 
+                }}
+              ></div>
+            </div>
+            <p className="text-xs text-white/60 mt-2">Addresses</p>
+          </div>
+
+          {/* Akkio Predictions Stage */}
+          <div className="bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-lg p-4 text-white shadow-lg hover:shadow-xl transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <TrendingUp className="h-8 w-8 text-white/80" />
+              <span className="text-xs text-white/80 font-semibold">
+                {(() => {
+                  const predicted = data.classifications?.filter(c => c.akkioPrediction?.paymentMethod).length || 0;
+                  return Math.round((predicted / data.summary.total) * 100);
+                })()}%
+              </span>
+            </div>
+            <div className="space-y-1">
+              <p className="text-3xl font-bold">
+                {data.classifications?.filter(c => c.akkioPrediction?.paymentMethod).length || 0}
+              </p>
+              <p className="text-xs text-white/80">Akkio Predictions</p>
+            </div>
+            <div className="mt-3 bg-white/10 rounded-full h-1.5">
+              <div 
+                className="bg-white/50 h-1.5 rounded-full transition-all" 
+                style={{ 
+                  width: `${Math.round((data.classifications?.filter(c => c.akkioPrediction?.paymentMethod).length || 0) / data.summary.total * 100)}%` 
+                }}
+              ></div>
+            </div>
+            <p className="text-xs text-white/60 mt-2">Payment Method</p>
+          </div>
+        </div>
+
+        {/* Classification Type Tiles */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 gap-4">
           {/* Total Records */}
           <div className="bg-gradient-to-br from-slate-500 to-slate-700 rounded-lg p-4 text-white shadow-lg hover:shadow-xl transition-shadow">
