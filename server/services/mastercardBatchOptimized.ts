@@ -288,15 +288,28 @@ export class MastercardBatchOptimizedService {
       
     } catch (error) {
       console.error(`❌ Error processing batch ${batchIndex + 1}:`, error);
+      
+      // Check if it's a rate limit error
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const isRateLimit = errorMessage.includes('429') || errorMessage.includes('LIMIT_EXCEEDED') || errorMessage.includes('Too Many Requests');
+      
       // ALWAYS return no_match instead of error for consistency
       batch.forEach(payee => {
         batchResults.set(payee.id, {
           enriched: false,
           status: 'no_match',
-          message: `No matching merchant found in Mastercard network (service error: ${error instanceof Error ? error.message : 'Unknown error'})`,
+          message: isRateLimit 
+            ? 'No matching merchant found in Mastercard network (rate limit exceeded)'
+            : `No matching merchant found in Mastercard network (service temporarily unavailable)`,
           source: 'api'
         });
       });
+      
+      // If rate limited, add a delay before next batch
+      if (isRateLimit) {
+        console.log('⏳ Rate limit detected, adding 30 second delay before next batch...');
+        await new Promise(resolve => setTimeout(resolve, 30000)); // 30 second delay
+      }
     }
     
     return batchResults;
