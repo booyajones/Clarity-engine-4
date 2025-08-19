@@ -6,21 +6,26 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+  workflow_dispatch: # Allow manual triggering
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   update-docs:
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
-        token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
-        persist-credentials: true
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
     
     - name: Setup Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '20'
         cache: 'npm'
     
     - name: Install dependencies
@@ -33,18 +38,25 @@ jobs:
         
     - name: Update README badges
       run: |
+        # Create docs directory if it doesn't exist
+        mkdir -p docs
         # Update any dynamic badges or stats in README
         echo "Documentation updated on $(date)" >> docs/LAST_UPDATED.md
     
-    - name: Commit documentation changes
+    - name: Check for changes
+      id: verify-changed-files
       run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add docs/ README.md
-        if ! git diff --staged --quiet; then
-          git commit -m "Auto-update documentation [skip ci]"
-          git push
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "changed=true" >> $GITHUB_OUTPUT
         else
-          echo "No documentation changes to commit"
+          echo "changed=false" >> $GITHUB_OUTPUT
         fi
-      if: github.event_name == 'push'
+    
+    - name: Commit documentation changes
+      if: steps.verify-changed-files.outputs.changed == 'true' && github.event_name == 'push'
+      run: |
+        git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add .
+        git commit -m "docs: auto-update documentation [skip ci]"
+        git push
