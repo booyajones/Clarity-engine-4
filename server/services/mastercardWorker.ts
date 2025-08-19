@@ -151,11 +151,12 @@ export class MastercardWorker {
         })
         .where(eq(mastercardSearchRequests.id, search.id));
 
-      // Try to get results - just check once per poll cycle
+      // Try to get results - let it poll properly until complete
+      // Mastercard searches take 5-20 minutes, so we need to wait patiently
       const results = await this.mastercardService.getSearchResults(
         search.searchId, 
         search.searchId,
-        1  // Only try once per poll cycle
+        240  // Allow up to 20 minutes of polling (240 * 5 seconds)
       );
 
       if (results) {

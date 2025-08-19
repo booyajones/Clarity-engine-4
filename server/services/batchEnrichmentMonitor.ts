@@ -441,16 +441,85 @@ class BatchEnrichmentMonitor {
    */
   private async processMastercardEnrichment(batchId: number) {
     try {
-      // For now, skip Mastercard as it requires async processing
-      // This would normally submit the batch to Mastercard API
-      console.log(`Skipping Mastercard enrichment for batch ${batchId} (requires async processing)`);
+      console.log(`🚀 Starting Mastercard enrichment for batch ${batchId}`);
       
+      // Import the async service
+      const { MastercardAsyncService } = await import('./mastercardAsyncService');
+      const mastercardService = new MastercardAsyncService();
+      
+      // Get all business classifications that need Mastercard enrichment
+      const classifications = await db.select()
+        .from(payeeClassifications)
+        .where(
+          and(
+            eq(payeeClassifications.batchId, batchId),
+            eq(payeeClassifications.payeeType, 'Business'),
+            isNull(payeeClassifications.mastercardMatchStatus)
+          )
+        );
+      
+      if (classifications.length === 0) {
+        console.log(`No records need Mastercard enrichment for batch ${batchId}`);
+        await db.update(uploadBatches)
+          .set({ 
+            mastercardEnrichmentStatus: 'completed',
+            mastercardEnrichmentTotal: 0,
+            mastercardEnrichmentProcessed: 0,
+            mastercardActualEnriched: 0
+          })
+          .where(eq(uploadBatches.id, batchId));
+        return;
+      }
+      
+      console.log(`📊 Found ${classifications.length} records for Mastercard enrichment`);
+      
+      // Update batch to show we're starting
       await db.update(uploadBatches)
-        .set({ mastercardEnrichmentStatus: 'skipped' })
+        .set({ 
+          mastercardEnrichmentStatus: 'processing',
+          mastercardEnrichmentTotal: classifications.length,
+          mastercardEnrichmentProcessed: 0,
+          mastercardActualEnriched: 0,
+          mastercardEnrichmentStartedAt: new Date()
+        })
         .where(eq(uploadBatches.id, batchId));
+      
+      // Prepare payees for Mastercard
+      const payees = classifications.map(c => ({
+        id: c.id.toString(),
+        name: c.cleanedName || c.originalName,
+        address: c.googleFormattedAddress || c.address || undefined,
+        city: c.googleCity || c.city || undefined,
+        state: c.googleState || c.state || undefined,
+        zipCode: c.googlePostalCode || c.zipCode || undefined
+      }));
+      
+      // Submit to Mastercard async service
+      const result = await mastercardService.submitBatchForEnrichment(batchId, payees);
+      
+      if (result.searchIds.length > 0) {
+        console.log(`✅ Submitted ${result.searchIds.length} Mastercard search(es) for batch ${batchId}`);
+        console.log(`   Search IDs: ${result.searchIds.join(', ')}`);
+        
+        // Mark as processing - the worker will handle polling
+        await db.update(uploadBatches)
+          .set({ 
+            mastercardEnrichmentStatus: 'processing',
+            mastercardEnrichmentTotal: classifications.length
+          })
+          .where(eq(uploadBatches.id, batchId));
+      } else {
+        console.log(`⚠️ No Mastercard searches submitted for batch ${batchId}`);
+        await db.update(uploadBatches)
+          .set({ 
+            mastercardEnrichmentStatus: 'failed',
+            mastercardEnrichmentTotal: classifications.length
+          })
+          .where(eq(uploadBatches.id, batchId));
+      }
 
     } catch (error) {
-      console.error(`Error in Mastercard enrichment for batch ${batchId}:`, error);
+      console.error(`❌ Error in Mastercard enrichment for batch ${batchId}:`, error);
       await db.update(uploadBatches)
         .set({ mastercardEnrichmentStatus: 'failed' })
         .where(eq(uploadBatches.id, batchId));
