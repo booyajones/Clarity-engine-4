@@ -201,15 +201,16 @@ export class MastercardBatchOptimizedService {
           if (searchResults && searchResults.results && searchResults.results.length > 0) {
             results = searchResults;
             const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
-            const totalMinutes = (totalTime / 60).toFixed(1);
+            const totalMinutes = (parseFloat(totalTime) / 60).toFixed(1);
             console.log(`✅ Batch ${batchIndex + 1} results ready in ${totalTime}s (${totalMinutes} minutes) after ${attempts} attempts!`);
             
             // Track average completion time
-            if (!global.mastercardSearchTimes) {
-              global.mastercardSearchTimes = [];
+            const globalAny = global as any;
+            if (!globalAny.mastercardSearchTimes) {
+              globalAny.mastercardSearchTimes = [];
             }
-            global.mastercardSearchTimes.push(parseFloat(totalTime));
-            const avgTime = global.mastercardSearchTimes.reduce((a, b) => a + b, 0) / global.mastercardSearchTimes.length;
+            globalAny.mastercardSearchTimes.push(parseFloat(totalTime));
+            const avgTime = globalAny.mastercardSearchTimes.reduce((a: number, b: number) => a + b, 0) / globalAny.mastercardSearchTimes.length;
             console.log(`  📊 Average Mastercard search time: ${avgTime.toFixed(1)}s (${(avgTime/60).toFixed(1)} minutes)`);
           }
         } catch (error) {
@@ -249,10 +250,10 @@ export class MastercardBatchOptimizedService {
                 matchConfidence: item.matchConfidence || '0',
                 matchStatus: item.matchStatus,
                 businessName: merchantDetails.merchantName || null,
-                taxId: merchantDetails.taxId || null,
+                taxId: (merchantDetails as any).taxId || null,
                 merchantIds: merchantDetails.merchantId ? [merchantDetails.merchantId] : null,
-                address: merchantDetails.businessAddress || null,
-                phone: merchantDetails.phoneNumber || null,
+                address: (merchantDetails as any).businessAddress || null,
+                phone: (merchantDetails as any).phoneNumber || null,
                 mccCode: merchantDetails.merchantCategoryCode || null,
                 mccGroup: merchantDetails.merchantCategoryDescription || null,
                 acceptanceNetwork: merchantDetails.acceptanceNetwork || null,

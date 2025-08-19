@@ -53,19 +53,30 @@ class MastercardModule implements PipelineModule {
 
       console.log(`Found ${businessClassifications.length} Business records to enrich with Mastercard`);
 
+      // Prepare payee data for Mastercard enrichment
+      const payeesForEnrichment = businessClassifications.map(c => ({
+        id: String(c.id), // Convert ID to string as expected by enrichBatch
+        name: c.cleanedName || c.originalName,
+        address: c.address || undefined,
+        city: c.city || undefined,
+        state: c.state || undefined,
+        zipCode: c.zipCode || undefined
+      }));
+
       // Use the batch optimized service for efficient processing
-      const results = await mastercardBatchOptimizedService.enrichBatch(
-        batchId,
-        businessClassifications,
-        {
-          fullBatch: true,
-          maxConcurrent: options.maxConcurrent || 10
-        }
-      );
+      const enrichmentMap = await mastercardBatchOptimizedService.enrichBatch(payeesForEnrichment);
 
       // Update final status
-      const successCount = results.filter(r => r.enriched).length;
-      const errorCount = results.filter(r => r.status === 'error').length;
+      let successCount = 0;
+      let errorCount = 0;
+      
+      enrichmentMap.forEach((result) => {
+        if (result.enriched) {
+          successCount++;
+        } else if (result.status === 'error') {
+          errorCount++;
+        }
+      });
 
       await storage.updateUploadBatch(batchId, {
         mastercardEnrichmentStatus: 'completed',
@@ -84,7 +95,7 @@ class MastercardModule implements PipelineModule {
         progressMessage: `Error: ${error.message}`
       });
       
-      throw error;
+      throw new Error(error instanceof Error ? error.message : 'Unknown error');
     }
   }
 }
