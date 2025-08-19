@@ -12,7 +12,14 @@ Clarity Engine 3 is an AI-powered web application for finance and accounting pro
 **FINEXIO MATCHING FIX (8/14/2025)**: Resolved critical issue where Finexio matching would hang indefinitely on large datasets. Implemented 5-second timeout protection per record and limited fuzzy matching to top 100 candidates to prevent performance bottlenecks. System now processes batches reliably in under 30 seconds. Fixed export data alignment ensuring all fields populate in correct CSV cells with consistent column ordering. Complete database schema fix: Added missing Finexio fields (finexioSupplierId, finexioSupplierName, finexioConfidence) to payeeClassifications table. Fixed storage function to properly update classifications instead of incorrectly saving to payeeMatches table. Fixed percentage calculation to display accurate match rates. Achieved 100% match success rate with 483,227 cached suppliers.
 
 ## User Preferences
-Preferred communication style: Simple, everyday language.
+- **Communication style**: Simple, everyday language
+- **Architecture preference**: Each processing stage should be a well-contained, self-contained app for modularity
+  - Classification module (standalone)
+  - Finexio matching module (standalone)
+  - Google Address validation module (standalone)
+  - Mastercard enrichment module (standalone)
+  - Akkio predictions module (standalone)
+  - This allows easy bolt-on additions of new components
 
 ## System Architecture
 
