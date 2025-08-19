@@ -155,6 +155,7 @@ type SearchResultsResponse = z.infer<typeof SearchResultsResponseSchema>;
 
 export class MastercardApiService {
   private activeSearches = new Map<string, SearchStatusResponse>();
+  private searchStartTimes = new Map<string, number>(); // Track when each search started for accurate timing
   private isConfigured: boolean;
   private privateKey: string | null = null;
   // Super-optimized result cache with TTL
@@ -617,10 +618,16 @@ export class MastercardApiService {
     }
   }
 
-  // Get search results with patient retrying - Mastercard searches take 5-10 MINUTES to complete
-  async getSearchResults(searchId: string, searchRequestId?: string, maxRetries = 120): Promise<SearchResultsResponse | null> {
+  // Get search results with INFINITE patience - Mastercard searches can take HOURS
+  // CRITICAL: NEVER timeout - every record MUST get a response
+  async getSearchResults(searchId: string, searchRequestId?: string, maxRetries = 999999): Promise<SearchResultsResponse | null> {
     let retries = 0;
     const baseDelay = 5000; // Start with 5 seconds since searches take minutes
+    
+    // Track when this search started for accurate elapsed time logging
+    if (!this.searchStartTimes.has(searchId)) {
+      this.searchStartTimes.set(searchId, Date.now());
+    }
     
     while (retries < maxRetries) {
       try {
@@ -635,11 +642,13 @@ export class MastercardApiService {
         if (status.status !== 'COMPLETED') {
           // Still processing, wait and retry
           retries++;
-          // Progressive delay optimized for 5-10 minute completion time
+          // Progressive delay optimized for searches that can take HOURS
           // First minute: check every 5 seconds (12 checks)
           // Minutes 2-5: check every 10 seconds (24 checks)
           // Minutes 5-10: check every 15 seconds (20 checks)
-          // After 10 minutes: check every 30 seconds
+          // Minutes 10-30: check every 30 seconds (40 checks)
+          // Minutes 30-60: check every 60 seconds (30 checks)
+          // After 1 hour: check every 2 minutes (can run for days)
           let delay;
           if (retries <= 12) {
             delay = 5000; // First minute: 5 seconds
@@ -647,14 +656,22 @@ export class MastercardApiService {
             delay = 10000; // Minutes 2-5: 10 seconds
           } else if (retries <= 56) {
             delay = 15000; // Minutes 5-10: 15 seconds
+          } else if (retries <= 96) {
+            delay = 30000; // Minutes 10-30: 30 seconds
+          } else if (retries <= 126) {
+            delay = 60000; // Minutes 30-60: 1 minute
           } else {
-            delay = 30000; // After 10 minutes: 30 seconds
+            delay = 120000; // After 1 hour: 2 minutes (for jobs that take hours)
           }
           
-          // Log progress every 10 attempts
-          if (retries % 10 === 0 || retries <= 3) {
-            const minutesWaited = Math.floor((retries * 7500) / 60000); // Rough estimate
-            console.log(`Search ${searchId} still ${status.status}, waiting ${delay/1000}s (attempt ${retries}/${maxRetries}, ~${minutesWaited} minutes elapsed)`);
+          // Log progress periodically - more detail for long-running searches
+          const shouldLog = retries <= 3 || retries % 10 === 0 || (retries > 100 && retries % 30 === 0);
+          if (shouldLog) {
+            const elapsedMs = Date.now() - (this.searchStartTimes.get(searchId) || Date.now());
+            const hours = Math.floor(elapsedMs / 3600000);
+            const minutes = Math.floor((elapsedMs % 3600000) / 60000);
+            const timeString = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+            console.log(`Search ${searchId} still ${status.status}, waiting ${delay/1000}s (attempt ${retries}, ${timeString} elapsed) - WILL WAIT AS LONG AS NEEDED`);
           }
           
           await new Promise(resolve => setTimeout(resolve, delay));
@@ -748,7 +765,9 @@ export class MastercardApiService {
       }
     }
     
-    console.log(`Search ${searchId}: Timed out after ${maxRetries} attempts`);
+    // This should NEVER happen with maxRetries = 999999
+    console.error(`CRITICAL ERROR: Search ${searchId} reached max retry limit of ${maxRetries} - this should never happen!`);
+    // Still return null but this is a critical failure that should be investigated
     return null;
   }
 

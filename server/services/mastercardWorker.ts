@@ -151,12 +151,13 @@ export class MastercardWorker {
         })
         .where(eq(mastercardSearchRequests.id, search.id));
 
-      // Try to get results - let it poll properly until complete
-      // Mastercard searches take 5-20 minutes, so we need to wait patiently
+      // Try to get results - NO TIMEOUT, poll until we get results
+      // Mastercard searches can take HOURS - we MUST wait for results
+      // NEVER return without a Mastercard response when enrichment is requested
       const results = await this.mastercardService.getSearchResults(
         search.searchId, 
         search.searchId,
-        240  // Allow up to 20 minutes of polling (240 * 5 seconds)
+        999999  // Effectively unlimited - can poll for days if needed
       );
 
       if (results) {
