@@ -84,26 +84,17 @@ class MastercardModule implements PipelineModule {
         });
       });
 
-      // Update final status
-      let successCount = 0;
-      let errorCount = 0;
+      // DO NOT mark as completed - this happens asynchronously!
+      // The worker will update individual records as results come in
       
-      enrichmentMap.forEach((result) => {
-        if (result.enriched) {
-          successCount++;
-        } else if (result.status === 'error') {
-          errorCount++;
-        }
-      });
-
       await storage.updateUploadBatch(batchId, {
-        mastercardEnrichmentStatus: 'completed',
-        mastercardEnrichmentCompletedAt: new Date(),
-        currentStep: 'Mastercard enrichment complete',
-        progressMessage: `Enriched ${successCount}/${businessClassifications.length} business records (${errorCount} errors)`
+        mastercardEnrichmentStatus: 'processing',
+        currentStep: 'Mastercard enrichment in progress',
+        progressMessage: `Processing ${businessClassifications.length} business records - results will arrive asynchronously`,
+        mastercardEnrichmentProcessed: businessClassifications.length // Track that we submitted all of them
       });
 
-      console.log(`✅ Mastercard Module: Completed for batch ${batchId} (${successCount}/${businessClassifications.length} enriched)`);
+      console.log(`📤 Mastercard Module: Submitted ${businessClassifications.length} records for batch ${batchId}. Worker will process results.`);
     } catch (error) {
       console.error(`❌ Mastercard Module: Failed for batch ${batchId}:`, error);
       

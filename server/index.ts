@@ -121,6 +121,14 @@ app.use((req, res, next) => {
         if (mastercardApi.isServiceConfigured()) {
           getMastercardWorker().start();
           console.log('✅ Mastercard worker started for polling search results');
+          
+          // Start Mastercard verification service to ensure all records get processed
+          import('./services/mastercardVerificationService').then(({ mastercardVerificationService }) => {
+            mastercardVerificationService.start();
+            console.log('✅ Mastercard verification service started');
+          }).catch(error => {
+            console.error('Failed to start Mastercard verification service:', error);
+          });
         }
       } catch (error) {
         console.error('Failed to start Mastercard worker:', error);

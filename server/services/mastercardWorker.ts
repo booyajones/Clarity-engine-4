@@ -94,9 +94,50 @@ export class MastercardWorker {
 
       // Handle pending searches that need initial submission
       if (search.status === "pending" && search.searchId.startsWith("pending_")) {
-        console.log(`Retrying submission for pending search ${search.searchId}`);
-        // The async service will handle resubmission
-        // For now, skip this search
+        console.log(`🔄 Retrying submission for pending search ${search.searchId}`);
+        
+        try {
+          // Extract the request payload and try to submit
+          const requestPayload = search.requestPayload as any;
+          const searchIdMapping = search.searchIdMapping as Record<string, string>;
+          
+          if (!requestPayload || !searchIdMapping) {
+            console.error(`Invalid pending search ${search.searchId} - missing payload or mapping`);
+            return;
+          }
+          
+          // Try to submit the search
+          const submitResponse = await this.mastercardService.submitBulkSearch(requestPayload);
+          const newSearchId = submitResponse.bulkSearchId;
+          
+          console.log(`✅ Successfully submitted pending search. Old ID: ${search.searchId}, New ID: ${newSearchId}`);
+          
+          // Update the search record with the new ID
+          await db
+            .update(mastercardSearchRequests)
+            .set({
+              searchId: newSearchId,
+              status: "submitted",
+              error: null,
+              submittedAt: new Date(),
+              pollAttempts: 0
+            })
+            .where(eq(mastercardSearchRequests.id, search.id));
+            
+          console.log(`📤 Pending search ${search.searchId} is now active as ${newSearchId}`);
+        } catch (error: any) {
+          console.error(`❌ Failed to retry pending search ${search.searchId}:`, error);
+          
+          // Update error but keep as pending for next retry
+          await db
+            .update(mastercardSearchRequests)
+            .set({
+              error: `Retry failed: ${error.message}`,
+              lastPolledAt: new Date()
+            })
+            .where(eq(mastercardSearchRequests.id, search.id));
+        }
+        
         return;
       }
 

@@ -95,45 +95,49 @@ export class MastercardAsyncService {
             maxPollAttempts: 999999, // Effectively unlimited
           });
 
-          console.log(`✅ Submitted Mastercard search ${searchId} with ${batch.length} payees`);
+          console.log(`✅ Submitted Mastercard search ${searchId} with ${batch.length} payees (batch ${i/MAX_BATCH_SIZE + 1}/${Math.ceil(payees.length/MAX_BATCH_SIZE)})`);
         } catch (error: any) {
-          console.error(`Error submitting batch:`, error);
+          console.error(`❌ Error submitting batch ${i/MAX_BATCH_SIZE + 1}/${Math.ceil(payees.length/MAX_BATCH_SIZE)}:`, error);
           
-          // Check if it's a rate limit error
-          const isRateLimit = error.message?.includes('429') || 
-                             error.message?.includes('LIMIT_EXCEEDED') || 
-                             error.message?.includes('Too Many Requests');
+          // CRITICAL: ALL errors must result in retry, not marking as no_match
+          // Every record MUST get a real Mastercard response
           
-          if (isRateLimit) {
-            console.log('⏳ Rate limit detected, will retry later via worker');
-            // Store as pending for worker to retry later
-            const pendingSearchId = `pending_${Date.now()}_${i}`;
-            
-            await db.insert(mastercardSearchRequests).values({
-              searchId: pendingSearchId,
-              batchId,
-              status: "pending", // Worker will retry submission
-              searchType: "bulk",
-              requestPayload: searchRequest,
-              searchIdMapping,
-              error: 'Rate limited - will retry',
-              pollAttempts: 0,
-              maxPollAttempts: 999999,
-            });
-            
-            searchIds.push(pendingSearchId);
-          } else {
-            // For other errors, mark all payees as no_match
-            for (const payeeId of Object.values(searchIdMapping)) {
-              await this.markPayeeAsNoMatch(parseInt(payeeId), 'Service temporarily unavailable');
-            }
-          }
+          const pendingSearchId = `pending_${Date.now()}_batch${batchId}_part${i/MAX_BATCH_SIZE}`;
+          
+          // Store as pending for worker to retry later - for ANY error type
+          await db.insert(mastercardSearchRequests).values({
+            searchId: pendingSearchId,
+            batchId,
+            status: "pending", // Worker will retry submission
+            searchType: "bulk",
+            requestPayload: searchRequest,
+            searchIdMapping,
+            error: `Failed to submit: ${error.message || 'Unknown error'} - will retry`,
+            pollAttempts: 0,
+            maxPollAttempts: 999999,
+          });
+          
+          searchIds.push(pendingSearchId);
+          console.log(`🔄 Stored batch for retry as ${pendingSearchId} - ALL ${batch.length} records WILL be processed`);
         }
       }
 
+      // Verify we have a search for EVERY record
+      const totalBatchesExpected = Math.ceil(payees.length / MAX_BATCH_SIZE);
+      if (searchIds.length !== totalBatchesExpected) {
+        console.error(`⚠️ WARNING: Expected ${totalBatchesExpected} searches but only have ${searchIds.length}`);
+      }
+      
+      // Log detailed submission status
+      console.log(`📊 Mastercard Submission Summary for batch ${batchId}:`);
+      console.log(`   - Total records: ${payees.length}`);
+      console.log(`   - Batches submitted: ${searchIds.length}`);
+      console.log(`   - Records per batch: ${MAX_BATCH_SIZE} (last batch: ${payees.length % MAX_BATCH_SIZE || MAX_BATCH_SIZE})`);
+      console.log(`   - Search IDs: ${searchIds.join(', ')}`);
+      
       return {
         searchIds,
-        message: `Submitted ${searchIds.length} search(es) for ${payees.length} payees. Results will be processed asynchronously.`
+        message: `Submitted ${searchIds.length} search(es) for ALL ${payees.length} payees. Every record WILL receive a Mastercard response.`
       };
     } catch (error) {
       console.error('Error in submitBatchForEnrichment:', error);
