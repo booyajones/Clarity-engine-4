@@ -109,6 +109,9 @@ interface ClassificationData {
   mastercardSource?: string;
   // BigQuery/Finexio enrichment fields
   finexioMatchScore?: number;
+  finexioSupplierName?: string;
+  finexioSupplierId?: string;
+  finexioConfidence?: number;
   paymentType?: string;
   matchReasoning?: string;
   createdAt: string;
@@ -730,117 +733,144 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
       </div>
 
       <div className="max-w-7xl mx-auto p-8 space-y-6">
-        {/* Summary Cards */}
+        {/* Beautiful Modular Dashboard Tiles */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 gap-4">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center">
-                <FileSpreadsheet className="h-8 w-8 text-gray-400" />
-                <div className="ml-4">
-                  <p className="text-2xl font-bold">{data.summary.total}</p>
-                  <p className="text-xs text-gray-500">Total Records</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Total Records */}
+          <div className="bg-gradient-to-br from-slate-500 to-slate-700 rounded-lg p-4 text-white shadow-lg hover:shadow-xl transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <FileSpreadsheet className="h-8 w-8 text-white/80" />
+              <Badge className="bg-white/20 text-white border-0 text-xs">Total</Badge>
+            </div>
+            <div className="space-y-1">
+              <p className="text-3xl font-bold">{data.summary.total}</p>
+              <p className="text-xs text-white/80">Total Records</p>
+            </div>
+            <div className="mt-3 bg-white/10 rounded-full h-1.5">
+              <div className="bg-white/50 h-1.5 rounded-full" style={{ width: '100%' }}></div>
+            </div>
+          </div>
           
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center">
-                <User className="h-8 w-8 text-green-500" />
-                <div className="ml-4">
-                  <p className="text-2xl font-bold">{data.summary.individual}</p>
-                  <p className="text-xs text-gray-500">Individuals</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Individuals */}
+          <div className="bg-gradient-to-br from-green-500 to-green-700 rounded-lg p-4 text-white shadow-lg hover:shadow-xl transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <User className="h-8 w-8 text-white/80" />
+              <span className="text-xs text-white/80">{Math.round((data.summary.individual / data.summary.total) * 100)}%</span>
+            </div>
+            <div className="space-y-1">
+              <p className="text-3xl font-bold">{data.summary.individual}</p>
+              <p className="text-xs text-white/80">Individuals</p>
+            </div>
+            <div className="mt-3 bg-white/10 rounded-full h-1.5">
+              <div className="bg-white/50 h-1.5 rounded-full transition-all" style={{ width: `${(data.summary.individual / data.summary.total) * 100}%` }}></div>
+            </div>
+          </div>
           
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center">
-                <Building2 className="h-8 w-8 text-blue-500" />
-                <div className="ml-4">
-                  <p className="text-2xl font-bold">{data.summary.business}</p>
-                  <p className="text-xs text-gray-500">Businesses</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Businesses */}
+          <div className="bg-gradient-to-br from-blue-500 to-blue-700 rounded-lg p-4 text-white shadow-lg hover:shadow-xl transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <Building2 className="h-8 w-8 text-white/80" />
+              <span className="text-xs text-white/80">{Math.round((data.summary.business / data.summary.total) * 100)}%</span>
+            </div>
+            <div className="space-y-1">
+              <p className="text-3xl font-bold">{data.summary.business}</p>
+              <p className="text-xs text-white/80">Businesses</p>
+            </div>
+            <div className="mt-3 bg-white/10 rounded-full h-1.5">
+              <div className="bg-white/50 h-1.5 rounded-full transition-all" style={{ width: `${(data.summary.business / data.summary.total) * 100}%` }}></div>
+            </div>
+          </div>
           
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center">
-                <LandmarkIcon className="h-8 w-8 text-purple-500" />
-                <div className="ml-4">
-                  <p className="text-2xl font-bold">{data.summary.government}</p>
-                  <p className="text-xs text-gray-500">Government</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Government */}
+          <div className="bg-gradient-to-br from-purple-500 to-purple-700 rounded-lg p-4 text-white shadow-lg hover:shadow-xl transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <LandmarkIcon className="h-8 w-8 text-white/80" />
+              <span className="text-xs text-white/80">{Math.round((data.summary.government / data.summary.total) * 100)}%</span>
+            </div>
+            <div className="space-y-1">
+              <p className="text-3xl font-bold">{data.summary.government}</p>
+              <p className="text-xs text-white/80">Government</p>
+            </div>
+            <div className="mt-3 bg-white/10 rounded-full h-1.5">
+              <div className="bg-white/50 h-1.5 rounded-full transition-all" style={{ width: `${(data.summary.government / data.summary.total) * 100}%` }}></div>
+            </div>
+          </div>
           
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center">
-                <Shield className="h-8 w-8 text-orange-500" />
-                <div className="ml-4">
-                  <p className="text-2xl font-bold">{data.summary.insurance || 0}</p>
-                  <p className="text-xs text-gray-500">Insurance</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Insurance */}
+          <div className="bg-gradient-to-br from-orange-500 to-orange-700 rounded-lg p-4 text-white shadow-lg hover:shadow-xl transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <Shield className="h-8 w-8 text-white/80" />
+              <span className="text-xs text-white/80">{Math.round(((data.summary.insurance || 0) / data.summary.total) * 100)}%</span>
+            </div>
+            <div className="space-y-1">
+              <p className="text-3xl font-bold">{data.summary.insurance || 0}</p>
+              <p className="text-xs text-white/80">Insurance</p>
+            </div>
+            <div className="mt-3 bg-white/10 rounded-full h-1.5">
+              <div className="bg-white/50 h-1.5 rounded-full transition-all" style={{ width: `${((data.summary.insurance || 0) / data.summary.total) * 100}%` }}></div>
+            </div>
+          </div>
           
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center">
-                <Banknote className="h-8 w-8 text-emerald-500" />
-                <div className="ml-4">
-                  <p className="text-2xl font-bold">{data.summary.banking || 0}</p>
-                  <p className="text-xs text-gray-500">Banking</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Banking */}
+          <div className="bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-lg p-4 text-white shadow-lg hover:shadow-xl transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <Banknote className="h-8 w-8 text-white/80" />
+              <span className="text-xs text-white/80">{Math.round(((data.summary.banking || 0) / data.summary.total) * 100)}%</span>
+            </div>
+            <div className="space-y-1">
+              <p className="text-3xl font-bold">{data.summary.banking || 0}</p>
+              <p className="text-xs text-white/80">Banking</p>
+            </div>
+            <div className="mt-3 bg-white/10 rounded-full h-1.5">
+              <div className="bg-white/50 h-1.5 rounded-full transition-all" style={{ width: `${((data.summary.banking || 0) / data.summary.total) * 100}%` }}></div>
+            </div>
+          </div>
           
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center">
-                <ArrowLeftRight className="h-8 w-8 text-indigo-500" />
-                <div className="ml-4">
-                  <p className="text-2xl font-bold">{data.summary.internalTransfer || 0}</p>
-                  <p className="text-xs text-gray-500">Internal Transfer</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Internal Transfer */}
+          <div className="bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-lg p-4 text-white shadow-lg hover:shadow-xl transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <ArrowLeftRight className="h-8 w-8 text-white/80" />
+              <span className="text-xs text-white/80">{Math.round(((data.summary.internalTransfer || 0) / data.summary.total) * 100)}%</span>
+            </div>
+            <div className="space-y-1">
+              <p className="text-3xl font-bold">{data.summary.internalTransfer || 0}</p>
+              <p className="text-xs text-white/80">Internal Transfer</p>
+            </div>
+            <div className="mt-3 bg-white/10 rounded-full h-1.5">
+              <div className="bg-white/50 h-1.5 rounded-full transition-all" style={{ width: `${((data.summary.internalTransfer || 0) / data.summary.total) * 100}%` }}></div>
+            </div>
+          </div>
           
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center">
-                <HelpCircle className="h-8 w-8 text-gray-500" />
-                <div className="ml-4">
-                  <p className="text-2xl font-bold">{data.summary.unknown || 0}</p>
-                  <p className="text-xs text-gray-500">Unknown</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Unknown */}
+          <div className="bg-gradient-to-br from-gray-500 to-gray-700 rounded-lg p-4 text-white shadow-lg hover:shadow-xl transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <HelpCircle className="h-8 w-8 text-white/80" />
+              <span className="text-xs text-white/80">{Math.round(((data.summary.unknown || 0) / data.summary.total) * 100)}%</span>
+            </div>
+            <div className="space-y-1">
+              <p className="text-3xl font-bold">{data.summary.unknown || 0}</p>
+              <p className="text-xs text-white/80">Unknown</p>
+            </div>
+            <div className="mt-3 bg-white/10 rounded-full h-1.5">
+              <div className="bg-white/50 h-1.5 rounded-full transition-all" style={{ width: `${((data.summary.unknown || 0) / data.summary.total) * 100}%` }}></div>
+            </div>
+          </div>
           
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center">
-                <TrendingUp className="h-8 w-8 text-orange-500" />
-                <div className="ml-4">
-                  <p className="text-2xl font-bold">
-                    {Math.round(data.summary.averageConfidence * 100)}%
-                  </p>
-                  <p className="text-xs text-gray-500">Avg Confidence</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Average Confidence */}
+          <div className="bg-gradient-to-br from-amber-500 to-amber-700 rounded-lg p-4 text-white shadow-lg hover:shadow-xl transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <TrendingUp className="h-8 w-8 text-white/80" />
+              <Badge className="bg-white/20 text-white border-0 text-xs">Accuracy</Badge>
+            </div>
+            <div className="space-y-1">
+              <p className="text-3xl font-bold">
+                {Math.round(data.summary.averageConfidence * 100)}%
+              </p>
+              <p className="text-xs text-white/80">Avg Confidence</p>
+            </div>
+            <div className="mt-3 bg-white/10 rounded-full h-1.5">
+              <div className="bg-white/50 h-1.5 rounded-full transition-all" style={{ width: `${data.summary.averageConfidence * 100}%` }}></div>
+            </div>
+          </div>
         </div>
 
         {/* Filters and Search */}

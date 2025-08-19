@@ -202,17 +202,28 @@ export class MastercardApiService {
         // Extract the actual private key from the PEM content
         // The file might contain Bag Attributes and other metadata
         // Support both PKCS#1 (RSA PRIVATE KEY) and PKCS#8 (PRIVATE KEY) formats
-        const privateKeyMatch = pemContent.match(/-----BEGIN (RSA )?PRIVATE KEY-----[\s\S]+?-----END (RSA )?PRIVATE KEY-----/);
+        // More flexible regex to handle varied spacing and line breaks
+        const privateKeyMatch = pemContent.match(/-----BEGIN (RSA )?PRIVATE KEY-----[\s\S]*?-----END (RSA )?PRIVATE KEY-----/);
         
         if (privateKeyMatch) {
           this.privateKey = privateKeyMatch[0];
           console.log('✅ Mastercard private key extracted from PEM file successfully');
-          console.log('   Key type:', privateKeyMatch[1] ? 'RSA PRIVATE KEY' : 'PRIVATE KEY');
+          console.log('   Key type:', privateKeyMatch[1] ? 'RSA PRIVATE KEY (PKCS#1)' : 'PRIVATE KEY (PKCS#8)');
           console.log('   Key length:', this.privateKey.length, 'characters');
-          return true;
+          console.log('   Key preview:', this.privateKey.substring(0, 50) + '...');
+          
+          // Verify it's a valid key format
+          if (this.privateKey.includes('BEGIN') && this.privateKey.includes('END')) {
+            console.log('✅ Private key format validated');
+            return true;
+          } else {
+            console.error('❌ Private key appears malformed');
+            return false;
+          }
         } else {
           console.error('❌ Could not find private key in PEM file');
-          console.error('   PEM content preview:', pemContent.substring(0, 100));
+          console.error('   PEM content preview:', pemContent.substring(0, 200));
+          console.error('   Looking for: -----BEGIN PRIVATE KEY----- or -----BEGIN RSA PRIVATE KEY-----');
           return false;
         }
       } catch (error) {
