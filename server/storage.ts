@@ -175,20 +175,36 @@ export class DatabaseStorage implements IStorage {
       .where(eq(uploadBatches.userId, userId))
       .orderBy(desc(uploadBatches.createdAt));
     
-    // Calculate Finexio match percentage based on actual data
+    // Calculate Finexio match percentage and Mastercard enrichment based on actual data
     for (const batch of batches) {
       if (batch.processedRecords > 0) {
         // Get count of records with VALID Finexio matches (>=85% confidence threshold)
-        const result = await db.execute(sql`
+        const finexioResult = await db.execute(sql`
           SELECT COUNT(DISTINCT pm.classification_id) as matched_count
           FROM payee_matches pm
           JOIN payee_classifications pc ON pm.classification_id = pc.id
           WHERE pc.batch_id = ${batch.id} AND pm.finexio_match_score >= 85
         `);
         
-        const matchedCount = parseInt(result.rows[0]?.matched_count || '0');
+        const matchedCount = parseInt(finexioResult.rows[0]?.matched_count || '0');
         batch.finexioMatchedCount = matchedCount;
         batch.finexioMatchPercentage = Math.round((matchedCount / batch.processedRecords) * 100);
+        
+        // Get actual Mastercard enrichment count
+        const mastercardResult = await db.execute(sql`
+          SELECT 
+            COUNT(CASE WHEN mastercard_match_status = 'matched' THEN 1 END) as matched_count,
+            COUNT(CASE WHEN mastercard_match_status IS NOT NULL THEN 1 END) as processed_count
+          FROM payee_classifications
+          WHERE batch_id = ${batch.id}
+        `);
+        
+        const mcMatchedCount = parseInt(mastercardResult.rows[0]?.matched_count || '0');
+        const mcProcessedCount = parseInt(mastercardResult.rows[0]?.processed_count || '0');
+        
+        // Update the batch with actual Mastercard counts
+        batch.mastercardActualEnriched = mcMatchedCount;
+        batch.mastercardEnrichmentProcessed = mcProcessedCount;
       }
     }
     

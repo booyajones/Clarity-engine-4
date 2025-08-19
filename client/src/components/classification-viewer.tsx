@@ -1131,14 +1131,21 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                         )}
                       </TableCell>
                       <TableCell>
-                        <div className="text-sm">
-                          {classification.city && classification.state && (
-                            <div>{classification.city}, {classification.state}</div>
-                          )}
+                        <div className="text-sm space-y-1">
                           {classification.address && (
-                            <div className="text-xs text-gray-500 max-w-xs truncate">
+                            <div className="text-xs font-medium text-gray-700">
                               {classification.address}
                             </div>
+                          )}
+                          {(classification.city || classification.state || classification.zipCode) && (
+                            <div className="text-xs text-gray-600">
+                              {[classification.city, classification.state, classification.zipCode]
+                                .filter(Boolean)
+                                .join(", ")}
+                            </div>
+                          )}
+                          {!classification.address && !classification.city && !classification.state && (
+                            <span className="text-xs text-gray-400">No address</span>
                           )}
                         </div>
                       </TableCell>
