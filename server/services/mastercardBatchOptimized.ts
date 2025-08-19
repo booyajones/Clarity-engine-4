@@ -8,6 +8,7 @@ export class MastercardBatchOptimizedService {
   private readonly MAX_BATCH_SIZE = 100; // Mastercard API batch limit
   private readonly MAX_MATCHES_PER_SEARCH = 1; // Only get the BEST match
   private readonly MAX_CONCURRENT_BATCHES = 5; // Process 5 batches concurrently
+  private batchId?: number; // Track the current batch ID for async processing
   
   /**
    * Enrich a batch of payees with Mastercard data
@@ -21,7 +22,8 @@ export class MastercardBatchOptimizedService {
     city?: string;
     state?: string;
     zipCode?: string;
-  }>): Promise<Map<string, any>> {
+  }>, batchId?: number): Promise<Map<string, any>> {
+    this.batchId = batchId; // Store for async processing
     console.log(`📦 Starting optimized Mastercard batch enrichment for ${payees.length} payees`);
     
     const enrichmentResults = new Map<string, any>();
@@ -274,16 +276,37 @@ export class MastercardBatchOptimizedService {
           }
         }
       } else {
-        // Timeout or no results - ALWAYS return no_match instead of error/timeout
-        console.warn(`⚠️ No results received for batch ${batchIndex + 1} after ${maxAttempts} attempts - marking as NO_MATCH`);
-        batch.forEach(payee => {
-          batchResults.set(payee.id, {
-            enriched: false,
-            status: 'no_match',
-            message: 'No matching merchant found in Mastercard network (search timeout)',
-            source: 'api'
+        // Timeout - switch to async processing that will wait indefinitely
+        console.warn(`⚠️ No results received for batch ${batchIndex + 1} after ${maxAttempts} attempts - switching to ASYNC processing`);
+        console.log(`📤 Submitting batch to async queue for indefinite polling...`);
+        
+        // Use the async service for these payees - it will poll indefinitely
+        const { mastercardAsyncService } = await import('./mastercardAsyncService');
+        const asyncSearchId = await mastercardAsyncService.submitBatchForEnrichment(batch, this.batchId || 0);
+        
+        if (asyncSearchId) {
+          console.log(`✅ Batch submitted to async processing with search ID: ${asyncSearchId}`);
+          // Mark as pending for async processing
+          batch.forEach(payee => {
+            batchResults.set(payee.id, {
+              enriched: false,
+              status: 'pending_async',
+              message: 'Submitted to Mastercard for extended processing',
+              source: 'api'
+            });
           });
-        });
+        } else {
+          // Only mark as no_match if async submission also failed
+          console.error(`❌ Failed to submit to async processing`);
+          batch.forEach(payee => {
+            batchResults.set(payee.id, {
+              enriched: false,
+              status: 'error',
+              message: 'Failed to submit to Mastercard - will be retried',
+              source: 'api'
+            });
+          });
+        }
       }
       
     } catch (error) {
@@ -293,17 +316,39 @@ export class MastercardBatchOptimizedService {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const isRateLimit = errorMessage.includes('429') || errorMessage.includes('LIMIT_EXCEEDED') || errorMessage.includes('Too Many Requests');
       
-      // ALWAYS return no_match instead of error for consistency
-      batch.forEach(payee => {
-        batchResults.set(payee.id, {
-          enriched: false,
-          status: 'no_match',
-          message: isRateLimit 
-            ? 'No matching merchant found in Mastercard network (rate limit exceeded)'
-            : `No matching merchant found in Mastercard network (service temporarily unavailable)`,
-          source: 'api'
+      // NEVER mark as no_match on error - use async processing instead
+      console.log(`📤 Error occurred - submitting batch to async queue for retry...`);
+      
+      // Use the async service which will handle retries properly
+      const { mastercardAsyncService } = await import('./mastercardAsyncService');
+      const asyncSearchId = await mastercardAsyncService.submitBatchForEnrichment(batch, this.batchId || 0);
+      
+      if (asyncSearchId) {
+        console.log(`✅ Error batch submitted to async processing with search ID: ${asyncSearchId}`);
+        batch.forEach(payee => {
+          batchResults.set(payee.id, {
+            enriched: false,
+            status: 'pending_async',
+            message: isRateLimit 
+              ? 'Rate limited - submitted for extended processing'
+              : 'Service error - submitted for extended processing',
+            source: 'api'
+          });
         });
-      });
+      } else {
+        // Only mark as error if async submission also failed
+        console.error(`❌ Failed to submit to async processing after error`);
+        batch.forEach(payee => {
+          batchResults.set(payee.id, {
+            enriched: false,
+            status: 'error',
+            message: isRateLimit 
+              ? 'Rate limit exceeded - will be retried'
+              : `Service error - will be retried`,
+            source: 'api'
+          });
+        });
+      }
       
       // If rate limited, add a delay before next batch
       if (isRateLimit) {
