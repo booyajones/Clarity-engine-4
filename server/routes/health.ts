@@ -150,10 +150,34 @@ router.get('/health/live', (req, res) => {
 router.get('/health/ready', async (req, res) => {
   try {
     // Quick database check
+    const dbStart = Date.now();
     await db.select().from(cachedSuppliers).limit(1);
-    res.status(200).json({ status: 'ready' });
+    const dbResponseTime = Date.now() - dbStart;
+    
+    // Check if startup is complete (services initialized)
+    const isStartupComplete = process.uptime() > 10; // Allow 10 seconds for startup
+    
+    if (dbResponseTime < 5000 && isStartupComplete) {
+      res.status(200).json({ 
+        status: 'ready',
+        uptime: process.uptime(),
+        database: {
+          status: 'connected',
+          responseTime: dbResponseTime + 'ms'
+        }
+      });
+    } else {
+      res.status(503).json({ 
+        status: 'not_ready',
+        reason: dbResponseTime >= 5000 ? 'database_slow' : 'startup_incomplete'
+      });
+    }
   } catch (error) {
-    res.status(503).json({ status: 'not_ready' });
+    res.status(503).json({ 
+      status: 'not_ready',
+      reason: 'database_error',
+      error: error instanceof Error ? error.message : String(error)
+    });
   }
 });
 

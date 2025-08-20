@@ -11,10 +11,15 @@ const redisConfig = {
   host: process.env.REDIS_HOST || 'localhost',
   port: parseInt(process.env.REDIS_PORT || '6379'),
   maxRetriesPerRequest: 3,
+  connectTimeout: 10000, // 10 seconds
+  lazyConnect: true, // Don't connect immediately
   retryStrategy: (times: number) => {
     const delay = Math.min(times * 50, 2000);
     return delay;
-  }
+  },
+  // Add timeout for deployment stability
+  commandTimeout: 5000, // 5 seconds for commands
+  keepAlive: 30000 // 30 seconds keepalive
 };
 
 // Create Redis clients for Bull (only if microservices enabled)
@@ -34,6 +39,14 @@ const createRedisClient = () => {
   
   client.on('connect', () => {
     console.log('✅ Redis connected successfully');
+  });
+
+  client.on('close', () => {
+    console.log('Redis connection closed');
+  });
+
+  client.on('reconnecting', () => {
+    console.log('Redis reconnecting...');
   });
   
   return client;
