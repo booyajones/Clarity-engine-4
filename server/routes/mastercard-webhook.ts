@@ -128,8 +128,12 @@ async function handleSearchResultsReady(data: any) {
     setImmediate(async () => {
       try {
         console.info(`🔄 Processing search results for: ${bulkRequestId}`);
-        await mastercardAsyncService.processSearchResults(bulkRequestId);
-        console.info(`✅ Successfully processed results for: ${bulkRequestId}`);
+        // Fetch the actual results from Mastercard
+        const results = await mastercardAsyncService.fetchSearchResults(bulkRequestId);
+        if (results) {
+          await mastercardAsyncService.processSearchResults(bulkRequestId, results);
+          console.info(`✅ Successfully processed results for: ${bulkRequestId}`);
+        }
       } catch (error) {
         console.error(`❌ Error processing results for ${bulkRequestId}:`, error);
       }
