@@ -243,4 +243,48 @@ router.get('/health/services', async (req, res) => {
   });
 });
 
+// Mastercard configuration diagnostic endpoint
+router.get('/health/mastercard', async (req, res) => {
+  const diagnostics = {
+    environment: process.env.NODE_ENV,
+    mastercardEnvironment: process.env.NODE_ENV === 'production' ? 'production' : 'sandbox',
+    apiUrl: process.env.NODE_ENV === 'production' 
+      ? 'https://api.mastercard.com/track/search' 
+      : 'https://sandbox.api.mastercard.com/track/search',
+    configuration: {
+      hasConsumerKey: !!process.env.MASTERCARD_CONSUMER_KEY,
+      consumerKeyPreview: process.env.MASTERCARD_CONSUMER_KEY 
+        ? process.env.MASTERCARD_CONSUMER_KEY.substring(0, 10) + '...' 
+        : 'NOT SET',
+      hasPrivateKey: !!process.env.MASTERCARD_KEY,
+      hasCertificate: !!process.env.MASTERCARD_CERT,
+      hasKeyAlias: !!process.env.MASTERCARD_KEY_ALIAS,
+      hasKeystorePassword: !!process.env.MASTERCARD_KEYSTORE_PASSWORD,
+      clientId: process.env.MASTERCARD_CONSUMER_KEY?.includes('!') 
+        ? process.env.MASTERCARD_CONSUMER_KEY.split('!')[1]?.substring(0, 10) + '...'
+        : 'NOT FOUND IN CONSUMER KEY'
+    },
+    requiredSecrets: {
+      MASTERCARD_CONSUMER_KEY: !!process.env.MASTERCARD_CONSUMER_KEY ? '✅ SET' : '❌ MISSING',
+      MASTERCARD_KEY: !!process.env.MASTERCARD_KEY ? '✅ SET' : '❌ MISSING', 
+      MASTERCARD_CERT: !!process.env.MASTERCARD_CERT ? '✅ SET (optional)' : '⚠️ NOT SET (optional)',
+      MASTERCARD_KEY_ALIAS: !!process.env.MASTERCARD_KEY_ALIAS ? '✅ SET' : '⚠️ NOT SET',
+      MASTERCARD_KEYSTORE_PASSWORD: !!process.env.MASTERCARD_KEYSTORE_PASSWORD ? '✅ SET' : '⚠️ NOT SET'
+    },
+    status: 'unknown'
+  };
+
+  // Determine overall status
+  if (diagnostics.configuration.hasConsumerKey && diagnostics.configuration.hasPrivateKey) {
+    diagnostics.status = 'configured';
+  } else if (diagnostics.configuration.hasConsumerKey || diagnostics.configuration.hasPrivateKey) {
+    diagnostics.status = 'partially_configured';
+  } else {
+    diagnostics.status = 'not_configured';
+  }
+
+  const statusCode = diagnostics.status === 'configured' ? 200 : 503;
+  res.status(statusCode).json(diagnostics);
+});
+
 export default router;

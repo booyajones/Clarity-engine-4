@@ -84,6 +84,18 @@ const MASTERCARD_CONFIG = {
 const environment = process.env.NODE_ENV === 'production' ? 'production' : (process.env.MASTERCARD_ENVIRONMENT || 'sandbox');
 const config = MASTERCARD_CONFIG[environment as keyof typeof MASTERCARD_CONFIG];
 
+// Log environment configuration at startup
+console.log('🌐 Mastercard Environment Configuration:', {
+  NODE_ENV: process.env.NODE_ENV,
+  selectedEnvironment: environment,
+  baseUrl: config.baseUrl,
+  hasConsumerKey: !!config.consumerKey,
+  hasPrivateKey: !!config.privateKey,
+  hasCertificate: !!config.certificate,
+  hasKeystoreAlias: !!config.keystoreAlias,
+  clientId: config.clientId ? config.clientId.substring(0, 10) + '...' : 'NOT SET'
+});
+
 // Request/Response schemas for Track Search API
 const BulkSearchRequestSchema = z.object({
   lookupType: z.literal('SUPPLIERS'),
@@ -178,10 +190,14 @@ export class MastercardApiService {
 
   private initializeCredentials(): boolean {
     console.log('🔐 Initializing Mastercard credentials...');
+    console.log(`   Environment: ${environment} (NODE_ENV=${process.env.NODE_ENV})`);
+    console.log(`   API URL: ${config.baseUrl}`);
     
+    // Check for consumer key
     if (!config.consumerKey) {
-      console.error('❌ No consumer key found in environment');
+      console.error('❌ MASTERCARD ERROR: No consumer key found');
       console.error('   Missing secret: MASTERCARD_CONSUMER_KEY');
+      console.error('   This is required for both sandbox and production environments');
       return false;
     }
     
@@ -281,11 +297,14 @@ export class MastercardApiService {
 
     // If we reach here, no credentials were found
     console.error('⚠️ MASTERCARD CREDENTIALS NOT CONFIGURED');
+    console.error(`   Environment: ${environment} (${environment === 'production' ? 'PRODUCTION' : 'SANDBOX'})`);
     console.error('   Missing required secrets:');
     if (!config.privateKey) console.error('   - MASTERCARD_KEY (private key in PEM format)');
-    if (!config.certificate) console.error('   - MASTERCARD_CERT (certificate in PEM format)');
-    if (!config.keystoreAlias) console.error('   - MASTERCARD_KEY_ALIAS (key alias from P12 certificate)');
+    if (!config.certificate) console.error('   - MASTERCARD_CERT (certificate in PEM format - optional but recommended)');
+    if (!config.keystoreAlias) console.error('   - MASTERCARD_KEY_ALIAS (key alias - required for some certificates)');
+    if (!config.keystorePassword) console.error('   - MASTERCARD_KEYSTORE_PASSWORD (keystore password)');
     console.error('   Please add these secrets to enable Mastercard enrichment');
+    console.error('   For production deployment, ensure all secrets are properly configured in your deployment environment');
     
     return false;
   }
@@ -419,8 +438,30 @@ export class MastercardApiService {
 
       if (!response.ok) {
         const error = await response.text();
-        console.log('Mastercard Track Search error response:', error);
-        throw new Error(`Mastercard API error: ${response.status} - ${error}`);
+        console.error('❌ MASTERCARD API ERROR:', {
+          status: response.status,
+          environment,
+          url: url.substring(0, 50) + '...',
+          error: error.substring(0, 500)
+        });
+        
+        // Provide specific error messages for common issues
+        if (response.status === 401) {
+          console.error('   🔐 Authentication failed - check your Mastercard credentials');
+          console.error('   - Verify MASTERCARD_CONSUMER_KEY is correct');
+          console.error('   - Verify MASTERCARD_KEY contains valid private key');
+          console.error(`   - Current environment: ${environment}`);
+          console.error(`   - Using URL: ${config.baseUrl}`);
+        } else if (response.status === 403) {
+          console.error('   🚫 Access forbidden - API key may not have access to this endpoint');
+          console.error(`   - Check if your ${environment} API key has Track Search access`);
+        } else if (response.status === 404) {
+          console.error('   ❓ Endpoint not found - possible environment mismatch');
+          console.error(`   - Current environment: ${environment}`);
+          console.error(`   - API URL: ${config.baseUrl}`);
+        }
+        
+        throw new Error(`Mastercard API error: ${response.status} - ${error.substring(0, 200)}`);
       }
 
       const data = await response.json();
