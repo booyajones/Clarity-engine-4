@@ -181,6 +181,7 @@ export class MastercardApiService {
     
     if (!config.consumerKey) {
       console.error('❌ No consumer key found in environment');
+      console.error('   Missing secret: MASTERCARD_CONSUMER_KEY');
       return false;
     }
     
@@ -191,12 +192,20 @@ export class MastercardApiService {
       // Clean up the private key if it has extra formatting
       const cleanKey = config.privateKey.replace(/\\n/g, '\n');
       this.privateKey = cleanKey;
-      console.log('✅ Using private key from environment variable (MASTERCARD_KEY)');
+      console.log('✅ Using private key from MASTERCARD_KEY secret');
       
       // Also check if we have the certificate for production
       if ((config as any).certificate) {
-        console.log('✅ Certificate also found in environment variables');
+        console.log('✅ Certificate found from MASTERCARD_CERT secret');
       }
+      
+      // Check key alias
+      if (config.keystoreAlias) {
+        console.log('✅ Key alias found from MASTERCARD_KEY_ALIAS secret');
+      } else {
+        console.log('⚠️ Missing MASTERCARD_KEY_ALIAS secret - may be needed for production');
+      }
+      
       return true;
     }
 
@@ -270,6 +279,14 @@ export class MastercardApiService {
       }
     }
 
+    // If we reach here, no credentials were found
+    console.error('⚠️ MASTERCARD CREDENTIALS NOT CONFIGURED');
+    console.error('   Missing required secrets:');
+    if (!config.privateKey) console.error('   - MASTERCARD_KEY (private key in PEM format)');
+    if (!config.certificate) console.error('   - MASTERCARD_CERT (certificate in PEM format)');
+    if (!config.keystoreAlias) console.error('   - MASTERCARD_KEY_ALIAS (key alias from P12 certificate)');
+    console.error('   Please add these secrets to enable Mastercard enrichment');
+    
     return false;
   }
 
