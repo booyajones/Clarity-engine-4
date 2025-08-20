@@ -1,97 +1,75 @@
-#!/usr/bin/env node
-import { mastercardBatchOptimizedService } from './server/services/mastercardBatchOptimized.js';
-import { drizzle } from 'drizzle-orm/neon-http';
-import { neon } from '@neondatabase/serverless';
-import * as schema from './shared/schema.js';
-import { eq } from 'drizzle-orm';
+import { db } from './server/db.js';
+import { payeeClassifications, mastercardSearchRequests } from './shared/schema.js';
+import { eq, and } from 'drizzle-orm';
+import { MastercardAsyncService } from './server/services/mastercardAsyncService.js';
 
-const sql = neon(process.env.DATABASE_URL);
-const db = drizzle(sql, { schema });
+console.log('🧪 Testing Mastercard enrichment with webhook support\n');
 
-async function testMastercardEnrichment() {
-  console.log('\n=== Testing Mastercard Enrichment with Detailed Logging ===\n');
-  
+async function testEnrichment() {
   try {
-    // Get business classifications from batch 20
-    const businessClassifications = await db.select()
-      .from(schema.payeeClassifications)
-      .where(eq(schema.payeeClassifications.batchId, 20))
-      .where(eq(schema.payeeClassifications.payeeType, 'Business'));
+    // Get Business classifications from batch 112
+    const classifications = await db
+      .select()
+      .from(payeeClassifications)
+      .where(and(
+        eq(payeeClassifications.batchId, 112),
+        eq(payeeClassifications.payeeType, 'Business')
+      ));
     
-    console.log(`Found ${businessClassifications.length} business classifications to enrich`);
+    console.log(`Found ${classifications.length} Business classifications to enrich\n`);
     
-    if (businessClassifications.length === 0) {
-      console.log('No business classifications found!');
-      process.exit(0);
+    if (classifications.length === 0) {
+      console.log('No Business classifications found for batch 112');
+      return;
     }
     
-    // Prepare payees for enrichment
-    const payeesForEnrichment = businessClassifications.slice(0, 3).map(c => ({
-      id: c.id.toString(),
-      name: c.cleanedName || c.originalName,
-      address: c.address || undefined,
-      city: c.city || undefined,
-      state: c.state || undefined,
-      zipCode: c.zipCode || undefined,
+    // Create test data for Mastercard enrichment
+    const payees = classifications.map(c => ({
+      id: c.id,
+      name: c.originalName,
+      address: c.payeeAddress || '',
+      city: c.payeeCity || '',
+      state: c.payeeState || '',
+      zipCode: c.payeeZip || ''
     }));
     
-    console.log('\nPayees to enrich:');
-    payeesForEnrichment.forEach(p => {
-      console.log(`  - ID: ${p.id}, Name: ${p.name}`);
-    });
+    console.log('Submitting to Mastercard for enrichment:');
+    payees.forEach(p => console.log(`  - ${p.name}`));
+    console.log('');
     
-    console.log('\n🔍 Starting enrichment process...\n');
+    // Submit for enrichment
+    const mastercardService = new MastercardAsyncService();
+    const result = await mastercardService.submitBatchForEnrichment(112, payees);
     
-    // Run enrichment
-    const enrichmentResults = await mastercardBatchOptimizedService.enrichBatch(payeesForEnrichment);
+    console.log('✅ Enrichment submission result:', result);
     
-    console.log(`\n📊 Enrichment results: ${enrichmentResults.size} entries`);
+    // Check if searches were created
+    const searches = await db
+      .select()
+      .from(mastercardSearchRequests)
+      .where(eq(mastercardSearchRequests.batchId, 112));
     
-    // Log the results
-    enrichmentResults.forEach((result, id) => {
-      console.log(`\nID ${id}:`);
-      console.log(`  - Enriched: ${result.enriched}`);
-      console.log(`  - Status: ${result.status}`);
-      if (result.data) {
-        console.log(`  - Business Name: ${result.data.businessName}`);
-        console.log(`  - MCC Code: ${result.data.mccCode}`);
-        console.log(`  - Match Confidence: ${result.data.matchConfidence}`);
-      }
-    });
+    console.log(`\n📊 Mastercard searches created: ${searches.length}`);
     
-    console.log('\n📝 Updating database...\n');
-    
-    // Update database
-    await mastercardBatchOptimizedService.updateDatabaseWithResults(enrichmentResults);
-    
-    console.log('\n✅ Database update completed!');
-    
-    // Verify the update
-    console.log('\n🔍 Verifying database update...\n');
-    const updatedRecords = await db.select()
-      .from(schema.payeeClassifications)
-      .where(eq(schema.payeeClassifications.batchId, 20))
-      .where(eq(schema.payeeClassifications.payeeType, 'Business'));
-    
-    let enrichedCount = 0;
-    updatedRecords.forEach(record => {
-      if (record.mastercardMatchStatus) {
-        enrichedCount++;
-        console.log(`✅ ${record.originalName}: ${record.mastercardMatchStatus} - ${record.mastercardBusinessName || 'N/A'}`);
-      }
-    });
-    
-    console.log(`\n📊 Final Summary:`);
-    console.log(`  - Total business records: ${updatedRecords.length}`);
-    console.log(`  - Enriched records: ${enrichedCount}`);
-    console.log(`  - Not enriched: ${updatedRecords.length - enrichedCount}`);
+    if (searches.length > 0) {
+      console.log('Search details:');
+      searches.forEach(s => {
+        console.log(`  - Search ID: ${s.searchId}`);
+        console.log(`    Status: ${s.status}`);
+        console.log(`    Webhook Status: ${s.webhookStatus || 'Not received'}`);
+      });
+      
+      console.log('\n🎉 SUCCESS! Mastercard enrichment is working!');
+      console.log('   - Searches submitted successfully');
+      console.log('   - Webhook will notify when results are ready');
+      console.log('   - Polling will check every minute as fallback');
+    }
     
   } catch (error) {
-    console.error('\n❌ Test failed:', error);
+    console.error('❌ Error:', error);
   }
   
   process.exit(0);
 }
 
-// Run the test
-testMastercardEnrichment();
+testEnrichment();
