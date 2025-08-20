@@ -57,22 +57,24 @@ const MASTERCARD_CONFIG = {
   sandbox: {
     baseUrl: 'https://sandbox.api.mastercard.com/track/search',
     consumerKey: process.env.MASTERCARD_CONSUMER_KEY,
-    privateKey: process.env.MASTERCARD_PRIVATE_KEY,
+    privateKey: process.env.MASTERCARD_KEY || process.env.MASTERCARD_PRIVATE_KEY,
+    certificate: process.env.MASTERCARD_CERT,
     privateKeyPath: './mastercard-private-key.pem',
     p12Path: process.env.MASTERCARD_P12_PATH || './Finexio_MasterCard_Production_2025-production.p12',
     keystorePassword: process.env.MASTERCARD_KEYSTORE_PASSWORD,
-    keystoreAlias: process.env.MASTERCARD_KEYSTORE_ALIAS,
+    keystoreAlias: process.env.MASTERCARD_KEY_ALIAS || process.env.MASTERCARD_KEYSTORE_ALIAS,
     // Extract clientId from consumer key (part after the !)
     clientId: process.env.MASTERCARD_CLIENT_ID || process.env.MASTERCARD_CONSUMER_KEY?.split('!')[1],
   },
   production: {
     baseUrl: 'https://api.mastercard.com/track/search',
     consumerKey: process.env.MASTERCARD_CONSUMER_KEY,
-    privateKey: process.env.MASTERCARD_PRIVATE_KEY,
+    privateKey: process.env.MASTERCARD_KEY || process.env.MASTERCARD_PRIVATE_KEY,
+    certificate: process.env.MASTERCARD_CERT,
     privateKeyPath: './mastercard-private-key.pem',
     p12Path: process.env.MASTERCARD_P12_PATH || './Finexio_MasterCard_Production_2025-production.p12',
     keystorePassword: process.env.MASTERCARD_KEYSTORE_PASSWORD,
-    keystoreAlias: process.env.MASTERCARD_KEYSTORE_ALIAS,
+    keystoreAlias: process.env.MASTERCARD_KEY_ALIAS || process.env.MASTERCARD_KEYSTORE_ALIAS,
     // Extract clientId from consumer key (part after the !)
     clientId: process.env.MASTERCARD_CLIENT_ID || process.env.MASTERCARD_CONSUMER_KEY?.split('!')[1],
   }
@@ -184,10 +186,17 @@ export class MastercardApiService {
     
     console.log('✓ Consumer key found:', config.consumerKey.substring(0, 20) + '...');
 
-    // First try to use direct private key if available
+    // First try to use direct private key if available (from MASTERCARD_KEY env var)
     if (config.privateKey) {
-      this.privateKey = config.privateKey;
-      console.log('✅ Using private key from environment variable');
+      // Clean up the private key if it has extra formatting
+      const cleanKey = config.privateKey.replace(/\\n/g, '\n');
+      this.privateKey = cleanKey;
+      console.log('✅ Using private key from environment variable (MASTERCARD_KEY)');
+      
+      // Also check if we have the certificate for production
+      if ((config as any).certificate) {
+        console.log('✅ Certificate also found in environment variables');
+      }
       return true;
     }
 
