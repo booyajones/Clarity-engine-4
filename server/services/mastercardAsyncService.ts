@@ -38,6 +38,13 @@ export class MastercardAsyncService {
       return { searchIds: [], message: "No payees to enrich" };
     }
 
+    // CRITICAL: Validate Mastercard service is ready
+    if (!this.mastercardApi.isConfigured()) {
+      const errorMessage = 'Mastercard API is not configured. Missing required credentials (MASTERCARD_CONSUMER_KEY, MASTERCARD_KEY, etc.)';
+      console.error(`❌ ${errorMessage}`);
+      throw new Error(errorMessage);
+    }
+
     console.log(`📤 Submitting ${payees.length} payees for async Mastercard enrichment (batch ${batchId})`);
 
     // CRITICAL FIX: Check if there are already active searches for this batch
@@ -49,17 +56,26 @@ export class MastercardAsyncService {
           eq(mastercardSearchRequests.batchId, batchId),
           or(
             eq(mastercardSearchRequests.status, 'submitted'),
-            eq(mastercardSearchRequests.status, 'polling')
+            eq(mastercardSearchRequests.status, 'polling'),
+            eq(mastercardSearchRequests.status, 'error') // Include error status for retry
           )
         )
       );
 
     if (existingSearches.length > 0) {
-      console.log(`⚠️ Batch ${batchId} already has ${existingSearches.length} active searches - skipping duplicate submission`);
-      return {
-        searchIds: existingSearches.map(s => s.searchId),
-        message: `Using existing ${existingSearches.length} search(es) already in progress`
-      };
+      console.log(`⚠️ Batch ${batchId} already has ${existingSearches.length} active searches - checking if they need retry`);
+      
+      // Check if any searches are in error state and need retry
+      const errorSearches = existingSearches.filter(s => s.status === 'error');
+      if (errorSearches.length > 0) {
+        console.log(`🔄 Found ${errorSearches.length} searches in error state - will retry these`);
+        // Continue with submission to retry failed searches
+      } else {
+        return {
+          searchIds: existingSearches.map(s => s.searchId),
+          message: `Using existing ${existingSearches.length} search(es) already in progress`
+        };
+      }
     }
 
     const searchIds: string[] = [];
@@ -100,8 +116,18 @@ export class MastercardAsyncService {
         };
 
         try {
-          // Submit to Mastercard API
+          // Validate API configuration before submission
+          if (!this.mastercardApi.isConfigured()) {
+            throw new Error('Mastercard API is not properly configured - missing credentials or configuration');
+          }
+
+          // Submit to Mastercard API with proper error handling
           const submitResponse = await this.mastercardApi.submitBulkSearch(searchRequest);
+          
+          if (!submitResponse || !submitResponse.bulkSearchId) {
+            throw new Error('Invalid response from Mastercard API - no search ID returned');
+          }
+
           const searchId = submitResponse.bulkSearchId;
           searchIds.push(searchId);
 
@@ -120,6 +146,12 @@ export class MastercardAsyncService {
           console.log(`✅ Submitted Mastercard search ${searchId} with ${batch.length} payees (batch ${i/MAX_BATCH_SIZE + 1}/${Math.ceil(payees.length/MAX_BATCH_SIZE)})`);
         } catch (error: any) {
           console.error(`❌ Error submitting batch ${i/MAX_BATCH_SIZE + 1}/${Math.ceil(payees.length/MAX_BATCH_SIZE)}:`, error);
+          console.error(`❌ Full error details:`, {
+            message: error.message,
+            status: error.status || error.statusCode,
+            response: error.response?.data || error.data,
+            stack: error.stack
+          });
 
           // CRITICAL: ALL errors must result in retry, not marking as no_match
           // Every record MUST get a real Mastercard response
@@ -130,13 +162,14 @@ export class MastercardAsyncService {
           await db.insert(mastercardSearchRequests).values({
             searchId: pendingSearchId,
             batchId,
-            status: "pending", // Worker will retry submission
+            status: "error", // Mark as error so worker knows to handle specially
             searchType: "bulk",
             requestPayload: searchRequest,
             searchIdMapping,
-            error: `Failed to submit: ${error.message || 'Unknown error'} - will retry`,
+            error: `Failed to submit: ${error.message || 'Unknown error'} - Status: ${error.status || 'unknown'} - will retry with exponential backoff`,
             pollAttempts: 0,
             maxPollAttempts: 999999,
+            lastAttemptAt: new Date(),
           });
 
           searchIds.push(pendingSearchId);

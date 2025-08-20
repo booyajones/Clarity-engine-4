@@ -161,6 +161,8 @@ export class MastercardApiService {
       console.log('   1. Consumer Key from Mastercard Developers portal');
       console.log('   2. Private Key in PEM format (starts with "-----BEGIN RSA PRIVATE KEY-----")');
       console.log('   3. Or a P12 certificate with keystore alias and password');
+    } else {
+      console.log('✅ Mastercard API properly configured and ready');
     }
     
     // Clean up caches periodically to prevent memory leaks
