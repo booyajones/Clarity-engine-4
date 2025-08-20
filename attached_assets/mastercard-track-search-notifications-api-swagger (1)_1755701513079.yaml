@@ -1,0 +1,121 @@
+openapi: 3.0.1
+info:
+  title: Mastercard Track Search Notifications API
+  description: API for the Mastercard Track Search webhook notification
+  contact:
+    name: API Support
+    url: https://developer.mastercard.com/support
+    email: apisupport@mastercard.com
+  license:
+    name: mastercard
+    url: https://www.mastercard.us/en-us.html
+  version: 1.0.0
+servers:
+  - url: https://api.mastercard.com/track/bps
+    description: Production Server
+  - url: https://sandbox.api.mastercard.com/track/bps
+    description: Developer Sandbox
+tags:
+  - name: Search Notifications
+    description: Search Notifications
+paths:
+  /search/notifications:
+    post:
+      tags:
+        - Search Notifications
+      summary: Post Search Notifications
+      description: |-
+        This endpoint allows you to accept Search Notifications.<br/> The data object schemas will differ based on the event type.<table style='text-align:left;'>
+            <tr>
+                <th>Event Type</th>
+                <th>Data Object Schema</th>
+            </tr>
+            <tr>
+                <td>BULK_SEARCH_RESULTS_READY</td>
+                <td>SearchResultsReadyNotificationData</td>
+            </tr>
+            <tr>
+                <td>BULK_SEARCH_CANCELLED</td>
+                <td>SearchCancelledNotificationData</td>
+            </tr>
+        </table>
+      operationId: notificationPost
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntelligenceNotification'
+        required: true
+      responses:
+        "204":
+          description: ""
+components:
+  schemas:
+    IntelligenceNotification:
+      required:
+        - data
+        - eventCreatedDate
+        - eventId
+        - eventType
+      type: object
+      properties:
+        eventId:
+          type: string
+          description: Unique identifier for the event.
+          example: acfe1a02-4d10-4fb2-ae59-91f56abbaf67
+        eventType:
+          type: string
+          description: Event type for Notification.
+          example: BULK_SEARCH_CANCELLED
+        eventCreatedDate:
+          type: string
+          description: 'Creation date for the event '
+          format: date-time
+          example: '2021-01-14T21:14:49.16Z'
+        data:
+          $ref: '#/components/schemas/SearchNotificationData'
+      description: Search Notification information.
+    SearchCancelledNotificationData:
+      required:
+        - bulkRequestId
+      type: object
+      properties:
+        bulkRequestId:
+          type: string
+          description: Unique ID assigned to bulk request.
+          example: 7b8bfb09-3fdc-4cd1-b768-477757fec6be
+        errors:
+          type: array
+          description: Provides reason and description of failure.
+          items:
+            $ref: '#/components/schemas/SearchCancelledNotificationError'
+    SearchCancelledNotificationError:
+      type: object
+      properties:
+        reasonCode:
+          type: string
+          description: Code that identifies the Error.
+          example: SEARCH_ERROR
+        description:
+          type: string
+          description: Details of exact location of Error in the service and/or identifiers
+            for tracing the request.
+          example: "Search resulted in an error. No results available. Please re-submit."
+      description: Provides reason and description of failure.
+    SearchNotificationData:
+      type: object
+      description: Data object corresponding to the Event Type
+      example:
+        bulkRequestId: cf76975f-fb11-43c0-83bd-b3fb5e146e71
+      oneOf:
+        - $ref: '#/components/schemas/SearchCancelledNotificationData'
+        - $ref: '#/components/schemas/SearchResultsReadyNotificationData'
+    SearchResultsReadyNotificationData:
+      required:
+        - bulkRequestId
+      type: object
+      properties:
+        bulkRequestId:
+          type: string
+          description: Unique ID assigned to bulk request.
+          example: 7b8bfb09-3fdc-4cd1-b768-477757fec6be

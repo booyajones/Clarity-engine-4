@@ -1287,13 +1287,21 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                         </div>
                       </TableCell>
                       <TableCell>
-                        {classification.mastercardMatchStatus ? (
+                        {classification.mastercardMatchStatus === 'match' ? (
                           <Badge 
                             variant="outline" 
                             className="text-xs border-blue-500 text-blue-600"
-                            title={`MC: ${classification.mastercardBusinessName || 'Enriched'}`}
+                            title={`MC: ${classification.mastercardBusinessName || 'Matched'}`}
                           >
-                            MC
+                            MC ✓
+                          </Badge>
+                        ) : classification.mastercardMatchStatus === 'no_match' ? (
+                          <Badge 
+                            variant="outline" 
+                            className="text-xs border-gray-400 text-gray-600"
+                            title="No Mastercard match found"
+                          >
+                            No Match
                           </Badge>
                         ) : (
                           <span className="text-xs text-gray-400">-</span>
@@ -1725,13 +1733,16 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                         </div>
                                         <Badge className={`text-xs ${
                                           hasMastercardData ? 'bg-green-100 text-green-800' :
+                                          selectedClassification.mastercardMatchStatus === 'no_match' ? 'bg-yellow-100 text-yellow-800' :
                                           wasEnriched ? 'bg-yellow-100 text-yellow-800' :
                                           selectedClassification.mastercardMatchStatus === 'error' ? 'bg-red-100 text-red-800' :
                                           'bg-gray-100 text-gray-800'
                                         }`}>
                                           {hasMastercardData ? '✓ Matched' :
+                                           selectedClassification.mastercardMatchStatus === 'no_match' ? 'No Match Found' :
                                            wasEnriched ? '✓ Enriched (No Match)' :
                                            selectedClassification.mastercardMatchStatus === 'error' ? '✗ Error' :
+                                           selectedClassification.mastercardMatchStatus === 'match' ? '✓ Matched' :
                                            selectedClassification.mastercardMatchStatus === 'matched' ? 'Processing' :
                                            'Not Enriched'}
                                         </Badge>
