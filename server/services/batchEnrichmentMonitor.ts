@@ -71,6 +71,11 @@ class BatchEnrichmentMonitor {
         .where(eq(uploadBatches.status, 'enriching'));
 
       for (const batch of batches) {
+        // Skip cancelled batches - safety check
+        if (batch.status === 'cancelled') {
+          console.log(`Skipping cancelled batch ${batch.id}`);
+          continue;
+        }
         await this.processBatchEnrichment(batch);
       }
 
@@ -90,6 +95,17 @@ class BatchEnrichmentMonitor {
     console.log(`Processing enrichment for batch ${batchId} (${batch.originalFilename})`);
 
     try {
+      // Double-check if batch was cancelled (in case it was cancelled after the query)
+      const currentBatch = await db.select()
+        .from(uploadBatches)
+        .where(eq(uploadBatches.id, batchId))
+        .limit(1);
+      
+      if (!currentBatch[0] || currentBatch[0].status === 'cancelled') {
+        console.log(`Batch ${batchId} is cancelled, stopping enrichment processing`);
+        return;
+      }
+      
       // Check if tools are enabled
       const enableFinexio = batch.toolsConfig?.enableFinexio !== false;
       const enableGoogleAddress = batch.toolsConfig?.enableGoogleAddressValidation !== false;

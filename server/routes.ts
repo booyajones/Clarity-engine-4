@@ -675,13 +675,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/upload/batches/:id", async (req, res) => {
     try {
       const batchId = parseInt(req.params.id);
+      console.log(`Deleting batch ${batchId} and stopping all background processes...`);
       
-      // Delete all classifications for this batch
+      // 1. First cancel all active processes (same as cancel operation)
+      try {
+        // Cancel classification job
+        const { optimizedClassificationService } = await import('./services/classificationV2');
+        optimizedClassificationService.cancelJob(batchId);
+        
+        // Cancel any active Mastercard searches
+        const { mastercardSearchRequests } = await import('@shared/schema');
+        const { eq, and, or } = await import('drizzle-orm');
+        
+        const activeSearches = await db.select()
+          .from(mastercardSearchRequests)
+          .where(
+            and(
+              eq(mastercardSearchRequests.batchId, batchId),
+              or(
+                eq(mastercardSearchRequests.status, 'submitted'),
+                eq(mastercardSearchRequests.status, 'polling'),
+                eq(mastercardSearchRequests.status, 'pending')
+              )
+            )
+          );
+        
+        if (activeSearches.length > 0) {
+          console.log(`Cancelling ${activeSearches.length} active Mastercard searches before deletion`);
+          await db.update(mastercardSearchRequests)
+            .set({ 
+              status: 'cancelled',
+              errorMessage: 'Batch deleted by user'
+            })
+            .where(eq(mastercardSearchRequests.batchId, batchId));
+        }
+        
+        // Delete Mastercard search records
+        await db.delete(mastercardSearchRequests)
+          .where(eq(mastercardSearchRequests.batchId, batchId));
+          
+      } catch (error) {
+        console.error('Error cancelling background processes before deletion:', error);
+      }
+      
+      // 2. Delete all classifications for this batch
       await storage.deleteBatchClassifications(batchId);
       
-      // Delete the batch itself
+      // 3. Delete the batch itself
       await storage.deleteUploadBatch(batchId);
       
+      console.log(`Batch ${batchId} successfully deleted with all background processes stopped`);
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting batch:", error);
@@ -714,18 +757,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/upload/batches/:id/cancel", async (req, res) => {
     try {
       const batchId = parseInt(req.params.id);
+      console.log(`Cancelling batch ${batchId} and all associated background processes...`);
       
-      // Cancel the job in the classification service
+      // 1. Cancel the classification job
       const { optimizedClassificationService } = await import('./services/classificationV2');
       optimizedClassificationService.cancelJob(batchId);
       
-      // Update batch status to cancelled
+      // 2. Cancel any active Mastercard searches for this batch
+      try {
+        const { mastercardSearchRequests } = await import('@shared/schema');
+        const { eq, and, or } = await import('drizzle-orm');
+        
+        // Find all active Mastercard searches for this batch
+        const activeSearches = await db.select()
+          .from(mastercardSearchRequests)
+          .where(
+            and(
+              eq(mastercardSearchRequests.batchId, batchId),
+              or(
+                eq(mastercardSearchRequests.status, 'submitted'),
+                eq(mastercardSearchRequests.status, 'polling'),
+                eq(mastercardSearchRequests.status, 'pending')
+              )
+            )
+          );
+        
+        // Cancel each search
+        if (activeSearches.length > 0) {
+          console.log(`Cancelling ${activeSearches.length} active Mastercard searches for batch ${batchId}`);
+          await db.update(mastercardSearchRequests)
+            .set({ 
+              status: 'cancelled',
+              errorMessage: 'Batch cancelled by user'
+            })
+            .where(
+              and(
+                eq(mastercardSearchRequests.batchId, batchId),
+                or(
+                  eq(mastercardSearchRequests.status, 'submitted'),
+                  eq(mastercardSearchRequests.status, 'polling'),
+                  eq(mastercardSearchRequests.status, 'pending')
+                )
+              )
+            );
+        }
+      } catch (error) {
+        console.error('Error cancelling Mastercard searches:', error);
+      }
+      
+      // 3. Stop any Akkio processing
+      try {
+        const { payeeClassifications } = await import('@shared/schema');
+        await db.update(payeeClassifications)
+          .set({ 
+            akkioPredictionStatus: 'cancelled',
+            processingStatus: 'cancelled'
+          })
+          .where(eq(payeeClassifications.batchId, batchId));
+      } catch (error) {
+        console.error('Error cancelling Akkio processing:', error);
+      }
+      
+      // 4. Update batch status to cancelled and mark all enrichment phases as cancelled
       const batch = await storage.updateUploadBatch(batchId, {
         status: "cancelled",
         currentStep: "Cancelled",
         progressMessage: "Processing cancelled by user",
+        googleAddressStatus: "cancelled",
+        finexioMatchingStatus: "cancelled",
+        mastercardEnrichmentStatus: "cancelled",
+        akkioEnrichmentStatus: "cancelled"
       });
       
+      console.log(`Batch ${batchId} successfully cancelled with all background processes stopped`);
       res.json(batch);
     } catch (error) {
       console.error("Error cancelling batch:", error);
