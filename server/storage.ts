@@ -193,7 +193,7 @@ export class DatabaseStorage implements IStorage {
         // Get actual Mastercard enrichment count
         const mastercardResult = await db.execute(sql`
           SELECT 
-            COUNT(CASE WHEN mastercard_match_status = 'matched' THEN 1 END) as matched_count,
+            COUNT(CASE WHEN mastercard_match_status = 'match' THEN 1 END) as matched_count,
             COUNT(CASE WHEN mastercard_match_status IS NOT NULL THEN 1 END) as processed_count
           FROM payee_classifications
           WHERE batch_id = ${batch.id}
