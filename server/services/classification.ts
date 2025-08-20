@@ -206,11 +206,26 @@ export class ClassificationService {
       return await this.classifyWithOpenAI(name.trim(), address);
     } catch (error) {
       console.error("OpenAI classification error:", error);
-      // Return a low-confidence result that will be skipped
+      console.error("Error details:", {
+        message: (error as any).message,
+        status: (error as any).status,
+        response: (error as any).response?.data
+      });
+      
+      // Try rule-based classification as fallback
+      const ruleResult = this.applyRules(name.toUpperCase());
+      if (ruleResult.confidence >= 0.7) {
+        return {
+          ...ruleResult,
+          reasoning: `Classified using rule-based system (OpenAI unavailable): ${ruleResult.reasoning || ''}`,
+        };
+      }
+      
+      // Return a low-confidence result that will be flagged
       return {
-        payeeType: "Business",
-        confidence: 0.5,
-        reasoning: `Classification failed due to API error: ${(error as Error).message}`,
+        payeeType: "Unknown",
+        confidence: 0.3,
+        reasoning: `Classification uncertain - requires manual review. Error: ${(error as Error).message}`,
       };
     }
   }
@@ -578,8 +593,50 @@ Provide your best classification for every payee. Give realistic confidence leve
             };
           } catch (error) {
             console.error(`Classification error for ${payee.originalName}:`, error);
+            console.error(`Error details:`, {
+              message: (error as any).message,
+              status: (error as any).status,
+              response: (error as any).response?.data
+            });
+            
             // Never skip payees - provide fallback classification
             const cleanedName = normalizePayeeName(payee.originalName);
+            
+            // Try rule-based classification first
+            const ruleResult = this.applyRules(cleanedName.toUpperCase());
+            
+            // Determine the best fallback type based on name patterns
+            let fallbackType: "Individual" | "Business" | "Government" = "Business";
+            let fallbackConfidence = 0.50;
+            let fallbackReasoning = `Fallback classification due to API error: ${(error as Error).message}`;
+            
+            if (ruleResult.confidence >= 0.7) {
+              // Use rule-based result if confident enough
+              fallbackType = ruleResult.payeeType as "Individual" | "Business" | "Government";
+              fallbackConfidence = ruleResult.confidence;
+              fallbackReasoning = `Rule-based classification (API unavailable): ${ruleResult.reasoning}`;
+            } else {
+              // Apply simple heuristics as last resort
+              const upperName = cleanedName.toUpperCase();
+              if (upperName.includes(' LLC') || upperName.includes(' INC') || upperName.includes(' CORP') || 
+                  upperName.includes(' LTD') || upperName.includes(' COMPANY')) {
+                fallbackType = "Business";
+                fallbackReasoning = "Business entity detected from name pattern (API unavailable)";
+              } else if (upperName.startsWith('CITY OF') || upperName.startsWith('COUNTY OF') || 
+                         upperName.startsWith('STATE OF') || upperName.includes('DEPARTMENT')) {
+                fallbackType = "Government";
+                fallbackReasoning = "Government entity detected from name pattern (API unavailable)";
+              } else if (upperName.split(' ').length === 2 && !upperName.includes('.')) {
+                // Likely a person's name (first + last name)
+                fallbackType = "Individual";
+                fallbackReasoning = "Appears to be individual name (API unavailable)";
+              } else {
+                // Default to Business for unknown entities
+                fallbackType = "Business";
+                fallbackReasoning = "Unknown entity type, defaulting to Business (API unavailable)";
+              }
+            }
+            
             return {
               type: 'classified' as const,
               classification: {
@@ -590,11 +647,11 @@ Provide your best classification for every payee. Give realistic confidence leve
                 city: payee.city,
                 state: payee.state,
                 zipCode: payee.zipCode,
-                payeeType: "Individual" as const, // Safe fallback
-                confidence: 0.50, // Low confidence for fallback
+                payeeType: fallbackType,
+                confidence: fallbackConfidence,
                 sicCode: undefined,
                 sicDescription: undefined,
-                reasoning: `Fallback classification due to processing error: ${(error as Error).message}`,
+                reasoning: fallbackReasoning,
                 status: "auto-classified" as const,
                 originalData: payee.originalData,
               }
