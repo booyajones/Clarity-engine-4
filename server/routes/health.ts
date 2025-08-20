@@ -153,10 +153,10 @@ router.get('/health/ready', async (req, res) => {
     const dbStart = Date.now();
     await db.select().from(cachedSuppliers).limit(1);
     const dbResponseTime = Date.now() - dbStart;
-    
+
     // Check if startup is complete (services initialized)
     const isStartupComplete = process.uptime() > 10; // Allow 10 seconds for startup
-    
+
     if (dbResponseTime < 5000 && isStartupComplete) {
       res.status(200).json({ 
         status: 'ready',
@@ -187,7 +187,7 @@ router.get('/health/db', async (req, res) => {
     const startTime = Date.now();
     await db.select().from(cachedSuppliers).limit(1);
     const responseTime = Date.now() - startTime;
-    
+
     res.status(200).json({
       status: 'healthy',
       database: 'connected',
@@ -236,7 +236,7 @@ router.get('/health/services', async (req, res) => {
   if (process.env.AKKIO_API_KEY) services.akkio = 'configured';
 
   const allHealthy = services.database === 'healthy' && services.bigQuery === 'healthy';
-  
+
   res.status(allHealthy ? 200 : 503).json({
     status: allHealthy ? 'healthy' : 'degraded',
     services
@@ -285,6 +285,43 @@ router.get('/health/mastercard', async (req, res) => {
 
   const statusCode = diagnostics.status === 'configured' ? 200 : 503;
   res.status(statusCode).json(diagnostics);
+});
+
+// Mastercard health check endpoint
+router.get('/mastercard', async (req, res) => {
+  try {
+    const { mastercardApi } = await import('../services/mastercardApi');
+
+    const healthStatus = {
+      environment: process.env.NODE_ENV || 'development',
+      mastercardConfigured: mastercardApi.isServiceConfigured(),
+      timestamp: new Date().toISOString()
+    };
+
+    if (healthStatus.mastercardConfigured) {
+      // Test the connection if configured
+      const connectionTest = await mastercardApi.testConnection();
+
+      res.json({
+        status: connectionTest.success ? 'healthy' : 'degraded',
+        connectionTest,
+        ...healthStatus
+      });
+    } else {
+      res.status(503).json({
+        status: 'unhealthy',
+        reason: 'Mastercard API not configured',
+        ...healthStatus
+      });
+    }
+  } catch (error) {
+    console.error('Health check error:', error);
+    res.status(500).json({
+      status: 'error',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 export default router;

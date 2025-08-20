@@ -6,47 +6,22 @@ import { db } from "../db";
 import { mastercardSearchRequests } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
-// Monkey-patch the OAuth library to fix GET request issues
-// The library always includes body hash, but Mastercard rejects GET requests with body hash
-// @ts-ignore - Runtime patching
-const originalGetOAuthParams = oauth.getOAuthParams;
-// @ts-ignore - Runtime patching
-oauth.getOAuthParams = function(consumerKey: string, payload: string | undefined, method?: string) {
-  const oauthParams = originalGetOAuthParams.call(this, consumerKey, payload);
-  
-  // Log original params for debugging
-  console.log(`OAuth params before patch (${method}):`, Array.from(oauthParams.keys()));
-  
-  // Remove body hash for GET requests
-  if (method && method.toUpperCase() === 'GET') {
-    oauthParams.delete('oauth_body_hash');
-    console.log('Removed oauth_body_hash for GET request');
+// Simple OAuth header generation without complex monkey-patching
+function generateOAuthHeader(method: string, url: string, consumerKey: string, privateKey: string, body?: string): string {
+  try {
+    // For GET requests, don't include body
+    const payload = method.toUpperCase() === 'GET' ? undefined : body;
+    
+    // Use the library directly with proper parameters
+    const authHeader = oauth.getAuthorizationHeader(url, method, payload, consumerKey, privateKey);
+    
+    console.log(`Generated OAuth header for ${method} ${url}`);
+    return authHeader;
+  } catch (error) {
+    console.error('OAuth generation failed:', error);
+    throw new Error(`OAuth signature generation failed: ${error instanceof Error ? error.message : String(error)}`);
   }
-  
-  console.log(`OAuth params after patch (${method}):`, Array.from(oauthParams.keys()));
-  
-  return oauthParams;
-};
-
-// Also patch the main method to pass method parameter
-const originalGetAuthorizationHeader = oauth.getAuthorizationHeader;
-oauth.getAuthorizationHeader = function(uri: string, method: string, payload: string | undefined, consumerKey: string, signingKey: string) {
-  // Pass method to getOAuthParams
-  // @ts-ignore - Runtime patching
-  const originalMethod = this.getOAuthParams;
-  // @ts-ignore - Runtime patching
-  this.getOAuthParams = function(key: string, data: string | undefined) {
-    return originalMethod.call(this, key, data, method);
-  };
-  
-  const result = originalGetAuthorizationHeader.call(this, uri, method, payload, consumerKey, signingKey);
-  
-  // Restore original method
-  // @ts-ignore - Runtime patching
-  this.getOAuthParams = originalMethod;
-  
-  return result;
-};
+}
 
 // Mastercard Track Search API service
 // This service integrates with Mastercard's Track Search API to enrich business data
@@ -172,9 +147,10 @@ export class MastercardApiService {
   private searchStartTimes = new Map<string, number>(); // Track when each search started for accurate timing
   private isConfigured: boolean;
   private privateKey: string | null = null;
-  // Super-optimized result cache with TTL
+  // Disabled cache to reduce memory usage
   private resultCache = new Map<string, { timestamp: number; data: any }>();
-  private readonly CACHE_TTL = 3600000; // 1 hour cache
+  private readonly CACHE_TTL = 300000; // 5 minutes cache (reduced from 1 hour)
+  private readonly MAX_CACHE_SIZE = 100; // Limit cache size
 
   constructor() {
     // Check if we have the necessary credentials and extract private key
@@ -185,6 +161,43 @@ export class MastercardApiService {
       console.log('   1. Consumer Key from Mastercard Developers portal');
       console.log('   2. Private Key in PEM format (starts with "-----BEGIN RSA PRIVATE KEY-----")');
       console.log('   3. Or a P12 certificate with keystore alias and password');
+    }
+    
+    // Clean up caches periodically to prevent memory leaks
+    setInterval(() => this.cleanupCaches(), 300000); // Every 5 minutes
+  }
+
+  // Clean up old cache entries and search data
+  private cleanupCaches(): void {
+    const now = Date.now();
+    
+    // Clean result cache
+    const cacheKeysToDelete: string[] = [];
+    for (const [key, value] of this.resultCache.entries()) {
+      if (now - value.timestamp > this.CACHE_TTL) {
+        cacheKeysToDelete.push(key);
+      }
+    }
+    cacheKeysToDelete.forEach(key => this.resultCache.delete(key));
+    
+    // Limit cache size
+    if (this.resultCache.size > this.MAX_CACHE_SIZE) {
+      const entries = Array.from(this.resultCache.entries());
+      entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+      const toDelete = entries.slice(0, this.resultCache.size - this.MAX_CACHE_SIZE);
+      toDelete.forEach(([key]) => this.resultCache.delete(key));
+    }
+    
+    // Clean old search times (older than 24 hours)
+    const dayAgo = now - 86400000;
+    for (const [searchId, startTime] of this.searchStartTimes.entries()) {
+      if (startTime < dayAgo) {
+        this.searchStartTimes.delete(searchId);
+      }
+    }
+    
+    if (cacheKeysToDelete.length > 0) {
+      console.log(`🧹 Cleaned up ${cacheKeysToDelete.length} old cache entries`);
     }
   }
 
@@ -321,6 +334,65 @@ export class MastercardApiService {
     return this.isConfigured;
   }
 
+  // Test API connectivity
+  async testConnection(): Promise<{ success: boolean; message: string; details?: any }> {
+    if (!this.isConfigured) {
+      return {
+        success: false,
+        message: 'Service not configured - missing credentials'
+      };
+    }
+
+    try {
+      // Test with a minimal search request
+      const testRequest: BulkSearchRequest = {
+        lookupType: 'SUPPLIERS',
+        maximumMatches: 1,
+        minimumConfidenceThreshold: '0.1',
+        searches: [{
+          searchRequestId: `test_${Date.now()}`,
+          businessName: 'TEST CONNECTION',
+          businessAddress: {
+            country: 'USA'
+          }
+        }]
+      };
+
+      console.log('🔍 Testing Mastercard API connection...');
+      const response = await this.submitBulkSearch(testRequest);
+      
+      if (response.bulkSearchId) {
+        return {
+          success: true,
+          message: 'API connection successful',
+          details: {
+            searchId: response.bulkSearchId,
+            environment: environment,
+            baseUrl: config.baseUrl
+          }
+        };
+      } else {
+        return {
+          success: false,
+          message: 'Unexpected response format'
+        };
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('❌ Mastercard API connection test failed:', errorMessage);
+      
+      return {
+        success: false,
+        message: `Connection test failed: ${errorMessage}`,
+        details: {
+          environment: environment,
+          baseUrl: config.baseUrl,
+          error: errorMessage
+        }
+      };
+    }
+  }
+
   // OAuth percent encoding as per RFC 5849
   private oauthPercentEncode(str: string): string {
     // OAuth 1.0a uses specific encoding rules
@@ -355,7 +427,7 @@ export class MastercardApiService {
     return encodedPairs.join('%26');
   }
 
-  // Generate OAuth signature
+  // Generate OAuth signature - simplified version
   private generateOAuthSignature(
     method: string,
     url: string,
@@ -363,109 +435,103 @@ export class MastercardApiService {
     body?: string
   ): string {
     if (!config.consumerKey || !this.privateKey) {
-      console.error('❌ Mastercard OAuth Error:', {
-        hasConsumerKey: !!config.consumerKey,
-        hasPrivateKey: !!this.privateKey,
-        privateKeyLength: this.privateKey ? this.privateKey.length : 0
-      });
+      console.error('❌ Mastercard OAuth Error: Missing credentials');
       throw new Error('Mastercard API credentials not configured');
     }
 
     try {
-      // Use the patched OAuth library for all requests
-      // For GET requests, pass undefined payload to avoid body hash (will be removed by our patch)
-      // For POST requests, pass the actual body
-      const payload = method.toUpperCase() === 'POST' ? body : undefined;
-      
-      console.log('OAuth generation:', {
-        method,
-        url,
-        hasPayload: !!payload,
-        consumerKey: config.consumerKey.substring(0, 20) + '...'
-      });
-      
-      const authHeader = oauth.getAuthorizationHeader(url, method, payload, config.consumerKey, this.privateKey);
-      
-      // Log full OAuth header for GET requests to debug
-      if (method.toUpperCase() === 'GET') {
-        console.log('Full OAuth header for GET:', authHeader);
-      } else {
-        console.log(`Generated OAuth header for ${method}:`, authHeader.substring(0, 100) + '...');
-      }
-      
-      return authHeader;
+      return generateOAuthHeader(method, url, config.consumerKey, this.privateKey, body);
     } catch (error) {
-      console.error('❌ Mastercard OAuth signature generation failed:', error);
-      console.error('OAuth error details:', {
-        method,
-        url,
-        hasConsumerKey: !!config.consumerKey,
-        hasPrivateKey: !!this.privateKey,
-        error: error instanceof Error ? error.message : String(error)
-      });
-      throw new Error(`OAuth signature generation failed: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('❌ OAuth signature generation failed:', error);
+      throw error;
     }
   }
 
-  // Submit a bulk search request
+  // Submit a bulk search request with retry logic
   async submitBulkSearch(request: BulkSearchRequest): Promise<BulkSearchSubmitResponse> {
     if (!this.isConfigured) {
       throw new Error('Mastercard API is not configured. Missing consumer key or private key.');
     }
     
-    try {
-      const url = `${config.baseUrl}/bulk-searches`;
-      const requestBody = JSON.stringify(request);
-      
-      // Debug logging
-      console.log('Mastercard Track Search URL:', url);
-      console.log('Mastercard Track Search request body:', requestBody);
-      console.log('Body hash:', crypto.createHash('sha256').update(requestBody, 'utf8').digest('base64'));
-      
-      const authHeader = this.generateOAuthSignature('POST', url, {}, requestBody);
-
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': authHeader,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-Openapi-Clientid': config.clientId || '',
-          'X-Client-Correlation-Id': (request.searches && request.searches[0] && request.searches[0].searchRequestId) || ''
-        },
-        body: requestBody,
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        console.error('❌ MASTERCARD API ERROR:', {
-          status: response.status,
-          environment,
-          url: url.substring(0, 50) + '...',
-          error: error.substring(0, 500)
-        });
+    const maxRetries = 3;
+    let lastError: Error | null = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`📤 Mastercard API attempt ${attempt}/${maxRetries}`);
         
-        // Provide specific error messages for common issues
-        if (response.status === 401) {
-          console.error('   🔐 Authentication failed - check your Mastercard credentials');
-          console.error('   - Verify MASTERCARD_CONSUMER_KEY is correct');
-          console.error('   - Verify MASTERCARD_KEY contains valid private key');
-          console.error(`   - Current environment: ${environment}`);
-          console.error(`   - Using URL: ${config.baseUrl}`);
-        } else if (response.status === 403) {
-          console.error('   🚫 Access forbidden - API key may not have access to this endpoint');
-          console.error(`   - Check if your ${environment} API key has Track Search access`);
-        } else if (response.status === 404) {
-          console.error('   ❓ Endpoint not found - possible environment mismatch');
-          console.error(`   - Current environment: ${environment}`);
-          console.error(`   - API URL: ${config.baseUrl}`);
+        const url = `${config.baseUrl}/bulk-searches`;
+        const requestBody = JSON.stringify(request);
+        
+        // Rate limiting - wait between attempts
+        if (attempt > 1) {
+          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000); // Exponential backoff max 10s
+          console.log(`⏳ Waiting ${delay}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
         
-        throw new Error(`Mastercard API error: ${response.status} - ${error.substring(0, 200)}`);
+        const authHeader = this.generateOAuthSignature('POST', url, {}, requestBody);
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Authorization': authHeader,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Openapi-Clientid': config.clientId || '',
+            'X-Client-Correlation-Id': (request.searches?.[0]?.searchRequestId) || `req_${Date.now()}`,
+            'User-Agent': 'Finexio-Classification-Service/1.0'
+          },
+          body: requestBody,
+        });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ MASTERCARD API ERROR:', {
+          status: response.status,
+          statusText: response.statusText,
+          environment,
+          url: url.substring(0, 80) + '...',
+          headers: Object.fromEntries(response.headers.entries()),
+          error: errorText.substring(0, 1000)
+        });
+        
+        // Enhanced error handling with specific fixes
+        let errorMessage = `Mastercard API ${response.status} error`;
+        
+        if (response.status === 400) {
+          console.error('   🔧 Bad Request - Check request format and data');
+          errorMessage = 'Invalid request format or data';
+        } else if (response.status === 401) {
+          console.error('   🔐 Authentication failed - OAuth signature issue');
+          console.error('   - Consumer Key:', config.consumerKey?.substring(0, 20) + '...');
+          console.error('   - Private Key length:', this.privateKey?.length || 0);
+          console.error(`   - Environment: ${environment}`);
+          errorMessage = 'Authentication failed - check OAuth credentials';
+        } else if (response.status === 403) {
+          console.error('   🚫 Access forbidden - insufficient permissions');
+          errorMessage = 'Access denied - check API permissions';
+        } else if (response.status === 404) {
+          console.error('   ❓ Endpoint not found');
+          console.error(`   - URL: ${config.baseUrl}`);
+          errorMessage = 'API endpoint not found';
+        } else if (response.status === 429) {
+          console.error('   ⏳ Rate limit exceeded');
+          errorMessage = 'Rate limit exceeded - will retry later';
+        } else if (response.status >= 500) {
+          console.error('   🔥 Server error - Mastercard service issue');
+          errorMessage = 'Mastercard server error - service may be down';
+        }
+        
+        throw new Error(`${errorMessage}: ${errorText.substring(0, 200)}`);
       }
 
       const data = await response.json();
-      console.log('Mastercard Track Search raw response:', JSON.stringify(data, null, 2));
+      console.log(`✅ Mastercard API success on attempt ${attempt}:`, {
+        bulkSearchId: data.bulkSearchId || data.searchId,
+        status: data.status || 'submitted'
+      });
+      
       const searchResponse = BulkSearchSubmitResponseSchema.parse(data);
 
       // Track active search with initial status
@@ -475,11 +541,31 @@ export class MastercardApiService {
       });
 
       return searchResponse;
+      
     } catch (error) {
-      console.error('Error submitting bulk search:', error);
-      throw error;
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.error(`❌ Mastercard API attempt ${attempt} failed:`, lastError.message);
+      
+      // Don't retry on authentication errors
+      if (lastError.message.includes('401') || lastError.message.includes('Authentication')) {
+        break;
+      }
+      
+      // Don't retry on client errors (4xx except 429)
+      if (lastError.message.includes('400') || lastError.message.includes('403') || lastError.message.includes('404')) {
+        break;
+      }
+      
+      if (attempt === maxRetries) {
+        break;
+      }
     }
   }
+  
+  // All attempts failed
+  console.error('❌ All Mastercard API attempts failed');
+  throw lastError || new Error('Mastercard API submission failed after all retries');
+}
 
 
 
@@ -761,21 +847,31 @@ export class MastercardApiService {
 
         if (!response.ok) {
           const error = await response.text();
-          console.log(`Mastercard response for ${searchId}: Status ${response.status}, Body: ${error.substring(0, 500)}`);
+          console.log(`Mastercard results response for ${searchId}: Status ${response.status}`);
           
-          // Check if this is a "no results found" response (search complete but no matches)
-          if (response.status === 400 && error.includes('RESULTS_NOT_FOUND')) {
-            console.log(`Search ${searchId}: Completed with no results found`);
-            // Return empty results - the search is done
-            return {
-              bulkSearchId: searchId,
-              results: []
-            };
+          // Handle specific error cases
+          if (response.status === 400) {
+            if (error.includes('RESULTS_NOT_FOUND') || error.includes('No results found')) {
+              console.log(`✅ Search ${searchId}: Completed with no results found`);
+              return {
+                bulkSearchId: searchId,
+                results: []
+              };
+            } else if (error.includes('Search not found') || error.includes('Invalid search')) {
+              console.log(`⚠️ Search ${searchId}: Search ID not found or invalid`);
+              return null;
+            }
+          } else if (response.status === 404) {
+            console.log(`⚠️ Search ${searchId}: Results endpoint not found - search may not be ready`);
+            // Don't return null, let it retry
+            throw new Error(`Results not ready for search ${searchId}`);
+          } else if (response.status === 429) {
+            console.log(`⏳ Search ${searchId}: Rate limited - will retry`);
+            throw new Error(`Rate limited for search ${searchId}`);
           }
           
-          // Unexpected error after status showed COMPLETED
-          console.error(`Unexpected error getting results for completed search ${searchId}`);
-          return null;
+          console.error(`❌ Unexpected error getting results for search ${searchId}: ${response.status} ${error.substring(0, 200)}`);
+          throw new Error(`Failed to get results: ${response.status} ${error.substring(0, 100)}`);
         }
 
         // Success! Parse and return results
