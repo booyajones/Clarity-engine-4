@@ -80,8 +80,8 @@ const MASTERCARD_CONFIG = {
   }
 };
 
-// Use sandbox by default, switch to production when ready
-const environment = process.env.MASTERCARD_ENVIRONMENT || 'sandbox';
+// Use production environment in production, sandbox in development
+const environment = process.env.NODE_ENV === 'production' ? 'production' : (process.env.MASTERCARD_ENVIRONMENT || 'sandbox');
 const config = MASTERCARD_CONFIG[environment as keyof typeof MASTERCARD_CONFIG];
 
 // Request/Response schemas for Track Search API
