@@ -1734,26 +1734,46 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                         <Badge className={`text-xs ${
                                           hasMastercardData ? 'bg-green-100 text-green-800' :
                                           selectedClassification.mastercardMatchStatus === 'no_match' ? 'bg-yellow-100 text-yellow-800' :
+                                          selectedClassification.mastercardMatchStatus === 'skipped' ? 'bg-gray-100 text-gray-600' :
                                           wasEnriched ? 'bg-yellow-100 text-yellow-800' :
                                           selectedClassification.mastercardMatchStatus === 'error' ? 'bg-red-100 text-red-800' :
                                           'bg-gray-100 text-gray-800'
                                         }`}>
                                           {hasMastercardData ? '✓ Matched' :
                                            selectedClassification.mastercardMatchStatus === 'no_match' ? 'No Match Found' :
+                                           selectedClassification.mastercardMatchStatus === 'skipped' ? 'Unavailable' :
                                            wasEnriched ? '✓ Enriched (No Match)' :
-                                           selectedClassification.mastercardMatchStatus === 'error' ? '✗ Error' :
+                                           selectedClassification.mastercardMatchStatus === 'error' ? 'Service Error' :
                                            selectedClassification.mastercardMatchStatus === 'match' ? '✓ Matched' :
                                            selectedClassification.mastercardMatchStatus === 'matched' ? 'Processing' :
                                            'Not Enriched'}
                                         </Badge>
                                       </div>
                                       
-                                      {/* Error Message for Mastercard */}
-                                      {selectedClassification.mastercardMatchStatus === 'error' && !hasMastercardData && (
-                                        <div className="bg-red-50 p-2 rounded text-sm text-red-700 border border-red-200">
-                                          <p>Unable to enrich with Mastercard data. The enrichment service encountered an error.</p>
-                                          {selectedClassification.mastercardSource && (
-                                            <p className="text-xs mt-1">Source: {selectedClassification.mastercardSource}</p>
+                                      {/* Error or Skipped Message for Mastercard */}
+                                      {(selectedClassification.mastercardMatchStatus === 'error' || 
+                                        selectedClassification.mastercardMatchStatus === 'skipped') && !hasMastercardData && (
+                                        <div className={`p-2 rounded text-sm border ${
+                                          selectedClassification.mastercardMatchStatus === 'skipped' 
+                                            ? 'bg-yellow-50 text-yellow-700 border-yellow-200' 
+                                            : 'bg-red-50 text-red-700 border-red-200'
+                                        }`}>
+                                          {selectedClassification.mastercardMatchStatus === 'skipped' ? (
+                                            <>
+                                              <p className="font-medium">Mastercard enrichment temporarily unavailable</p>
+                                              <p className="text-xs mt-1">
+                                                {selectedClassification.mastercardSource?.includes('authentication') 
+                                                  ? 'Service configuration issue - other enrichments completed successfully'
+                                                  : 'Service is temporarily unavailable - will retry automatically'}
+                                              </p>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <p>Unable to enrich with Mastercard data at this time.</p>
+                                              {selectedClassification.mastercardSource && (
+                                                <p className="text-xs mt-1">Details: {selectedClassification.mastercardSource}</p>
+                                              )}
+                                            </>
                                           )}
                                         </div>
                                       )}

@@ -500,32 +500,52 @@ export class MastercardApiService {
         
         // Enhanced error handling with specific fixes
         let errorMessage = `Mastercard API ${response.status} error`;
+        let isRetryable = false;
         
         if (response.status === 400) {
           console.error('   🔧 Bad Request - Check request format and data');
           errorMessage = 'Invalid request format or data';
+          // Check if it's a known Mastercard validation error
+          if (errorText.includes('INVALID_FIELD') || errorText.includes('MISSING_FIELD')) {
+            console.error('   📝 Request validation failed - data format issue');
+          }
         } else if (response.status === 401) {
           console.error('   🔐 Authentication failed - OAuth signature issue');
           console.error('   - Consumer Key:', config.consumerKey?.substring(0, 20) + '...');
           console.error('   - Private Key length:', this.privateKey?.length || 0);
           console.error(`   - Environment: ${environment}`);
-          errorMessage = 'Authentication failed - check OAuth credentials';
+          console.error('   - Possible causes:');
+          console.error('     • Incorrect consumer key or private key');
+          console.error('     • Key mismatch between sandbox and production');
+          console.error('     • OAuth signature generation issue');
+          errorMessage = 'Authentication failed - credentials may not match environment';
         } else if (response.status === 403) {
           console.error('   🚫 Access forbidden - insufficient permissions');
-          errorMessage = 'Access denied - check API permissions';
+          console.error('   - Your API key may not have Track Search access');
+          console.error('   - Contact Mastercard to enable Track Search API');
+          errorMessage = 'Access denied - Track Search API not enabled for this key';
         } else if (response.status === 404) {
           console.error('   ❓ Endpoint not found');
           console.error(`   - URL: ${config.baseUrl}`);
-          errorMessage = 'API endpoint not found';
+          console.error('   - This often means environment mismatch');
+          errorMessage = 'API endpoint not found - check environment configuration';
         } else if (response.status === 429) {
-          console.error('   ⏳ Rate limit exceeded');
+          console.error('   ⏳ Rate limit exceeded - will retry automatically');
           errorMessage = 'Rate limit exceeded - will retry later';
+          isRetryable = true;
         } else if (response.status >= 500) {
           console.error('   🔥 Server error - Mastercard service issue');
-          errorMessage = 'Mastercard server error - service may be down';
+          console.error('   - This is a temporary Mastercard service issue');
+          errorMessage = 'Mastercard service temporarily unavailable';
+          isRetryable = true;
         }
         
-        throw new Error(`${errorMessage}: ${errorText.substring(0, 200)}`);
+        // Create error with retry flag
+        const error: any = new Error(`${errorMessage}`);
+        error.status = response.status;
+        error.isRetryable = isRetryable;
+        error.details = errorText.substring(0, 200);
+        throw error;
       }
 
       const data = await response.json();

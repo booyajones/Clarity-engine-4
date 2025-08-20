@@ -145,35 +145,59 @@ export class MastercardAsyncService {
 
           console.log(`✅ Submitted Mastercard search ${searchId} with ${batch.length} payees (batch ${i/MAX_BATCH_SIZE + 1}/${Math.ceil(payees.length/MAX_BATCH_SIZE)})`);
         } catch (error: any) {
-          console.error(`❌ Error submitting batch ${i/MAX_BATCH_SIZE + 1}/${Math.ceil(payees.length/MAX_BATCH_SIZE)}:`, error);
-          console.error(`❌ Full error details:`, {
-            message: error.message,
-            status: error.status || error.statusCode,
-            response: error.response?.data || error.data,
-            stack: error.stack
-          });
-
-          // CRITICAL: ALL errors must result in retry, not marking as no_match
-          // Every record MUST get a real Mastercard response
-
-          const pendingSearchId = `pending_${Date.now()}_batch${batchId}_part${i/MAX_BATCH_SIZE}`;
-
-          // Store as pending for worker to retry later - for ANY error type
-          await db.insert(mastercardSearchRequests).values({
-            searchId: pendingSearchId,
-            batchId,
-            status: "error", // Mark as error so worker knows to handle specially
-            searchType: "bulk",
-            requestPayload: searchRequest,
-            searchIdMapping,
-            error: `Failed to submit: ${error.message || 'Unknown error'} - Status: ${error.status || 'unknown'} - will retry with exponential backoff`,
-            pollAttempts: 0,
-            maxPollAttempts: 999999,
-            lastAttemptAt: new Date(),
-          });
-
-          searchIds.push(pendingSearchId);
-          console.log(`🔄 Stored batch for retry as ${pendingSearchId} - ALL ${batch.length} records WILL be processed`);
+          console.error(`⚠️ Mastercard submission error for batch ${i/MAX_BATCH_SIZE + 1}/${Math.ceil(payees.length/MAX_BATCH_SIZE)}:`, error.message);
+          
+          // Determine if error is retryable
+          const isRetryable = error.isRetryable || 
+                            error.status === 429 || // Rate limit
+                            error.status >= 500 || // Server errors
+                            !error.status; // Network errors
+          
+          const isAuthError = error.status === 401 || error.status === 403;
+          
+          if (isAuthError) {
+            console.error('🔐 Mastercard authentication/authorization error detected');
+            console.error('   This likely means:');
+            console.error('   • Wrong credentials for this environment');
+            console.error('   • API not enabled for your account');
+            console.error('   • Credentials mismatch between sandbox/production');
+            
+            // For auth errors, mark records as skipped but continue processing
+            for (const payee of batch) {
+              await this.markPayeeAsSkipped(payee.id, 'Mastercard authentication error - enrichment skipped');
+            }
+            
+            console.log(`⏭️ Skipping Mastercard for ${batch.length} records due to authentication error`);
+            continue; // Continue with next batch or finish
+          }
+          
+          if (isRetryable) {
+            // Store for retry with exponential backoff
+            const pendingSearchId = `pending_${Date.now()}_batch${batchId}_part${i/MAX_BATCH_SIZE}`;
+            
+            await db.insert(mastercardSearchRequests).values({
+              searchId: pendingSearchId,
+              batchId,
+              status: "error",
+              searchType: "bulk",
+              requestPayload: searchRequest,
+              searchIdMapping,
+              error: `Temporary error (${error.status || 'network'}): ${error.message} - will retry automatically`,
+              pollAttempts: 0,
+              maxPollAttempts: 999999,
+              lastAttemptAt: new Date(),
+            });
+            
+            searchIds.push(pendingSearchId);
+            console.log(`🔄 Will retry ${batch.length} records later (temporary error)`);
+          } else {
+            // Non-retryable error - skip enrichment but don't fail entire process
+            console.error(`❌ Non-retryable Mastercard error: ${error.message}`);
+            for (const payee of batch) {
+              await this.markPayeeAsSkipped(payee.id, `Mastercard error: ${error.message}`);
+            }
+            console.log(`⏭️ Skipping Mastercard for ${batch.length} records (non-retryable error)`);
+          }
         }
       }
 
@@ -212,6 +236,21 @@ export class MastercardAsyncService {
       });
     } catch (error) {
       console.error(`Error marking payee ${payeeId} as no_match:`, error);
+    }
+  }
+
+  /**
+   * Mark a payee as skipped (due to error)
+   */
+  private async markPayeeAsSkipped(payeeId: number, reason: string) {
+    try {
+      await storage.updatePayeeClassification(payeeId, {
+        mastercardMatchStatus: 'skipped',
+        mastercardEnrichmentDate: new Date(),
+        mastercardSource: reason
+      });
+    } catch (error) {
+      console.error(`Error marking payee ${payeeId} as skipped:`, error);
     }
   }
 
