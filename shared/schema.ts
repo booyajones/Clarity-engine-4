@@ -408,3 +408,25 @@ export type CachedSupplier = typeof cachedSuppliers.$inferSelect;
 export type InsertCachedSupplier = z.infer<typeof insertCachedSupplierSchema>;
 export type MastercardSearchRequest = typeof mastercardSearchRequests.$inferSelect;
 export type InsertMastercardSearchRequest = z.infer<typeof insertMastercardSearchRequestSchema>;
+
+// Webhook events table
+export const webhookEvents = pgTable("webhook_events", {
+  id: serial("id").primaryKey(),
+  eventId: text("event_id").notNull().unique(),
+  eventType: text("event_type").notNull(),
+  bulkRequestId: text("bulk_request_id"),
+  payload: jsonb("payload").notNull(),
+  processed: boolean("processed").default(false),
+  processedAt: timestamp("processed_at"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow()
+});
+
+export const insertWebhookEventSchema = createInsertSchema(webhookEvents).omit({
+  id: true,
+  createdAt: true,
+  processedAt: true
+});
+
+export type WebhookEvent = typeof webhookEvents.$inferSelect;
+export type InsertWebhookEvent = z.infer<typeof insertWebhookEventSchema>;

@@ -16,6 +16,7 @@ import akkioRoutes from "./routes/akkio";
 import batchJobRoutes from "./routes/batch-jobs";
 import monitoringRoutes from "./routes/monitoring";
 import pipelineRoutes from "./routes/pipelineRoutes";
+import mastercardWebhookRouter from "./routes/mastercard-webhook";
 import { AppError, errorHandler, notFoundHandler, asyncHandler } from "./middleware/errorHandler";
 import { generalLimiter, uploadLimiter, classificationLimiter, expensiveLimiter } from "./middleware/rateLimiter";
 import { db } from "./db";
@@ -229,6 +230,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // System monitoring and performance routes
   app.use('/api/monitoring', monitoringRoutes);
+  
+  // Mastercard webhook routes (no rate limiting for webhooks)
+  app.use('/', mastercardWebhookRouter);
   
   // Test database connection on startup
   try {
