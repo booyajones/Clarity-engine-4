@@ -73,25 +73,26 @@ class MastercardModule implements PipelineModule {
       console.log(`📤 ${message}`);
       
       // Create a dummy enrichmentMap for compatibility
-      // The actual enrichment happens asynchronously
+      // The actual enrichment happens asynchronously via the worker
       const enrichmentMap = new Map();
       payeesForEnrichment.forEach(p => {
         enrichmentMap.set(p.id, {
           enriched: false,
-          status: 'processing',
-          message: 'Mastercard enrichment submitted - processing asynchronously',
+          status: 'submitted',
+          message: 'Submitted to Mastercard - awaiting results',
           source: 'api'
         });
       });
 
-      // DO NOT mark as completed - this happens asynchronously!
-      // The worker will update individual records as results come in
-      
+      // Update batch to show submission is complete but processing is ongoing
       await storage.updateUploadBatch(batchId, {
         mastercardEnrichmentStatus: 'processing',
-        currentStep: 'Mastercard enrichment in progress',
-        progressMessage: `Processing ${businessClassifications.length} business records - results will arrive asynchronously`,
-        mastercardEnrichmentProcessed: businessClassifications.length // Track that we submitted all of them
+        mastercardEnrichmentTotal: businessClassifications.length,
+        mastercardEnrichmentProcessed: 0, // Don't set processed until we actually get results
+        mastercardEnrichmentProgress: 0,
+        mastercardActualEnriched: 0,
+        currentStep: 'Mastercard searches submitted',
+        progressMessage: `${searchIds.length} Mastercard searches submitted for ${businessClassifications.length} business records. Results will be processed asynchronously.`
       });
 
       console.log(`📤 Mastercard Module: Submitted ${businessClassifications.length} records for batch ${batchId}. Worker will process results.`);
