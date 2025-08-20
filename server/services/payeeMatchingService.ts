@@ -4,6 +4,7 @@ import { storage } from '../storage';
 import type { PayeeClassification } from '@shared/schema';
 import { supplierCacheService } from './supplierCacheService';
 import { memoryOptimizedCache } from './memoryOptimizedSupplierCache';
+import { AccurateMatchingService } from './accurateMatchingService';
 import OpenAI from 'openai';
 
 // Configuration interface for matching options
@@ -18,11 +19,13 @@ export interface MatchingOptions {
 // Service to handle payee matching workflow
 export class PayeeMatchingService {
   private openai: OpenAI | null = null;
+  private accurateMatchingService: AccurateMatchingService;
   
   constructor() {
     if (process.env.OPENAI_API_KEY) {
       this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     }
+    this.accurateMatchingService = new AccurateMatchingService();
   }
 
   async matchPayeeWithBigQuery(
@@ -58,85 +61,60 @@ export class PayeeMatchingService {
         return { matched: false };
       }
       
-      console.log('[PayeeMatching] Starting Finexio match for:', classification.cleanedName);
+      console.log('[PayeeMatching] Starting sophisticated Finexio match for:', classification.cleanedName);
       
-      // Use memory-optimized cache for supplier search (reduces memory by 95%)
-      const useMemoryOptimized = true; // Always use optimized version to save memory
-      const cachedCandidates = useMemoryOptimized
-        ? await memoryOptimizedCache.searchSuppliers(classification.cleanedName, 10)
-        : await supplierCacheService.searchCachedSuppliers(classification.cleanedName);
-      console.log('[PayeeMatching] Cached candidates found:', cachedCandidates.length);
+      // Use AccurateMatchingService for sophisticated 6-algorithm fuzzy matching
+      const matchResult = await this.accurateMatchingService.findBestMatch(classification.cleanedName);
+      console.log('[PayeeMatching] Sophisticated match result:', matchResult.bestMatch ? 'FOUND' : 'NO MATCH');
       
-      // If cache is empty or needs refresh, fall back to BigQuery
-      let candidates: BigQueryPayeeResult[];
-      
-      if (cachedCandidates.length > 0) {
-        // Convert cached suppliers to BigQuery format for compatibility
-        candidates = cachedCandidates.map(supplier => ({
-          payeeId: supplier.id || supplier.payeeId || supplier.supplierId,
-          payeeName: supplier.payeeName,
-          normalizedName: supplier.normalizedName || supplier.mastercardBusinessName || undefined,
-          category: supplier.category || undefined,
-          sicCode: supplier.mcc || undefined,
-          industry: supplier.industry || undefined,
-          paymentType: supplier.paymentType || undefined,
-          city: supplier.city || undefined,
-          state: supplier.state || undefined,
-          confidence: supplier.confidence || 1.0,
-          matchReasoning: 'Cached supplier match'
-        }));
-        console.log(`Found ${candidates.length} cached candidates for "${classification.cleanedName}"`);
-      } else if (bigQueryService.isServiceConfigured()) {
-        // Fall back to BigQuery if cache miss
-        console.log('Cache miss - falling back to BigQuery');
-        candidates = await bigQueryService.searchKnownPayees(classification.cleanedName);
-      } else {
-        console.log('No cached data and BigQuery not configured');
+      // If no match found with sophisticated matching, return early
+      if (!matchResult.bestMatch || matchResult.confidence < opts.confidenceThreshold) {
+        console.log(`[PayeeMatching] No acceptable match found (confidence: ${matchResult.confidence}, threshold: ${opts.confidenceThreshold})`);
         return { matched: false };
       }
       
-      if (candidates.length === 0) {
+      // Get the best match and its details
+      const topMatch = matchResult.matches[0];
+      if (!topMatch) {
         return { matched: false };
       }
       
-      // Find the best match using our fuzzy matching algorithms
-      let bestMatch = null;
-      let bestConfidence = 0;
-      let bestMatchResult = null;
+      // Convert the matched supplier to expected format
+      const bestMatch = {
+        payeeId: matchResult.bestMatch.payeeId || matchResult.bestMatch.id,
+        payeeName: matchResult.bestMatch.payeeName,
+        normalizedName: matchResult.bestMatch.normalizedName || matchResult.bestMatch.mastercardBusinessName || undefined,
+        category: matchResult.bestMatch.category || undefined,
+        sicCode: matchResult.bestMatch.mcc || undefined,
+        industry: matchResult.bestMatch.industry || undefined,
+        paymentType: matchResult.bestMatch.paymentType || undefined,
+        city: matchResult.bestMatch.city || undefined,
+        state: matchResult.bestMatch.state || undefined,
+        confidence: matchResult.confidence || 1.0,
+        matchReasoning: topMatch.reasoning || 'Sophisticated fuzzy match'
+      };
       
-      // Evaluate each candidate with our fuzzy matcher
-      for (const candidate of candidates) {
-        const fuzzyResult = await fuzzyMatcher.matchPayee(
-          classification.cleanedName,
-          candidate.payeeName
-        );
-        
-        if (fuzzyResult.confidence > bestConfidence) {
-          bestConfidence = fuzzyResult.confidence;
-          bestMatch = candidate;
-          bestMatchResult = fuzzyResult;
-        }
-      }
+      const bestMatchResult = {
+        confidence: matchResult.confidence,
+        matchType: topMatch.matchType,
+        algorithm: 'sophisticated_6_algorithms',
+        reasoning: topMatch.reasoning,
+        scores: topMatch.details
+      };
       
-      if (!bestMatch || !bestMatchResult) {
-        return { matched: false };
-      }
-      
-      // Use the fuzzy matcher's confidence and reasoning
+      // Use the sophisticated matcher's confidence and reasoning
       let finalConfidence = bestMatchResult.confidence;
-      let matchReasoning = bestMatchResult.matchType === 'ai_enhanced' 
-        ? bestMatchResult.details.aiReasoning || 'AI-enhanced match'
-        : `${bestMatchResult.matchType} match with ${Math.round(finalConfidence * 100)}% confidence`;
-      let matchType = bestMatchResult.matchType;
+      let matchReasoning = bestMatchResult.reasoning || 
+        `${bestMatchResult.matchType} match with ${Math.round(finalConfidence * 100)}% confidence`;
+      let matchType = bestMatchResult.matchType || 'sophisticated_fuzzy';
       
-      // The fuzzy matcher already handles AI enhancement internally
+      // The sophisticated matcher already handles all 6 algorithms internally
       
       // Calculate Finexio-specific match score (0-100)
       const finexioMatchScore = Math.round(finalConfidence * 100);
       
-      // Only accept matches that the fuzzy matcher determined as valid
-      // (fuzzy matcher already handles thresholds: >=0.9 direct, 0.6-0.9 AI-enhanced, <0.6 no match)
-      if (bestMatchResult.isMatch) {
+      // Apply confidence threshold (sophisticated matcher finds all matches, we filter here)
+      if (finalConfidence >= opts.confidenceThreshold) {
         // Store the match in database only if classification has an ID
         if (classification.id) {
           await storage.createPayeeMatch({

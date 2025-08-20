@@ -45,7 +45,9 @@ export class MemoryOptimizedSupplierCache {
     // Remove oldest if at capacity
     if (this.recentCache.size >= this.maxCacheSize) {
       const firstKey = this.recentCache.keys().next().value;
-      this.recentCache.delete(firstKey);
+      if (firstKey) {
+        this.recentCache.delete(firstKey);
+      }
     }
     this.recentCache.set(key, value);
   }
@@ -68,19 +70,18 @@ export class MemoryOptimizedSupplierCache {
       // Direct database query with fuzzy matching
       const results = await db
         .select({
-          id: cachedSuppliers.supplierId,
+          id: cachedSuppliers.id,
+          payeeId: cachedSuppliers.payeeId,
           payeeName: cachedSuppliers.payeeName,
-          businessName: cachedSuppliers.businessName,
-          legalName: cachedSuppliers.legalName,
-          dbaName: cachedSuppliers.dbaName,
+          normalizedName: cachedSuppliers.normalizedName,
+          mastercardBusinessName: cachedSuppliers.mastercardBusinessName,
           confidence: sql<number>`
             CASE 
               WHEN LOWER(${cachedSuppliers.payeeName}) = ${normalized} THEN 1.0
-              WHEN LOWER(${cachedSuppliers.businessName}) = ${normalized} THEN 0.95
-              WHEN LOWER(${cachedSuppliers.legalName}) = ${normalized} THEN 0.90
-              WHEN LOWER(${cachedSuppliers.dbaName}) = ${normalized} THEN 0.85
+              WHEN LOWER(${cachedSuppliers.mastercardBusinessName}) = ${normalized} THEN 0.95
+              WHEN LOWER(${cachedSuppliers.normalizedName}) = ${normalized} THEN 0.90
               WHEN LOWER(${cachedSuppliers.payeeName}) LIKE ${`%${normalized}%`} THEN 0.7
-              WHEN LOWER(${cachedSuppliers.businessName}) LIKE ${`%${normalized}%`} THEN 0.65
+              WHEN LOWER(${cachedSuppliers.mastercardBusinessName}) LIKE ${`%${normalized}%`} THEN 0.65
               ELSE 0.5
             END
           `.as('confidence')
@@ -89,9 +90,8 @@ export class MemoryOptimizedSupplierCache {
         .where(
           or(
             ilike(cachedSuppliers.payeeName, `%${searchTerm}%`),
-            ilike(cachedSuppliers.businessName, `%${searchTerm}%`),
-            ilike(cachedSuppliers.legalName, `%${searchTerm}%`),
-            ilike(cachedSuppliers.dbaName, `%${searchTerm}%`)
+            ilike(cachedSuppliers.mastercardBusinessName, `%${searchTerm}%`),
+            ilike(cachedSuppliers.normalizedName, `%${searchTerm}%`)
           )
         )
         .orderBy(sql`confidence DESC`)
@@ -127,9 +127,8 @@ export class MemoryOptimizedSupplierCache {
         .where(
           or(
             eq(sql`LOWER(${cachedSuppliers.payeeName})`, normalized),
-            eq(sql`LOWER(${cachedSuppliers.businessName})`, normalized),
-            eq(sql`LOWER(${cachedSuppliers.legalName})`, normalized),
-            eq(sql`LOWER(${cachedSuppliers.dbaName})`, normalized)
+            eq(sql`LOWER(${cachedSuppliers.mastercardBusinessName})`, normalized),
+            eq(sql`LOWER(${cachedSuppliers.normalizedName})`, normalized)
           )
         )
         .limit(1);
@@ -158,7 +157,7 @@ export class MemoryOptimizedSupplierCache {
       const result = await db
         .select()
         .from(cachedSuppliers)
-        .where(eq(cachedSuppliers.supplierId, supplierId))
+        .where(eq(cachedSuppliers.payeeId, supplierId))
         .limit(1);
       
       const supplier = result[0] || null;

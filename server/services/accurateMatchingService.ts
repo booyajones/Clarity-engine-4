@@ -1,22 +1,21 @@
 import { sql } from 'drizzle-orm';
 import { db } from '../db';
 import type { CachedSupplier } from '@shared/schema';
+import { fuzzyMatcher } from './fuzzyMatcher';
 
 /**
- * Expert-level Accurate Matching Service
- * Implements sophisticated matching algorithms with strict confidence thresholds
+ * Sophisticated Matching Service using 6-algorithm fuzzy matching
+ * ALL matches go through intelligent fuzzy matching - no shortcuts
  */
 export class AccurateMatchingService {
-  private readonly MIN_CONFIDENCE_THRESHOLD = 0.84; // Consider matches at 84% or higher
+  private readonly MIN_CONFIDENCE_THRESHOLD = 0.75; // Consider matches at 75% or higher for fuzzy
   private readonly MIN_DISPLAY_THRESHOLD = 0.60; // Show all matches above 60% for transparency
-  private readonly EXACT_MATCH_SCORE = 1.0;
-  private readonly PREFIX_MATCH_SCORE = 0.95;
-  private readonly CONTAINS_MATCH_SCORE = 0.7;
   
   /**
-   * Primary matching function with multi-stage algorithm
+   * Primary matching function using sophisticated 6-algorithm fuzzy matching
+   * NO shortcuts - ALL matches go through fuzzy matching algorithms
    */
-  async findBestMatch(payeeName: string, limit = 5): Promise<{
+  async findBestMatch(payeeName: string, limit = 10): Promise<{
     matches: Array<{
       supplier: CachedSupplier;
       score: number;
@@ -29,173 +28,61 @@ export class AccurateMatchingService {
     const normalizedInput = this.normalize(payeeName);
     const cleanInput = payeeName.trim();
     
-    console.log(`[AccurateMatching] Searching for: "${payeeName}" (normalized: "${normalizedInput}")`);
+    console.log(`[SophisticatedMatching] Processing: "${payeeName}" with 6-algorithm fuzzy matching`);
     
-    // Stage 1: Exact Match (100% confidence)
-    const exactMatch = await this.findExactMatch(cleanInput, normalizedInput);
-    if (exactMatch) {
-      console.log(`[AccurateMatching] Found exact match: ${exactMatch.payee_name}`);
+    // Get ALL potential candidates from database (no immediate returns)
+    const candidates = await this.findAllCandidates(cleanInput, normalizedInput, limit * 3);
+    
+    if (candidates.length === 0) {
+      console.log(`[SophisticatedMatching] No candidates found for "${payeeName}"`);
       return {
-        matches: [{
-          supplier: exactMatch,
-          score: this.EXACT_MATCH_SCORE,
-          matchType: 'exact',
-          reasoning: 'Exact name match in supplier database'
-        }],
-        bestMatch: exactMatch,
-        confidence: this.EXACT_MATCH_SCORE
+        matches: [],
+        bestMatch: null,
+        confidence: 0
       };
     }
     
-    // Stage 2: Smart Prefix Match (95% confidence for clear prefixes)
-    const prefixMatches = await this.findPrefixMatches(cleanInput, normalizedInput, limit);
-    if (prefixMatches.length > 0) {
-      // Score prefix matches based on length similarity
-      const scoredPrefixMatches = prefixMatches.map(supplier => {
-        const supplierName = supplier.payeeName || supplier.payee_name || '';
-        const lengthRatio = supplierName ? cleanInput.length / supplierName.length : 0;
-        const score = this.PREFIX_MATCH_SCORE * Math.max(0.8, lengthRatio);
+    console.log(`[SophisticatedMatching] Found ${candidates.length} candidates, running 6-algorithm analysis...`);
+    
+    // Run ALL candidates through sophisticated 6-algorithm fuzzy matching
+    const fuzzyMatches = await Promise.all(
+      candidates.map(async (supplier) => {
+        const supplierName = supplier.payeeName || '';
+        
+        // Run sophisticated fuzzy matching with ALL 6 algorithms
+        const fuzzyResult = await fuzzyMatcher.matchPayee(cleanInput, supplierName);
+        
         return {
           supplier,
-          score,
-          matchType: 'prefix',
-          reasoning: `Name starts with "${cleanInput}" (${Math.round(score * 100)}% confidence)`
+          score: fuzzyResult.confidence,
+          matchType: fuzzyResult.matchType,
+          reasoning: this.generateReasoning(fuzzyResult),
+          details: fuzzyResult.details
         };
-      });
-      
-      // Filter only high-confidence matches
-      const goodMatches = scoredPrefixMatches.filter(m => m.score >= this.MIN_CONFIDENCE_THRESHOLD);
-      
-      if (goodMatches.length > 0) {
-        const bestMatch = goodMatches[0];
-        console.log(`[AccurateMatching] Found prefix match: ${bestMatch.supplier.payee_name} (${Math.round(bestMatch.score * 100)}%)`);
-        return {
-          matches: goodMatches,
-          bestMatch: bestMatch.supplier,
-          confidence: bestMatch.score
-        };
+      })
+    );
+    
+    // Sort by confidence score from fuzzy matching
+    fuzzyMatches.sort((a, b) => b.score - a.score);
+    
+    // Log the top matches with their algorithm scores
+    if (fuzzyMatches.length > 0) {
+      const topMatch = fuzzyMatches[0];
+      console.log(`[SophisticatedMatching] Best match: "${topMatch.supplier.payeeName}" with ${(topMatch.score * 100).toFixed(1)}% confidence`);
+      if (topMatch.details) {
+        console.log(`  Algorithm scores:`, topMatch.details);
       }
     }
     
-    // Stage 3: Smart Partial Matching (handles "ACCO ENGINEERED" -> "ACCO ENGINEERED SYSTEMS")
-    const smartMatches = await this.findSmartPartialMatches(cleanInput, normalizedInput, limit * 2);
-    if (smartMatches.length > 0) {
-      const scoredSmartMatches = smartMatches.map(supplier => {
-        const supplierName = supplier.payeeName || supplier.payee_name || '';
-        const score = this.calculateSmartMatchScore(cleanInput, supplierName);
-        return {
-          supplier,
-          score,
-          matchType: 'smart_partial',
-          reasoning: `Smart match for "${cleanInput}" (${Math.round(score * 100)}% confidence)`
-        };
-      });
-      
-      const goodMatches = scoredSmartMatches.filter(m => m.score >= this.MIN_CONFIDENCE_THRESHOLD);
-      if (goodMatches.length > 0) {
-        const bestMatch = goodMatches[0];
-        console.log(`[AccurateMatching] Found smart partial match: ${bestMatch.supplier.payeeName || bestMatch.supplier.payee_name} (${Math.round(bestMatch.score * 100)}%)`);
-        return {
-          matches: goodMatches,
-          bestMatch: bestMatch.supplier,
-          confidence: bestMatch.score
-        };
-      }
-    }
+    // Filter matches by confidence thresholds
+    const displayMatches = fuzzyMatches.filter(m => m.score >= this.MIN_DISPLAY_THRESHOLD);
+    const highConfidenceMatches = fuzzyMatches.filter(m => m.score >= this.MIN_CONFIDENCE_THRESHOLD);
     
-    // Stage 4: Intelligent Contains Match (only for very specific patterns)
-    // This is where we prevent "HD Supply" from matching "10-S TENNIS SUPPLY"
-    const containsMatches = await this.findIntelligentContainsMatches(cleanInput, normalizedInput, limit);
-    if (containsMatches.length > 0) {
-      const scoredContainsMatches = containsMatches.map(supplier => {
-        const supplierName = supplier.payeeName || supplier.payee_name || '';
-        const score = this.calculateContainsScore(cleanInput, supplierName);
-        return {
-          supplier,
-          score,
-          matchType: 'contains',
-          reasoning: `Partial match for "${cleanInput}" (${Math.round(score * 100)}% confidence)`
-        };
-      });
-      
-      // Only return contains matches if they're really good
-      const goodMatches = scoredContainsMatches.filter(m => m.score >= this.MIN_CONFIDENCE_THRESHOLD);
-      
-      if (goodMatches.length > 0) {
-        const bestMatch = goodMatches[0];
-        console.log(`[AccurateMatching] Found contains match: ${bestMatch.supplier.payee_name} (${Math.round(bestMatch.score * 100)}%)`);
-        return {
-          matches: goodMatches,
-          bestMatch: bestMatch.supplier,
-          confidence: bestMatch.score
-        };
-      }
-    }
+    // Take top results
+    const topMatches = displayMatches.slice(0, limit);
+    const bestMatch = highConfidenceMatches.length > 0 ? highConfidenceMatches[0] : null;
     
-    // Stage 5: Return ALL scored matches above display threshold for transparency
-    // Even if no matches meet the 84% threshold, we still show the best attempts
-    const allScoredMatches: Array<{
-      supplier: CachedSupplier;
-      score: number;
-      matchType: string;
-      reasoning: string;
-    }> = [];
-    
-    // Re-collect all matches with scores for display
-    if (prefixMatches.length > 0) {
-      prefixMatches.forEach(supplier => {
-        const supplierName = supplier.payeeName || supplier.payee_name || '';
-        const lengthRatio = supplierName ? cleanInput.length / supplierName.length : 0;
-        const score = this.PREFIX_MATCH_SCORE * Math.max(0.8, lengthRatio);
-        if (score >= this.MIN_DISPLAY_THRESHOLD) {
-          allScoredMatches.push({
-            supplier,
-            score,
-            matchType: 'prefix',
-            reasoning: `Name starts with "${cleanInput}" (${Math.round(score * 100)}% confidence)`
-          });
-        }
-      });
-    }
-    
-    if (smartMatches.length > 0) {
-      smartMatches.forEach(supplier => {
-        const supplierName = supplier.payeeName || supplier.payee_name || '';
-        const score = this.calculateSmartMatchScore(cleanInput, supplierName);
-        if (score >= this.MIN_DISPLAY_THRESHOLD) {
-          allScoredMatches.push({
-            supplier,
-            score,
-            matchType: 'smart_partial',
-            reasoning: `Smart match for "${cleanInput}" (${Math.round(score * 100)}% confidence)`
-          });
-        }
-      });
-    }
-    
-    if (containsMatches.length > 0) {
-      containsMatches.forEach(supplier => {
-        const supplierName = supplier.payeeName || supplier.payee_name || '';
-        const score = this.calculateContainsScore(cleanInput, supplierName);
-        if (score >= this.MIN_DISPLAY_THRESHOLD) {
-          allScoredMatches.push({
-            supplier,
-            score,
-            matchType: 'contains',
-            reasoning: `Partial match for "${cleanInput}" (${Math.round(score * 100)}% confidence)`
-          });
-        }
-      });
-    }
-    
-    // Sort by score and take top results
-    allScoredMatches.sort((a, b) => b.score - a.score);
-    const topMatches = allScoredMatches.slice(0, limit);
-    
-    // Best match is only considered if it meets the 84% threshold
-    const bestMatch = topMatches.find(m => m.score >= this.MIN_CONFIDENCE_THRESHOLD);
-    
-    console.log(`[AccurateMatching] Found ${topMatches.length} scored matches, ${topMatches.filter(m => m.score >= this.MIN_CONFIDENCE_THRESHOLD).length} meet 84% threshold`);
+    console.log(`[SophisticatedMatching] ${topMatches.length} matches above 60%, ${highConfidenceMatches.length} above 75% threshold`);
     
     return {
       matches: topMatches,
@@ -205,9 +92,90 @@ export class AccurateMatchingService {
   }
   
   /**
-   * Find exact matches (case-insensitive)
+   * Generate human-readable reasoning from fuzzy match results
    */
-  private async findExactMatch(cleanInput: string, normalizedInput: string): Promise<CachedSupplier | null> {
+  private generateReasoning(fuzzyResult: any): string {
+    const confidence = Math.round(fuzzyResult.confidence * 100);
+    const details = fuzzyResult.details || {};
+    
+    // Build reasoning based on algorithm scores
+    const algorithms = [];
+    if (details.exact > 0.9) algorithms.push('exact match');
+    if (details.levenshtein > 0.85) algorithms.push(`${Math.round(details.levenshtein * 100)}% text similarity`);
+    if (details.jaroWinkler > 0.85) algorithms.push(`${Math.round(details.jaroWinkler * 100)}% character pattern`);
+    if (details.tokenSet > 0.8) algorithms.push('matching word tokens');
+    if (details.metaphone > 0.8) algorithms.push('phonetic match');
+    if (details.nGram > 0.75) algorithms.push('character sequence match');
+    
+    if (algorithms.length === 0) {
+      return `Fuzzy match with ${confidence}% confidence`;
+    }
+    
+    return `Sophisticated match (${confidence}%): ${algorithms.join(', ')}`;
+  }
+  
+  /**
+   * Find all potential candidates from the database
+   * Uses multiple search strategies to gather candidates for fuzzy matching
+   */
+  private async findAllCandidates(cleanInput: string, normalizedInput: string, limit: number): Promise<CachedSupplier[]> {
+    const candidates = new Map<string, CachedSupplier>();
+    
+    // Strategy 1: Exact and prefix matches
+    const exactAndPrefix = await this.findExactAndPrefixMatches(cleanInput, normalizedInput, limit);
+    exactAndPrefix.forEach(c => {
+      const id = c.payeeId || c.id || c.payeeName;
+      if (id) candidates.set(id.toString(), c);
+    });
+    
+    // Strategy 2: Token-based search (for multi-word names)
+    const tokens = cleanInput.split(/\s+/).filter(t => t.length >= 3);
+    if (tokens.length > 0) {
+      const tokenMatches = await this.findTokenMatches(tokens, limit);
+      tokenMatches.forEach(c => {
+        const id = c.payeeId || c.id || c.payeeName;
+        if (id) candidates.set(id.toString(), c);
+      });
+    }
+    
+    // Strategy 3: Substring matches (for typos and variations)
+    if (cleanInput.length >= 4) {
+      const substringMatches = await this.findSubstringMatches(cleanInput, limit);
+      substringMatches.forEach(c => {
+        const id = c.payeeId || c.id || c.payeeName;
+        if (id) candidates.set(id.toString(), c);
+      });
+    }
+    
+    // Strategy 4: Fuzzy variant matches for typos (CRITICAL for "Amazone" -> "Amazon")
+    if (cleanInput.length >= 4) {
+      // Try removing last 1-2 characters for typos
+      const fuzzyVariants = [
+        cleanInput.substring(0, cleanInput.length - 1),  // Remove last char
+        cleanInput.substring(0, Math.max(3, cleanInput.length - 2))  // Remove last 2 chars
+      ];
+      
+      console.log(`[SophisticatedMatching] Trying fuzzy variants for "${cleanInput}":`, fuzzyVariants);
+      
+      for (const variant of fuzzyVariants) {
+        if (variant.length >= 3) {
+          const fuzzyMatches = await this.findFuzzyVariantMatches(variant, limit);
+          console.log(`[SophisticatedMatching] Found ${fuzzyMatches.length} matches for variant "${variant}"`);
+          fuzzyMatches.forEach(c => {
+            const id = c.payeeId || c.id || c.payeeName;
+            if (id) candidates.set(id.toString(), c);
+          });
+        }
+      }
+    }
+    
+    return Array.from(candidates.values()).slice(0, limit * 2); // Return more candidates for fuzzy scoring
+  }
+  
+  /**
+   * Find exact and prefix matches
+   */
+  private async findExactAndPrefixMatches(cleanInput: string, normalizedInput: string, limit: number): Promise<CachedSupplier[]> {
     try {
       const result = await db.execute(sql`
         SELECT * FROM cached_suppliers
@@ -216,41 +184,104 @@ export class AccurateMatchingService {
           OR LOWER(payee_name) = ${normalizedInput}
           OR LOWER(mastercard_business_name) = ${cleanInput.toLowerCase()}
           OR LOWER(mastercard_business_name) = ${normalizedInput}
-        LIMIT 1
+          OR LOWER(payee_name) LIKE ${cleanInput.toLowerCase() + '%'}
+          OR LOWER(mastercard_business_name) LIKE ${cleanInput.toLowerCase() + '%'}
+        ORDER BY 
+          CASE 
+            WHEN LOWER(payee_name) = ${cleanInput.toLowerCase()} THEN 1
+            WHEN LOWER(payee_name) = ${normalizedInput} THEN 2
+            WHEN LOWER(payee_name) LIKE ${cleanInput.toLowerCase() + '%'} THEN 3
+            ELSE 4
+          END,
+          LENGTH(payee_name)
+        LIMIT ${limit}
       `);
       
-      if (result.rows.length > 0) {
-        return this.mapToCachedSupplier(result.rows[0]);
-      }
+      return result.rows.map(row => this.mapToCachedSupplier(row));
     } catch (error) {
-      console.error('[AccurateMatching] Exact match query failed:', error);
+      console.error('[SophisticatedMatching] Exact/prefix query failed:', error);
+      return [];
     }
-    return null;
   }
   
   /**
-   * Find prefix matches with smart scoring
+   * Find matches based on individual tokens
    */
-  private async findPrefixMatches(cleanInput: string, normalizedInput: string, limit: number): Promise<CachedSupplier[]> {
+  private async findTokenMatches(tokens: string[], limit: number): Promise<CachedSupplier[]> {
     try {
-      // Only do prefix matching if input is at least 3 characters
-      if (cleanInput.length < 3) return [];
+      // Build OR conditions for each significant token
+      const tokenConditions = tokens
+        .filter(t => t.length >= 3)
+        .map(token => sql`LOWER(payee_name) LIKE ${'%' + token.toLowerCase() + '%'}`)
+        .slice(0, 3); // Limit to first 3 tokens for performance
+      
+      if (tokenConditions.length === 0) return [];
+      
+      const result = await db.execute(sql`
+        SELECT * FROM cached_suppliers
+        WHERE ${sql.join(tokenConditions, sql` OR `)}
+        ORDER BY LENGTH(payee_name)
+        LIMIT ${limit}
+      `);
+      
+      return result.rows.map(row => this.mapToCachedSupplier(row));
+    } catch (error) {
+      console.error('[SophisticatedMatching] Token match query failed:', error);
+      return [];
+    }
+  }
+  
+  /**
+   * Find substring matches for typo tolerance
+   */
+  private async findSubstringMatches(cleanInput: string, limit: number): Promise<CachedSupplier[]> {
+    try {
+      // For shorter inputs, require higher similarity
+      const minLength = Math.max(3, cleanInput.length - 2);
       
       const result = await db.execute(sql`
         SELECT * FROM cached_suppliers
         WHERE 
-          (LOWER(payee_name) LIKE ${cleanInput.toLowerCase() + '%'}
-           OR LOWER(mastercard_business_name) LIKE ${cleanInput.toLowerCase() + '%'})
-          AND LENGTH(payee_name) <= ${cleanInput.length * 3}  -- Prevent matching very long names
+          LENGTH(payee_name) >= ${minLength}
+          AND LENGTH(payee_name) <= ${cleanInput.length + 5}
+          AND (
+            LOWER(payee_name) LIKE ${'%' + cleanInput.toLowerCase() + '%'}
+            OR LOWER(mastercard_business_name) LIKE ${'%' + cleanInput.toLowerCase() + '%'}
+          )
         ORDER BY 
-          LENGTH(payee_name),  -- Prefer shorter, more specific matches
+          ABS(LENGTH(payee_name) - ${cleanInput.length}),
           payee_name
         LIMIT ${limit}
       `);
       
       return result.rows.map(row => this.mapToCachedSupplier(row));
     } catch (error) {
-      console.error('[AccurateMatching] Prefix match query failed:', error);
+      console.error('[SophisticatedMatching] Substring match query failed:', error);
+      return [];
+    }
+  }
+  
+
+  
+  /**
+   * Find fuzzy variant matches for handling typos
+   */
+  private async findFuzzyVariantMatches(variant: string, limit: number): Promise<CachedSupplier[]> {
+    try {
+      const result = await db.execute(sql`
+        SELECT * FROM cached_suppliers
+        WHERE 
+          LOWER(payee_name) LIKE ${variant.toLowerCase() + '%'}
+          OR LOWER(mastercard_business_name) LIKE ${variant.toLowerCase() + '%'}
+        ORDER BY 
+          LENGTH(payee_name),
+          payee_name
+        LIMIT ${limit}
+      `);
+      
+      return result.rows.map(row => this.mapToCachedSupplier(row));
+    } catch (error) {
+      console.error('[SophisticatedMatching] Fuzzy variant query failed:', error);
       return [];
     }
   }
@@ -390,7 +421,7 @@ export class AccurateMatchingService {
     const wordBoundaryRegex = new RegExp(`\\b${inputLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
     if (wordBoundaryRegex.test(candidateLower)) {
       const lengthRatio = input.length / candidateName.length;
-      return Math.min(0.9, this.CONTAINS_MATCH_SCORE + (lengthRatio * 0.2));
+      return Math.min(0.9, 0.7 + (lengthRatio * 0.2));
     }
     
     // Otherwise, calculate based on token overlap
@@ -403,7 +434,7 @@ export class AccurateMatchingService {
     });
     
     const tokenScore = matchedTokens / inputTokens.size;
-    return tokenScore * this.CONTAINS_MATCH_SCORE;
+    return tokenScore * 0.7;
   }
   
   /**

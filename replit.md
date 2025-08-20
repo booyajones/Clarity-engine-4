@@ -45,6 +45,7 @@ Clarity Engine 3 is an AI-powered web application for finance and accounting pro
 - **Schema**: Includes tables for users, upload batches, payee classifications, SIC codes, classification rules, and cached suppliers.
 - **Performance**: Indexes on frequently queried columns.
 - **Cache**: Complete Finexio database with 483,227 suppliers for guaranteed matching.
+- **Matching Strategy**: AccurateMatchingService using sophisticated 6-algorithm fuzzy matching with multiple candidate-finding strategies, smart ambiguity penalties, and AI enhancement for medium-confidence matches.
 
 ### AI/ML Classification Service
 - **Core Technology**: OpenAI GPT-4o for advanced payee classification (95%+ accuracy target).
@@ -56,6 +57,7 @@ Clarity Engine 3 is an AI-powered web application for finance and accounting pro
 - **Intelligent Address Enhancement**: OpenAI-powered system for selective address enhancement.
 - **Akkio Payment Prediction**: Integrated as the final enrichment step for payment method and outcome prediction.
 - **Keyword Exclusion System**: 593 permanent exclusion keywords for government/financial entities.
+- **Sophisticated Fuzzy Matching**: 6-algorithm fuzzy matching system (Levenshtein, Jaro-Winkler, Token Set, Metaphone, N-gram, AI enhancement) for intelligent typo tolerance and variation handling. Completely eliminates simple exact matching in favor of sophisticated algorithmic matching with confidence scoring.
 
 ### File Processing Pipeline
 - **Handling**: Asynchronous processing with status tracking.

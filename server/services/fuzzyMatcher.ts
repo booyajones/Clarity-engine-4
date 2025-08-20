@@ -49,6 +49,22 @@ export class FuzzyMatcher {
         return 0.3; // 30% penalty for common surname matches
       }
       
+      // For single-word comparisons, check if they're very similar (likely typos)
+      if (inputWords.length === 1 && candidateWords.length === 1) {
+        const lowerInput = inputWords[0].toLowerCase();
+        const lowerCandidate = candidateWords[0].toLowerCase();
+        
+        // Calculate simple edit distance ratio
+        const maxLen = Math.max(lowerInput.length, lowerCandidate.length);
+        const distance = this.levenshteinDistance(lowerInput, lowerCandidate);
+        const similarity = 1 - (distance / maxLen);
+        
+        // If words are very similar (>80%), likely a typo - reduce penalty
+        if (similarity > 0.8) {
+          return 0.05; // Only 5% penalty for likely typos
+        }
+      }
+      
       // General penalty for single word matches
       return 0.2; // 20% penalty
     }
@@ -168,7 +184,7 @@ export class FuzzyMatcher {
         matchType: matchType,
         details: { ...matchDetails, boosts: { exact: exactBoost, prefix: prefixBoost, wordBoundary: wordBoundaryBoost } },
       };
-    } else if (averageConfidence >= 0.5 && averageConfidence < 0.9 && this.openai) {
+    } else if (averageConfidence >= 0.4 && averageConfidence < 0.9 && this.openai) {
       // Skip AI for single-word matches with heavy penalties (likely just surnames)
       const isLikelySurname = inputName.split(/\s+/).length === 1 && ambiguityPenalty >= 0.3;
       if (isLikelySurname) {
@@ -181,13 +197,13 @@ export class FuzzyMatcher {
         };
       }
       
-      // Use AI for medium confidence matches (50-90%)
+      // Use AI for medium confidence matches (40-90%) - lowered from 50% to catch typos
       console.log(`Triggering AI enhancement for confidence ${(averageConfidence * 100).toFixed(2)}% (below 90% threshold)`);
       const aiResult = await this.aiMatch(inputName, candidateName, matchDetails);
       console.log(`AI result: isMatch=${aiResult.isMatch}, confidence=${(aiResult.confidence * 100).toFixed(2)}%, type=${aiResult.matchType}`);
       return { ...aiResult, matchType: `ai_enhanced_${matchType}` };
     } else {
-      // Low confidence (<50%) - no match
+      // Low confidence (<40%) - no match
       return {
         isMatch: false,
         confidence: averageConfidence,
