@@ -63,7 +63,16 @@ export class PayeeMatchingService {
       console.log('[PayeeMatching] Starting sophisticated Finexio match for:', classification.cleanedName);
 
       // Use AccurateMatchingService for sophisticated 6-algorithm fuzzy matching
-      const matchResult = await accurateMatchingService.findBestMatch(classification.cleanedName);
+      const matchResult = await accurateMatchingService.findBestMatch(
+        classification.cleanedName,
+        10,
+        {
+          address: classification.address || undefined,
+          city: classification.city || undefined,
+          state: classification.state || undefined,
+          zip: classification.zipCode || undefined,
+        }
+      );
       console.log('[PayeeMatching] Sophisticated match result:', matchResult.bestMatch ? 'FOUND' : 'NO MATCH');
       
       // If no match found with sophisticated matching, return early

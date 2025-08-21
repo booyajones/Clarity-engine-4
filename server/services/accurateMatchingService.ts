@@ -3,6 +3,13 @@ import { db } from '../db';
 import type { CachedSupplier } from '@shared/schema';
 import { fuzzyMatcher } from './fuzzyMatcher';
 
+interface Location {
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+}
+
 /**
  * Sophisticated Matching Service using 6-algorithm fuzzy matching
  * ALL matches go through intelligent fuzzy matching - no shortcuts
@@ -14,7 +21,7 @@ export class AccurateMatchingService {
   /**
    * Primary matching function - OPTIMIZED with exact match first, then sophisticated fuzzy
    */
-  async findBestMatch(payeeName: string, limit = 10): Promise<{
+  async findBestMatch(payeeName: string, limit = 10, location?: Location): Promise<{
     matches: Array<{
       supplier: CachedSupplier;
       score: number;
@@ -48,6 +55,11 @@ export class AccurateMatchingService {
     
     // Get ALL potential candidates from database (no immediate returns)
     const candidates = await this.findAllCandidates(cleanInput, normalizedInput, limit * 3);
+
+    // Reorder candidates based on geographic proximity if location data provided
+    const candidatePool = location
+      ? this.prioritizeByLocation(candidates, location)
+      : candidates;
     
     if (candidates.length === 0) {
       console.log(`[SophisticatedMatching] No candidates found for "${payeeName}"`);
@@ -60,8 +72,8 @@ export class AccurateMatchingService {
     
     // PERFORMANCE OPTIMIZATION: Limit candidates and add early exit
     const maxCandidatesToAnalyze = 10; // Analyze only top 10 candidates for performance
-    const candidatesToAnalyze = candidates.slice(0, maxCandidatesToAnalyze);
-    
+    const candidatesToAnalyze = candidatePool.slice(0, maxCandidatesToAnalyze);
+
     console.log(`[SophisticatedMatching] Found ${candidates.length} candidates, analyzing top ${candidatesToAnalyze.length}...`);
     
     // Run sophisticated 6-algorithm fuzzy matching with early exit
@@ -77,18 +89,27 @@ export class AccurateMatchingService {
       
       // Run sophisticated fuzzy matching with ALL 6 algorithms
       const fuzzyResult = await fuzzyMatcher.matchPayee(cleanInput, supplierName);
-      
+
+      // Factor in geographic proximity
+      const geoScore = location ? this.calculateGeoProximityScore(supplier, location) : 0;
+      const combinedScore = Math.min(1, fuzzyResult.confidence + geoScore);
+
+      let reasoning = this.generateReasoning(fuzzyResult);
+      if (geoScore > 0 && location) {
+        reasoning += ` | ${this.generateGeoReasoning(supplier, location)}`;
+      }
+
       fuzzyMatches.push({
         supplier,
-        score: fuzzyResult.confidence,
+        score: combinedScore,
         matchType: fuzzyResult.matchType,
-        reasoning: this.generateReasoning(fuzzyResult),
-        details: fuzzyResult.details
+        reasoning,
+        details: { ...(fuzzyResult.details || {}), geoScore }
       });
       
       // EARLY EXIT: If we find a very high confidence match, stop searching
-      if (fuzzyResult.confidence >= 0.95) {
-        console.log(`[SophisticatedMatching] Found high-confidence match (${(fuzzyResult.confidence * 100).toFixed(1)}%), stopping search`);
+      if (combinedScore >= 0.95) {
+        console.log(`[SophisticatedMatching] Found high-confidence match (${(combinedScore * 100).toFixed(1)}%), stopping search`);
         break;
       }
     }
@@ -143,6 +164,35 @@ export class AccurateMatchingService {
     }
     
     return `Sophisticated match (${confidence}%): ${algorithms.join(', ')}`;
+  }
+
+  private generateGeoReasoning(supplier: CachedSupplier, location: Location): string {
+    const reasons = [];
+    if (location.state && supplier.state && supplier.state.toLowerCase() === location.state.toLowerCase()) {
+      reasons.push('state match');
+    }
+    if (location.city && supplier.city && supplier.city.toLowerCase() === location.city.toLowerCase()) {
+      reasons.push('city match');
+    }
+    return `Geographic proximity (${reasons.join(', ')})`;
+  }
+
+  private calculateGeoProximityScore(supplier: CachedSupplier, location: Location): number {
+    let score = 0;
+    if (location.state && supplier.state && supplier.state.toLowerCase() === location.state.toLowerCase()) {
+      score += 0.05;
+    }
+    if (location.city && supplier.city && supplier.city.toLowerCase() === location.city.toLowerCase()) {
+      score += 0.05;
+    }
+    return score;
+  }
+
+  private prioritizeByLocation(candidates: CachedSupplier[], location: Location): CachedSupplier[] {
+    return candidates
+      .map(s => ({ supplier: s, score: this.calculateGeoProximityScore(s, location) }))
+      .sort((a, b) => b.score - a.score)
+      .map(item => item.supplier);
   }
   
   /**
