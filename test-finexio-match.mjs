@@ -2,7 +2,7 @@ import { db } from './server/db.js';
 import { cachedSuppliers } from './shared/schema.js';
 import { sql } from 'drizzle-orm';
 import { memoryOptimizedCache } from './server/services/memoryOptimizedSupplierCache.js';
-import { fuzzyMatcher } from './server/services/fuzzyMatcher.js';
+import { fuzzyMatcher } from './server/services/fuzzyMatcher.ts';
 
 async function testFinexioMatching() {
   try {
@@ -83,7 +83,7 @@ async function testFinexioMatching() {
     
     for (const test of fuzzyTests) {
       console.log(`\nMatching "${test.input}" vs "${test.candidate}":`);
-      const result = await fuzzyMatcher.matchPayee(test.input, test.candidate);
+      const result = fuzzyMatcher.matchPayee(test.input, test.candidate);
       console.log(`  Match: ${result.isMatch ? '✅ YES' : '❌ NO'}`);
       console.log(`  Confidence: ${(result.confidence * 100).toFixed(1)}%`);
       console.log(`  Type: ${result.matchType}`);

@@ -77,7 +77,7 @@ export class AccurateMatchingService {
       if (lengthRatio < 0.3) continue; // Skip if one name is more than 3x longer
       
       // Run sophisticated fuzzy matching with ALL 6 algorithms
-      const fuzzyResult = await fuzzyMatcher.matchPayee(cleanInput, supplierName);
+      const fuzzyResult = fuzzyMatcher.matchPayee(cleanInput, supplierName);
       
       fuzzyMatches.push({
         supplier,

@@ -14,7 +14,7 @@ const mockBigQueryResults = {
   ]
 };
 
-async function testFinexioMatching() {
+function testFinexioMatching() {
   console.log('🧪 Testing Finexio Matching System\n');
   console.log('='.repeat(60));
   
@@ -97,16 +97,16 @@ async function testFinexioMatching() {
     console.log(`\n${category.category}\n${'='.repeat(60)}`);
     
     for (const test of category.tests) {
-      const result = await fuzzyMatcher.matchPayee(test.input, test.candidate);
+      const result = fuzzyMatcher.matchPayee(test.input, test.candidate);
       
       console.log(`\n📝 Test: "${test.input}" vs "${test.candidate}"`);
       console.log(`   Expected: ${test.expected}`);
       console.log(`   Reason: ${test.reason}`);
-      console.log(`   
-   Result: ${result.isMatch ? 'MATCH' : 'NO MATCH'} 
+      console.log(`
+   Result: ${result.isMatch ? 'MATCH' : 'NO MATCH'}
    Confidence: ${(result.confidence * 100).toFixed(1)}%
-   Method: ${result.matchType === 'ai_enhanced' ? '🤖 AI Enhanced' : '⚡ Algorithmic'}
-   
+   Method: ${result.matchType}
+
    Algorithm Scores:`);
       
       // Display individual algorithm scores
@@ -123,44 +123,10 @@ async function testFinexioMatching() {
   
   // Explain the matching process
   console.log('\n\n📚 FINEXIO MATCHING PROCESS EXPLAINED\n' + '='.repeat(60));
-  console.log(`
-🔍 TIER 1: High-Speed Algorithmic Matching
-   └─ Normalization:
-      • Convert to lowercase
-      • Remove business suffixes (Inc, LLC, Corp, Ltd)
-      • Remove special characters
-      • Collapse whitespace
-   
-   └─ Six Parallel Algorithms:
-      • Exact Match (100% weight) - Perfect match after normalization
-      • Jaro-Winkler (90% weight) - Great for typos & short strings
-      • Token Set (85% weight) - Handles word reordering
-      • Levenshtein (80% weight) - Edit distance for typos
-      • N-Gram (75% weight) - Substring similarity
-      • Metaphone (70% weight) - Phonetic matching
-   
-   └─ Decision Thresholds:
-      • ≥ 85% → ✅ Direct Match
-      • 60-85% → 🤖 AI Evaluation
-      • < 60% → ❌ No Match
+  console.log(`\n🔍 TIER 1: High-Speed Algorithmic Matching\n   └─ Normalization:\n      • Convert to lowercase\n      • Remove business suffixes (Inc, LLC, Corp, Ltd)\n      • Remove special characters\n      • Collapse whitespace\n\n   └─ Six Sequential Algorithms with early exit:\n      • Exact Match (100% weight) - Perfect match after normalization\n      • Jaro-Winkler (90% weight) - Great for typos & short strings\n      • Token Set (85% weight) - Handles word reordering\n      • Levenshtein (80% weight) - Edit distance for typos\n      • N-Gram (75% weight) - Substring similarity\n      • Metaphone (70% weight) - Phonetic matching\n\n   └─ Decision Thresholds:\n      • ≥ 85% → ✅ Direct Match\n      • < 85% → ❌ No Match\n\n💡 BigQuery Integration:\n   └─ Searches Finexio's supplier database\n   └─ Returns payment preferences (ACH, Virtual Card, Check)\n   └─ Provides supplier IDs for existing relationships\n  `);
 
-🧠 TIER 2: AI Enhancement (OpenAI GPT-4)
-   └─ Triggered for ambiguous cases (60-85% confidence)
-   └─ Analyzes:
-      • Business context and patterns
-      • Common abbreviations (J → John, Corp → Corporation)
-      • Industry knowledge (McDonald's = McDonalds)
-      • Nickname recognition
-   └─ Returns refined match decision with explanation
-
-💡 BigQuery Integration:
-   └─ Searches Finexio's supplier database
-   └─ Returns payment preferences (ACH, Virtual Card, Check)
-   └─ Provides supplier IDs for existing relationships
-  `);
-  
   console.log('\n✅ Matching system test complete!\n');
 }
 
 // Run the test
-testFinexioMatching().catch(console.error);
+testFinexioMatching();

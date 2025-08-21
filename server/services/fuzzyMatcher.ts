@@ -1,20 +1,8 @@
-import OpenAI from 'openai';
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
-import { bigQueryService } from './bigQueryService';
 import { unifiedFuzzyMatcher } from './unifiedFuzzyMatcher';
 
 // Advanced fuzzy matching algorithms for payee name comparison
 export class FuzzyMatcher {
-  private openai: OpenAI | null = null;
-  
-  constructor() {
-    if (process.env.OPENAI_API_KEY) {
-      this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-      console.log('FuzzyMatcher: OpenAI initialized successfully');
-    } else {
-      console.log('FuzzyMatcher: OpenAI not initialized - no API key');
-    }
-  }
+  constructor() {}
   
   // Check if a name could be a person's name
   private isPossiblePersonName(name: string): boolean {
@@ -72,13 +60,13 @@ export class FuzzyMatcher {
     return 0;
   }
 
-  // Main matching function that combines multiple algorithms
-  async matchPayee(inputName: string, candidateName: string): Promise<{
+  // Main matching function that combines multiple algorithms synchronously
+  matchPayee(inputName: string, candidateName: string): {
     isMatch: boolean;
     confidence: number;
     matchType: string;
     details: Record<string, any>;
-  }> {
+  } {
     const lowerInput = inputName.toLowerCase().trim();
     const lowerCandidate = candidateName.toLowerCase().trim();
     const normalizedInput = this.normalize(inputName);
@@ -118,17 +106,9 @@ export class FuzzyMatcher {
       console.log(`Word boundary match detected: "${inputName}" in "${candidateName}"`);
     }
     
-    // Run multiple matching algorithms
-    const results = await Promise.all([
-      this.exactMatch(normalizedInput, normalizedCandidate),
-      this.levenshteinMatch(normalizedInput, normalizedCandidate),
-      this.jaroWinklerMatch(normalizedInput, normalizedCandidate),
-      this.tokenSetMatch(normalizedInput, normalizedCandidate),
-      this.metaphoneMatch(normalizedInput, normalizedCandidate),
-      this.nGramMatch(normalizedInput, normalizedCandidate),
-    ]);
-    
-    // Calculate weighted average confidence
+    // Pre-calculate ambiguity penalty once
+    const ambiguityPenalty = this.calculateAmbiguityPenalty(inputName, candidateName);
+
     const weights = {
       exact: 1.0,
       levenshtein: 0.8,
@@ -136,80 +116,72 @@ export class FuzzyMatcher {
       tokenSet: 0.85,
       metaphone: 0.7,
       nGram: 0.75,
-    };
-    
+    } as const;
+
+    const methods = [
+      { name: 'exact', fn: (a: string, b: string) => this.exactMatch(a, b) },
+      { name: 'levenshtein', fn: (a: string, b: string) => this.levenshteinMatch(a, b) },
+      { name: 'jaroWinkler', fn: (a: string, b: string) => this.jaroWinklerMatch(a, b) },
+      { name: 'tokenSet', fn: (a: string, b: string) => this.tokenSetMatch(a, b) },
+      { name: 'metaphone', fn: (a: string, b: string) => this.metaphoneMatch(a, b) },
+      { name: 'nGram', fn: (a: string, b: string) => this.nGramMatch(a, b) },
+    ];
+
     let totalWeight = 0;
     let weightedSum = 0;
     const matchDetails: Record<string, number> = {};
-    
-    results.forEach((result, index) => {
-      const methodNames = ['exact', 'levenshtein', 'jaroWinkler', 'tokenSet', 'metaphone', 'nGram'];
-      const method = methodNames[index];
-      const weight = weights[method as keyof typeof weights];
-      
-      matchDetails[method] = result.confidence;
-      weightedSum += result.confidence * weight;
+
+    for (const { name, fn } of methods) {
+      const { confidence } = fn(normalizedInput, normalizedCandidate);
+      const weight = weights[name as keyof typeof weights];
+      matchDetails[name] = confidence;
+      weightedSum += confidence * weight;
       totalWeight += weight;
-    });
-    
+
+      let averageConfidence = weightedSum / totalWeight;
+      const totalBoost = Math.min(0.4, exactBoost + prefixBoost + wordBoundaryBoost);
+      averageConfidence = Math.min(1.0, averageConfidence + totalBoost);
+      averageConfidence = averageConfidence * (1 - ambiguityPenalty);
+
+      let matchType = 'cascading';
+      if (exactBoost > 0) matchType = 'exact_cascading';
+      else if (prefixBoost > 0) matchType = 'prefix_cascading';
+      else if (wordBoundaryBoost > 0) matchType = 'boundary_cascading';
+
+      if (averageConfidence >= 0.9) {
+        console.log(`Cascading match analysis (early exit: ${name}): "${inputName}" vs "${candidateName}"`);
+        return {
+          isMatch: true,
+          confidence: averageConfidence,
+          matchType,
+          details: { ...matchDetails, boosts: { exact: exactBoost, prefix: prefixBoost, wordBoundary: wordBoundaryBoost } },
+        };
+      }
+    }
+
+    // Final calculation if high confidence not reached during iteration
     let averageConfidence = weightedSum / totalWeight;
-    
-    // Apply boosts for special matches
-    const totalBoost = Math.min(0.4, exactBoost + prefixBoost + wordBoundaryBoost); // Cap total boost at 40%
+    const totalBoost = Math.min(0.4, exactBoost + prefixBoost + wordBoundaryBoost);
     averageConfidence = Math.min(1.0, averageConfidence + totalBoost);
-    
-    // Apply ambiguity penalty for single-word matches
-    const ambiguityPenalty = this.calculateAmbiguityPenalty(inputName, candidateName);
     averageConfidence = averageConfidence * (1 - ambiguityPenalty);
-    
-    // Log comprehensive matching details
+
     console.log(`Cascading match analysis: "${inputName}" vs "${candidateName}"`);
     console.log(`  Algorithms: Levenshtein=${(matchDetails.levenshtein * 100).toFixed(1)}%, JaroWinkler=${(matchDetails.jaroWinkler * 100).toFixed(1)}%, TokenSet=${(matchDetails.tokenSet * 100).toFixed(1)}%`);
     console.log(`  Phonetic: Metaphone=${(matchDetails.metaphone * 100).toFixed(1)}%, N-gram=${(matchDetails.nGram * 100).toFixed(1)}%`);
     console.log(`  Boosts: Exact=${(exactBoost * 100).toFixed(0)}%, Prefix=${(prefixBoost * 100).toFixed(0)}%, WordBoundary=${(wordBoundaryBoost * 100).toFixed(0)}%`);
     console.log(`  Final confidence: ${(averageConfidence * 100).toFixed(2)}% (penalty: ${(ambiguityPenalty * 100).toFixed(0)}%)`);
-    
-    // Determine match type based on confidence and special conditions
+
     let matchType = 'cascading';
     if (exactBoost > 0) matchType = 'exact_cascading';
     else if (prefixBoost > 0) matchType = 'prefix_cascading';
     else if (wordBoundaryBoost > 0) matchType = 'boundary_cascading';
-    
-    // If confidence is below 90%, use AI for final determination
-    if (averageConfidence >= 0.9) {
-      return {
-        isMatch: true,
-        confidence: averageConfidence,
-        matchType: matchType,
-        details: { ...matchDetails, boosts: { exact: exactBoost, prefix: prefixBoost, wordBoundary: wordBoundaryBoost } },
-      };
-    } else if (averageConfidence >= 0.4 && averageConfidence < 0.9 && this.openai) {
-      // Skip AI for single-word matches with heavy penalties (likely just surnames)
-      const isLikelySurname = inputName.split(/\s+/).length === 1 && ambiguityPenalty >= 0.3;
-      if (isLikelySurname) {
-        console.log(`Skipping AI for likely surname match: "${inputName}" (penalty: ${(ambiguityPenalty * 100).toFixed(0)}%)`);
-        return {
-          isMatch: false,
-          confidence: averageConfidence,
-          matchType: matchType,
-          details: { ...matchDetails, boosts: { exact: exactBoost, prefix: prefixBoost, wordBoundary: wordBoundaryBoost } },
-        };
-      }
-      
-      // Use AI for medium confidence matches (40-90%) - lowered from 50% to catch typos
-      console.log(`Triggering AI enhancement for confidence ${(averageConfidence * 100).toFixed(2)}% (below 90% threshold)`);
-      const aiResult = await this.aiMatch(inputName, candidateName, matchDetails);
-      console.log(`AI result: isMatch=${aiResult.isMatch}, confidence=${(aiResult.confidence * 100).toFixed(2)}%, type=${aiResult.matchType}`);
-      return { ...aiResult, matchType: `ai_enhanced_${matchType}` };
-    } else {
-      // Low confidence (<40%) - no match
-      return {
-        isMatch: false,
-        confidence: averageConfidence,
-        matchType: 'deterministic',
-        details: matchDetails,
-      };
-    }
+
+    return {
+      isMatch: averageConfidence >= 0.9,
+      confidence: averageConfidence,
+      matchType: averageConfidence >= 0.9 ? matchType : 'deterministic',
+      details: { ...matchDetails, boosts: { exact: exactBoost, prefix: prefixBoost, wordBoundary: wordBoundaryBoost } },
+    };
   }
   
   // Normalize strings for comparison
@@ -229,51 +201,44 @@ export class FuzzyMatcher {
   }
   
   // Exact match
-  private async exactMatch(s1: string, s2: string): Promise<{ confidence: number }> {
+  private exactMatch(s1: string, s2: string): { confidence: number } {
     return { confidence: s1 === s2 ? 1.0 : 0.0 };
   }
-  
+
   // Levenshtein distance
-  private async levenshteinMatch(s1: string, s2: string): Promise<{ confidence: number }> {
-    // Use unified implementation (returns 0-1 consistently)
+  private levenshteinMatch(s1: string, s2: string): { confidence: number } {
     const confidence = unifiedFuzzyMatcher.levenshtein(s1, s2);
     return { confidence };
   }
   
   // Jaro-Winkler distance
-  private async jaroWinklerMatch(s1: string, s2: string): Promise<{ confidence: number }> {
-    // Use unified implementation (returns 0-1 consistently)
+  private jaroWinklerMatch(s1: string, s2: string): { confidence: number } {
     const confidence = unifiedFuzzyMatcher.jaroWinkler(s1, s2);
     return { confidence };
   }
-  
+
   // Token set matching (handles word order variations)
-  private async tokenSetMatch(s1: string, s2: string): Promise<{ confidence: number }> {
-    // Use unified implementation with special handling for subsets
+  private tokenSetMatch(s1: string, s2: string): { confidence: number } {
     const tokens1 = new Set(s1.split(' ').filter(t => t.length > 0));
     const tokens2 = new Set(s2.split(' ').filter(t => t.length > 0));
-    
-    // If one is subset of the other, give high confidence
+
     const allTokens1InTokens2 = Array.from(tokens1).every(t => tokens2.has(t));
     const allTokens2InTokens1 = Array.from(tokens2).every(t => tokens1.has(t));
-    
+
     if (allTokens1InTokens2 || allTokens2InTokens1) {
-      // One is a subset of the other - high confidence
       const sizeRatio = Math.min(tokens1.size, tokens2.size) / Math.max(tokens1.size, tokens2.size);
-      return { confidence: 0.9 + (sizeRatio * 0.1) }; // 90-100% based on size similarity
+      return { confidence: 0.9 + (sizeRatio * 0.1) };
     }
-    
-    // Otherwise use unified implementation
+
     const confidence = unifiedFuzzyMatcher.tokenSetRatio(s1, s2);
     return { confidence };
   }
   
   // Metaphone matching (phonetic similarity)
-  private async metaphoneMatch(s1: string, s2: string): Promise<{ confidence: number }> {
+  private metaphoneMatch(s1: string, s2: string): { confidence: number } {
     const meta1 = this.metaphone(s1);
     const meta2 = this.metaphone(s2);
-    
-    // Use unified Levenshtein for consistency
+
     const similarity = meta1 === meta2 ? 1.0 : unifiedFuzzyMatcher.levenshtein(meta1, meta2);
     return { confidence: similarity };
   }
@@ -302,17 +267,17 @@ export class FuzzyMatcher {
   }
   
   // N-gram matching
-  private async nGramMatch(s1: string, s2: string, n: number = 3): Promise<{ confidence: number }> {
+  private nGramMatch(s1: string, s2: string, n: number = 3): { confidence: number } {
     const ngrams1 = this.getNGrams(s1, n);
     const ngrams2 = this.getNGrams(s2, n);
-    
+
     if (ngrams1.size === 0 || ngrams2.size === 0) {
       return { confidence: s1 === s2 ? 1.0 : 0.0 };
     }
-    
+
     const intersection = new Set(Array.from(ngrams1).filter(x => ngrams2.has(x)));
     const union = new Set([...Array.from(ngrams1), ...Array.from(ngrams2)]);
-    
+
     const confidence = intersection.size / union.size;
     return { confidence };
   }
@@ -328,73 +293,6 @@ export class FuzzyMatcher {
     return ngrams;
   }
   
-  // AI-powered matching for ambiguous cases
-  private async aiMatch(
-    inputName: string, 
-    candidateName: string, 
-    deterministicScores: Record<string, number>
-  ): Promise<{
-    isMatch: boolean;
-    confidence: number;
-    matchType: string;
-    details: Record<string, any>;
-  }> {
-    if (!this.openai) {
-      return {
-        isMatch: false,
-        confidence: 0,
-        matchType: 'ai_unavailable',
-        details: deterministicScores,
-      };
-    }
-    
-    try {
-      const prompt = `Analyze if these two payee names refer to the same entity:
-      
-Name 1: "${inputName}"
-Name 2: "${candidateName}"
-
-Deterministic matching scores:
-${Object.entries(deterministicScores).map(([k, v]) => `- ${k}: ${(v * 100).toFixed(1)}%`).join('\n')}
-
-Consider:
-1. Common abbreviations and variations
-2. Subsidiary relationships
-3. DBA (Doing Business As) names
-4. Typographical errors
-5. Regional variations
-
-Respond with JSON: { "isMatch": boolean, "confidence": 0-1, "reasoning": "brief explanation" }`;
-      
-      const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [{ role: 'user', content: prompt }],
-        response_format: { type: 'json_object' },
-        temperature: 0.1,
-      });
-      
-      const result = JSON.parse(response.choices[0].message.content || '{}');
-      
-      return {
-        isMatch: result.isMatch || false,
-        confidence: result.confidence || 0,
-        matchType: 'ai_enhanced',
-        details: {
-          ...deterministicScores,
-          aiConfidence: result.confidence,
-          aiReasoning: result.reasoning,
-        },
-      };
-    } catch (error) {
-      console.error('AI matching error:', error);
-      return {
-        isMatch: false,
-        confidence: 0,
-        matchType: 'ai_error',
-        details: deterministicScores,
-      };
-    }
-  }
 }
 
 export const fuzzyMatcher = new FuzzyMatcher();
