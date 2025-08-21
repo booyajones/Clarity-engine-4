@@ -90,6 +90,7 @@ DATABASE_URL=your_postgresql_connection_string
 # Optional
 NODE_ENV=development
 PORT=3000
+LOG_LEVEL=info # Adjust server log verbosity
 ```
 
 ### Database Setup
