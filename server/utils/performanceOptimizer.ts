@@ -7,10 +7,32 @@ export const supplierCache = new LRUCache<string, any>({
   updateAgeOnGet: true,
   updateAgeOnHas: true,
   allowStale: true,
-  
+
   // Size calculation
   sizeCalculation: (value) => {
-    return JSON.stringify(value).length;
+    // Approximate the size without expensive serialization
+    if (typeof value === 'string') {
+      // Use byte length for strings
+      return Buffer.byteLength(value);
+    }
+
+    if (Buffer.isBuffer(value)) {
+      // Direct buffer length when available
+      return value.length;
+    }
+
+    if (value && typeof value === 'object') {
+      // Allow objects to provide a precomputed size
+      if (typeof (value as any)._size === 'number') {
+        return (value as any)._size;
+      }
+
+      // Rough estimate: number of keys times an average value size
+      return Object.keys(value).length * 50;
+    }
+
+    // Fallback for numbers/booleans/etc.
+    return 8;
   },
   
   // Maximum size in bytes (5MB) - REDUCED from 50MB for production
