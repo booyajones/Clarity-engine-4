@@ -5,9 +5,9 @@ import { env } from './config';
  */
 
 import { Request, Response } from 'express';
-import { 
-  classificationQueue, 
-  finexioQueue, 
+import {
+  classificationQueue,
+  finexioQueue,
   mastercardQueue,
   addressQueue,
   akkioQueue,
@@ -15,6 +15,7 @@ import {
   checkQueueHealth
 } from './services/queueService';
 import { nanoid } from 'nanoid';
+import logger from './logger';
 
 // Job status tracking (in production, use Redis)
 const jobStatuses = new Map<string, any>();
@@ -274,7 +275,7 @@ export function queueMiddleware(
       });
       
     } catch (error) {
-      console.error(`Error adding job to ${queueName} queue:`, error);
+      logger.error(`Error adding job to ${queueName} queue:`, error);
       res.status(500).json({
         error: 'Failed to queue job',
         details: error.message
@@ -290,7 +291,7 @@ export function useMicroservices(): boolean {
   return env.ENABLE_MICROSERVICES;
 }
 
-console.log(`🚀 API Gateway initialized (Microservices: ${useMicroservices() ? 'ENABLED' : 'DISABLED'})`);
+logger.info(`🚀 API Gateway initialized (Microservices: ${useMicroservices() ? 'ENABLED' : 'DISABLED'})`);
 
 export default {
   classifyViaQueue,

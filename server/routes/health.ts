@@ -5,6 +5,7 @@ import { bigQueryService } from '../services/bigQueryService';
 import { addressValidationService } from '../services/addressValidationService';
 import { cachedSuppliers } from '@shared/schema';
 import { sql } from 'drizzle-orm';
+import logger from '../logger';
 
 const router = Router();
 
@@ -316,7 +317,7 @@ router.get('/mastercard', async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('Health check error:', error);
+    logger.error('Health check error:', error);
     res.status(500).json({
       status: 'error',
       error: error instanceof Error ? error.message : 'Unknown error',
