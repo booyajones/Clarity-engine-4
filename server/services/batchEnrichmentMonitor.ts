@@ -18,6 +18,7 @@ import { addressValidationService } from './addressValidationService';
 import { MastercardApiService } from './mastercardApi';
 import { akkioService } from './akkioService';
 import { supplierCacheService } from './supplierCacheService';
+import { AccurateMatchingService } from './accurateMatchingService';
 
 const MONITOR_INTERVAL = 60000; // Check every 60 seconds (REDUCED from 10s for production)
 const BATCH_TIMEOUT = 30 * 60 * 1000; // 30 minutes timeout for stuck batches
@@ -27,6 +28,11 @@ class BatchEnrichmentMonitor {
   private isRunning = false;
   private monitorInterval: NodeJS.Timeout | null = null;
   private processingBatch = false; // PRODUCTION FIX: Track if processing to prevent overlap
+  private accurateMatchingService: AccurateMatchingService;
+
+  constructor() {
+    this.accurateMatchingService = new AccurateMatchingService();
+  }
 
   /**
    * Start monitoring batches for enrichment
@@ -239,11 +245,8 @@ class BatchEnrichmentMonitor {
             // Google-validated address will be used by Finexio for better matching
             const searchName = classification.cleanedName || classification.originalName;
             
-            // Create a promise for the supplier search
-            const searchPromise = supplierCacheService.searchCachedSuppliers(
-              searchName,
-              1
-            );
+            // Create a promise for the sophisticated fuzzy matching
+            const searchPromise = this.accurateMatchingService.findBestMatch(searchName, 5);
 
             // Create a timeout promise (5 seconds per record)
             const timeoutPromise = new Promise((_, reject) => 
@@ -251,23 +254,23 @@ class BatchEnrichmentMonitor {
             );
 
             // Race between search and timeout
-            const matches = await Promise.race([searchPromise, timeoutPromise]) as any;
+            const result = await Promise.race([searchPromise, timeoutPromise]) as any;
 
-            // Accept matches with 85%+ confidence (not just 100%)
-            if (matches && matches.length > 0 && matches[0].confidence >= 85) {
-              const bestMatch = matches[0];
+            // Accept matches with 75%+ confidence (fuzzy matching threshold)
+            if (result && result.bestMatch && result.confidence >= 0.75) {
+              const bestMatch = result.bestMatch;
               await db.update(payeeClassifications)
                 .set({
                   finexioSupplierId: bestMatch.payeeId,
                   finexioSupplierName: bestMatch.payeeName,
-                  finexioConfidence: bestMatch.confidence || 0,
-                  finexioMatchReasoning: bestMatch.reasoning || `Matched with ${bestMatch.confidence}% confidence`
+                  finexioConfidence: Math.round(result.confidence * 100) / 100, // Store as decimal 0-1
+                  finexioMatchReasoning: result.matches[0]?.reasoning || `Matched with ${Math.round(result.confidence * 100)}% confidence`
                 })
                 .where(eq(payeeClassifications.id, classification.id));
               matchCount++;
               
-              if (bestMatch.confidence < 100) {
-                console.log(`💼 Finexio: Matched "${classification.originalName}" to "${bestMatch.payeeName}" (${bestMatch.confidence}% confidence)`);
+              if (result.confidence < 1.0) {
+                console.log(`💼 Finexio: Matched "${classification.originalName}" to "${bestMatch.payeeName}" (${Math.round(result.confidence * 100)}% confidence)`);
               }
             }
           } catch (error: any) {
