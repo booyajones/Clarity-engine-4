@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import { LRUCache } from 'lru-cache';
 import { bigQueryService } from './bigQueryService';
 import { unifiedFuzzyMatcher } from './unifiedFuzzyMatcher';
 
@@ -7,13 +7,16 @@ import { unifiedFuzzyMatcher } from './unifiedFuzzyMatcher';
 export class FuzzyMatcher {
   private openai: OpenAI | null = null;
   private aiDisabled = false;
-  // Cache to store AI match decisions for normalized name pairs
-  private aiDecisionCache = new Map<string, {
+  // Cache to store AI match decisions for normalized name pairs with eviction
+  private aiDecisionCache = new LRUCache<string, {
     isMatch: boolean;
     confidence: number;
     matchType: string;
     details: Record<string, any>;
-  }>();
+  }>({
+    max: 500,
+    ttl: 1000 * 60 * 60, // 1 hour TTL
+  });
 
   constructor() {
     // Allow OpenAI usage to be disabled for low latency requirements
@@ -260,7 +263,21 @@ export class FuzzyMatcher {
 
     return result;
   }
-  
+
+  // Clear the AI decision cache
+  public clearCache(): void {
+    this.aiDecisionCache.clear();
+  }
+
+  // Report cache statistics for observability
+  public getCacheStats() {
+    return {
+      size: this.aiDecisionCache.size,
+      max: this.aiDecisionCache.max,
+      ttl: this.aiDecisionCache.ttl,
+    };
+  }
+
   // Normalize strings for comparison
   private normalize(name: string | null | undefined): string {
     if (!name) return '';
