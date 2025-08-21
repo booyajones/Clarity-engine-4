@@ -61,7 +61,15 @@ export class PayeeMatchingService {
       }
       
       // Check in-memory cache first to avoid duplicate work
-      const cacheKey = classification.cleanedName.toLowerCase();
+      // Include location fields so separate addresses don't share cached results
+      const cacheKey = [
+        classification.cleanedName.toLowerCase(),
+        classification.city?.toLowerCase(),
+        classification.state?.toLowerCase(),
+        classification.zipCode
+      ]
+        .filter(Boolean)
+        .join('|');
       const cached = this.matchCache.get(cacheKey);
       if (cached) {
         return cached;
