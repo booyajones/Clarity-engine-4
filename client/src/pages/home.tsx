@@ -1598,6 +1598,8 @@ export default function Home() {
                         fileInputRef.current.value = "";
                       }
                     }}
+                    aria-label="Remove selected file"
+                    title="Remove Selected File"
                   >
                     <X className="h-4 w-4" />
                   </Button>
@@ -2039,6 +2041,7 @@ export default function Home() {
                               variant="outline"
                               onClick={() => setViewingBatchId(batch.id)}
                               title="View Results"
+                              aria-label="View results"
                               className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
                             >
                               <Eye className="h-4 w-4" />
@@ -2049,6 +2052,7 @@ export default function Home() {
                               onClick={() => handleDownload(batch.id, batch.originalFilename)}
                               disabled={downloadingBatchId === batch.id}
                               title="Download CSV"
+                              aria-label="Download CSV"
                               className="hover:bg-green-50 hover:text-green-600 transition-all hover:shadow-md active:scale-95"
                             >
                               {downloadingBatchId === batch.id ? (
@@ -2064,6 +2068,7 @@ export default function Home() {
                           variant="ghost"
                           onClick={() => deleteMutation.mutate(batch.id)}
                           title="Delete"
+                          aria-label="Delete batch"
                           className="hover:bg-red-50 hover:text-red-600 transition-colors"
                         >
                           <X className="h-4 w-4" />

@@ -165,7 +165,12 @@ export default function MastercardMonitor() {
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
             <Link href="/">
-              <Button variant="ghost" size="icon" className="hover:bg-amber-100 transition-colors">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="hover:bg-amber-100 transition-colors"
+                aria-label="Back to home"
+              >
                 <ArrowLeft className="h-5 w-5" />
               </Button>
             </Link>
@@ -344,6 +349,7 @@ export default function MastercardMonitor() {
                             setSelectedSearch(search);
                           }}
                           title="View Details"
+                          aria-label="View details"
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
@@ -356,6 +362,7 @@ export default function MastercardMonitor() {
                           }}
                           disabled={cancelMutation.isPending}
                           title="Cancel Search"
+                          aria-label="Cancel search"
                           className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
                         >
                           <XCircle className="h-4 w-4" />
@@ -368,6 +375,7 @@ export default function MastercardMonitor() {
                             setDeleteSearchId(search.id);
                           }}
                           title="Delete Search"
+                          aria-label="Delete search"
                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -458,6 +466,8 @@ export default function MastercardMonitor() {
                             e.stopPropagation();
                             setSelectedSearch(search);
                           }}
+                          title="View Details"
+                          aria-label="View details"
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
@@ -470,6 +480,8 @@ export default function MastercardMonitor() {
                               retryMutation.mutate(search);
                             }}
                             disabled={retryMutation.isPending}
+                            title="Retry Search"
+                            aria-label="Retry search"
                           >
                             <RotateCcw className="h-4 w-4" />
                           </Button>
@@ -481,6 +493,8 @@ export default function MastercardMonitor() {
                             e.stopPropagation();
                             setDeleteSearchId(search.id);
                           }}
+                          title="Delete Search"
+                          aria-label="Delete search"
                         >
                           <Trash2 className="h-4 w-4 text-red-500" />
                         </Button>
