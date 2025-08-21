@@ -195,9 +195,13 @@ class BatchEnrichmentMonitor {
    */
   private async processFinexioMatching(batchId: number) {
     try {
-      // Update status to processing
+      // Update status to in_progress (matches frontend expectations)
       await db.update(uploadBatches)
-        .set({ finexioMatchingStatus: 'processing' })
+        .set({ 
+          finexioMatchingStatus: 'in_progress',
+          progressMessage: 'Starting Finexio supplier matching...',
+          currentStep: 'Finexio: 0% complete'
+        })
         .where(eq(uploadBatches.id, batchId));
 
       // Get all classifications for this batch
@@ -216,6 +220,17 @@ class BatchEnrichmentMonitor {
       
       for (let i = 0; i < classifications.length; i += batchSize) {
         const batch = classifications.slice(i, i + batchSize);
+        
+        // Update progress during processing
+        const processedSoFar = Math.min(i, classifications.length);
+        const progressPercent = Math.round((processedSoFar / classifications.length) * 100);
+        
+        await db.update(uploadBatches)
+          .set({ 
+            progressMessage: `Matching with Finexio suppliers... (${processedSoFar}/${classifications.length})`,
+            currentStep: `Finexio: ${progressPercent}% complete`
+          })
+          .where(eq(uploadBatches.id, batchId));
         
         // Process batch with parallel promises but with timeout protection
         const promises = batch.map(async (classification) => {
@@ -269,10 +284,21 @@ class BatchEnrichmentMonitor {
         // Wait for all in this batch to complete
         await Promise.allSettled(promises);
         
+        // Update progress after processing this batch
+        const processedAfter = Math.min(i + batchSize, classifications.length);
+        const progressAfter = Math.round((processedAfter / classifications.length) * 100);
+        
+        await db.update(uploadBatches)
+          .set({ 
+            progressMessage: `Matching with Finexio suppliers... (${processedAfter}/${classifications.length})`,
+            currentStep: `Finexio: ${progressAfter}% complete`,
+            finexioMatchedCount: matchCount
+          })
+          .where(eq(uploadBatches.id, batchId));
+        
         // Log progress every 100 records for large batches
         if (classifications.length > 100 && (i + batchSize) % 100 === 0) {
-          const processed = Math.min(i + batchSize, classifications.length);
-          console.log(`💼 Finexio Progress: ${processed}/${classifications.length} processed (${Math.round(processed * 100 / classifications.length)}%)`);
+          console.log(`💼 Finexio Progress: ${processedAfter}/${classifications.length} processed (${progressAfter}%)`);
         }
       }
 
@@ -338,6 +364,15 @@ class BatchEnrichmentMonitor {
       }
 
       console.log(`Processing Google Address validation for batch ${batchId}: ${classifications.length} records remaining`);
+      
+      // Update status to in_progress
+      await db.update(uploadBatches)
+        .set({ 
+          googleAddressStatus: 'in_progress',
+          progressMessage: 'Validating addresses with Google...',
+          currentStep: 'Google Address: 0% complete'
+        })
+        .where(eq(uploadBatches.id, batchId));
 
       let validatedCount = 0;
       let errorCount = 0;
@@ -348,6 +383,17 @@ class BatchEnrichmentMonitor {
       
       for (let i = 0; i < classifications.length; i += batchSize) {
         const batch = classifications.slice(i, i + batchSize);
+        
+        // Update progress before processing
+        const processedSoFar = Math.min(i, classifications.length);
+        const progressPercent = Math.round((processedSoFar / classifications.length) * 100);
+        
+        await db.update(uploadBatches)
+          .set({ 
+            progressMessage: `Validating addresses... (${processedSoFar}/${classifications.length})`,
+            currentStep: `Google Address: ${progressPercent}% complete`
+          })
+          .where(eq(uploadBatches.id, batchId));
         
         // Process batch with parallel promises but with timeout protection
         const promises = batch.map(async (classification) => {
@@ -411,18 +457,22 @@ class BatchEnrichmentMonitor {
         // Wait for all in this batch to complete
         await Promise.allSettled(promises);
         
+        // Update progress after processing this batch
+        const processedAfter = Math.min(i + batchSize, classifications.length);
+        const progressAfter = Math.round((processedAfter / classifications.length) * 100);
+        
+        await db.update(uploadBatches)
+          .set({ 
+            progressMessage: `Validating addresses... (${processedAfter}/${classifications.length})`,
+            currentStep: `Google Address: ${progressAfter}% complete`,
+            googleAddressValidated: validatedCount,
+            googleAddressProcessed: processedAfter
+          })
+          .where(eq(uploadBatches.id, batchId));
+        
         // Log progress every 50 records for large batches
         if (classifications.length > 50 && (i + batchSize) % 50 === 0) {
-          const processed = Math.min(i + batchSize, classifications.length);
-          console.log(`📍 Progress: ${processed}/${classifications.length} addresses processed (${Math.round(processed * 100 / classifications.length)}%)`);
-          
-          // Update batch progress periodically
-          await db.update(uploadBatches)
-            .set({
-              googleAddressValidated: validatedCount,
-              googleAddressProcessed: processed
-            })
-            .where(eq(uploadBatches.id, batchId));
+          console.log(`📍 Progress: ${processedAfter}/${classifications.length} addresses processed (${progressAfter}%)`);
         }
       }
 
