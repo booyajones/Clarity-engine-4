@@ -1,6 +1,6 @@
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useIsFetching } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import ErrorBoundary from "@/components/error-boundary";
@@ -24,15 +24,42 @@ function Router() {
   );
 }
 
-function App() {
+function LoadingIndicator() {
+  const isFetching = useIsFetching();
+
+  if (!isFetching) return null;
+
   return (
-    <QueryClientProvider client={queryClient}>
+    <div
+      role="progressbar"
+      aria-label="Content loading"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      className="fixed top-0 left-0 right-0 z-50 h-1 bg-primary animate-pulse"
+    >
+      <span className="sr-only">Loading...</span>
+    </div>
+  );
+}
+
+function AppContent() {
+  return (
+    <>
+      <LoadingIndicator />
       <TooltipProvider>
         <Toaster />
         <ErrorBoundary>
           <Router />
         </ErrorBoundary>
       </TooltipProvider>
+    </>
+  );
+}
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppContent />
     </QueryClientProvider>
   );
 }
