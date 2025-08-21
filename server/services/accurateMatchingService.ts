@@ -2,7 +2,6 @@ import { sql } from 'drizzle-orm';
 import { db } from '../db';
 import type { CachedSupplier } from '@shared/schema';
 import { fuzzyMatcher } from './fuzzyMatcher';
-import { unifiedFuzzyMatcher } from './unifiedFuzzyMatcher';
 
 /**
  * Sophisticated Matching Service using 6-algorithm fuzzy matching
