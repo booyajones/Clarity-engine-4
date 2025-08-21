@@ -257,6 +257,41 @@ export class BigQueryService {
       throw error;
     }
   }
+
+  // Log fuzzy match performance metrics
+  async logMatchMetric(metric: {
+    inputName: string;
+    candidateName: string;
+    deterministicConfidence: number;
+    finalConfidence: number;
+    isMatch: boolean;
+    aiUsed: boolean;
+    latencyMs: number;
+  }): Promise<void> {
+    const record = {
+      inputName: metric.inputName,
+      candidateName: metric.candidateName,
+      deterministicConfidence: metric.deterministicConfidence,
+      finalConfidence: metric.finalConfidence,
+      isMatch: metric.isMatch,
+      aiUsed: metric.aiUsed,
+      latencyMs: metric.latencyMs,
+      timestamp: new Date().toISOString(),
+    };
+
+    if (!this.isConfigured || !this.bigquery) {
+      console.log('Match metric:', record);
+      return;
+    }
+
+    try {
+      const dataset = process.env.BIGQUERY_DATASET || 'SE_Enrichment';
+      const table = process.env.BIGQUERY_MATCH_METRICS_TABLE || 'fuzzy_match_metrics';
+      await this.bigquery.dataset(dataset).table(table).insert([record]);
+    } catch (error) {
+      console.error('Error logging match metric to BigQuery:', error);
+    }
+  }
 }
 
 export const bigQueryService = new BigQueryService();

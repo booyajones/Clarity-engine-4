@@ -6,11 +6,24 @@ import { unifiedFuzzyMatcher } from './unifiedFuzzyMatcher';
 // Advanced fuzzy matching algorithms for payee name comparison
 export class FuzzyMatcher {
   private openai: OpenAI | null = null;
-  
+  private aiDisabled = false;
+  // Cache to store AI match decisions for normalized name pairs
+  private aiDecisionCache = new Map<string, {
+    isMatch: boolean;
+    confidence: number;
+    matchType: string;
+    details: Record<string, any>;
+  }>();
+
   constructor() {
-    if (process.env.OPENAI_API_KEY) {
+    // Allow OpenAI usage to be disabled for low latency requirements
+    this.aiDisabled = process.env.DISABLE_OPENAI === 'true';
+
+    if (process.env.OPENAI_API_KEY && !this.aiDisabled) {
       this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
       console.log('FuzzyMatcher: OpenAI initialized successfully');
+    } else if (this.aiDisabled) {
+      console.log('FuzzyMatcher: OpenAI disabled via configuration');
     } else {
       console.log('FuzzyMatcher: OpenAI not initialized - no API key');
     }
@@ -174,42 +187,78 @@ export class FuzzyMatcher {
     if (exactBoost > 0) matchType = 'exact_cascading';
     else if (prefixBoost > 0) matchType = 'prefix_cascading';
     else if (wordBoundaryBoost > 0) matchType = 'boundary_cascading';
-    
-    // If confidence is below 90%, use AI for final determination
+
+    const cacheKey = `${normalizedInput}::${normalizedCandidate}`;
+    const startTime = Date.now();
+    let aiUsed = false;
+    let result: { isMatch: boolean; confidence: number; matchType: string; details: Record<string, any> };
+
     if (averageConfidence >= 0.9) {
-      return {
+      result = {
         isMatch: true,
         confidence: averageConfidence,
         matchType: matchType,
         details: { ...matchDetails, boosts: { exact: exactBoost, prefix: prefixBoost, wordBoundary: wordBoundaryBoost } },
       };
-    } else if (averageConfidence >= 0.4 && averageConfidence < 0.9 && this.openai) {
+    } else if (
+      averageConfidence >= 0.6 &&
+      averageConfidence < 0.9 &&
+      this.openai &&
+      !this.aiDisabled
+    ) {
       // Skip AI for single-word matches with heavy penalties (likely just surnames)
       const isLikelySurname = inputName.split(/\s+/).length === 1 && ambiguityPenalty >= 0.3;
       if (isLikelySurname) {
         console.log(`Skipping AI for likely surname match: "${inputName}" (penalty: ${(ambiguityPenalty * 100).toFixed(0)}%)`);
-        return {
+        result = {
           isMatch: false,
           confidence: averageConfidence,
           matchType: matchType,
           details: { ...matchDetails, boosts: { exact: exactBoost, prefix: prefixBoost, wordBoundary: wordBoundaryBoost } },
         };
+      } else {
+        const cached = this.aiDecisionCache.get(cacheKey);
+        if (cached) {
+          console.log(`Using cached AI decision for "${inputName}" vs "${candidateName}"`);
+          result = { ...cached, matchType: `ai_cached_${matchType}` };
+        } else {
+          console.log(`Triggering AI enhancement for confidence ${(averageConfidence * 100).toFixed(2)}% (below 90% threshold)`);
+          const aiResult = await this.aiMatch(inputName, candidateName, matchDetails);
+          console.log(`AI result: isMatch=${aiResult.isMatch}, confidence=${(aiResult.confidence * 100).toFixed(2)}%, type=${aiResult.matchType}`);
+          this.aiDecisionCache.set(cacheKey, aiResult);
+          result = { ...aiResult, matchType: `ai_enhanced_${matchType}` };
+          aiUsed = true;
+        }
       }
-      
-      // Use AI for medium confidence matches (40-90%) - lowered from 50% to catch typos
-      console.log(`Triggering AI enhancement for confidence ${(averageConfidence * 100).toFixed(2)}% (below 90% threshold)`);
-      const aiResult = await this.aiMatch(inputName, candidateName, matchDetails);
-      console.log(`AI result: isMatch=${aiResult.isMatch}, confidence=${(aiResult.confidence * 100).toFixed(2)}%, type=${aiResult.matchType}`);
-      return { ...aiResult, matchType: `ai_enhanced_${matchType}` };
     } else {
-      // Low confidence (<40%) - no match
-      return {
+      // Low confidence (<60%) or AI disabled - no match
+      result = {
         isMatch: false,
         confidence: averageConfidence,
         matchType: 'deterministic',
         details: matchDetails,
       };
     }
+
+    const latencyMs = Date.now() - startTime;
+    console.log(
+      `FuzzyMatcher metrics: isMatch=${result.isMatch}, confidence=${(result.confidence * 100).toFixed(2)}%, aiUsed=${aiUsed}, latency=${latencyMs}ms`
+    );
+    try {
+      await bigQueryService.logMatchMetric({
+        inputName,
+        candidateName,
+        deterministicConfidence: averageConfidence,
+        finalConfidence: result.confidence,
+        isMatch: result.isMatch,
+        aiUsed,
+        latencyMs,
+      });
+    } catch (err) {
+      console.error('Failed to log match metrics:', err);
+    }
+
+    return result;
   }
   
   // Normalize strings for comparison
