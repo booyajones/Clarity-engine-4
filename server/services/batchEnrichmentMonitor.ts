@@ -18,7 +18,7 @@ import { addressValidationService } from './addressValidationService';
 import { MastercardApiService } from './mastercardApi';
 import { akkioService } from './akkioService';
 import { supplierCacheService } from './supplierCacheService';
-import { AccurateMatchingService } from './accurateMatchingService';
+import { accurateMatchingService } from './accurateMatchingService';
 
 const MONITOR_INTERVAL = 60000; // Check every 60 seconds (REDUCED from 10s for production)
 const BATCH_TIMEOUT = 30 * 60 * 1000; // 30 minutes timeout for stuck batches
@@ -28,11 +28,8 @@ class BatchEnrichmentMonitor {
   private isRunning = false;
   private monitorInterval: NodeJS.Timeout | null = null;
   private processingBatch = false; // PRODUCTION FIX: Track if processing to prevent overlap
-  private accurateMatchingService: AccurateMatchingService;
 
-  constructor() {
-    this.accurateMatchingService = new AccurateMatchingService();
-  }
+  constructor() {}
 
   /**
    * Start monitoring batches for enrichment
@@ -246,7 +243,7 @@ class BatchEnrichmentMonitor {
             const searchName = classification.originalName || classification.cleanedName;
             
             // Create a promise for the sophisticated fuzzy matching
-            const searchPromise = this.accurateMatchingService.findBestMatch(searchName, 5);
+            const searchPromise = accurateMatchingService.findBestMatch(searchName, 5);
 
             // Create a timeout promise (5 seconds per record)
             const timeoutPromise = new Promise((_, reject) => 
