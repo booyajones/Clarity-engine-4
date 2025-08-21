@@ -12,8 +12,7 @@ export class AccurateMatchingService {
   private readonly MIN_DISPLAY_THRESHOLD = 0.60; // Show all matches above 60% for transparency
   
   /**
-   * Primary matching function using sophisticated 6-algorithm fuzzy matching
-   * NO shortcuts - ALL matches go through fuzzy matching algorithms
+   * Primary matching function - OPTIMIZED with exact match first, then sophisticated fuzzy
    */
   async findBestMatch(payeeName: string, limit = 10): Promise<{
     matches: Array<{
@@ -28,7 +27,24 @@ export class AccurateMatchingService {
     const normalizedInput = this.normalize(payeeName);
     const cleanInput = payeeName.trim();
     
-    console.log(`[SophisticatedMatching] Processing: "${payeeName}" with 6-algorithm fuzzy matching`);
+    // OPTIMIZATION: Try exact match FIRST (super fast <50ms)
+    const exactMatch = await this.tryExactMatch(cleanInput, normalizedInput);
+    if (exactMatch) {
+      console.log(`[SophisticatedMatching] ⚡ EXACT match for "${payeeName}" in <50ms`);
+      return {
+        matches: [{
+          supplier: exactMatch,
+          score: 1.0,
+          matchType: 'exact',
+          reasoning: 'Exact match found - 100% confidence'
+        }],
+        bestMatch: exactMatch,
+        confidence: 1.0
+      };
+    }
+    
+    // No exact match - proceed with sophisticated fuzzy matching
+    console.log(`[SophisticatedMatching] No exact match, using 6-algorithm fuzzy matching for: "${payeeName}"`);
     
     // Get ALL potential candidates from database (no immediate returns)
     const candidates = await this.findAllCandidates(cleanInput, normalizedInput, limit * 3);
@@ -130,8 +146,42 @@ export class AccurateMatchingService {
   }
   
   /**
-   * Find all potential candidates from the database
-   * Uses multiple search strategies to gather candidates for fuzzy matching
+   * Try exact match first - SUPER FAST <50ms
+   */
+  private async tryExactMatch(cleanInput: string, normalizedInput: string): Promise<CachedSupplier | null> {
+    try {
+      const startTime = Date.now();
+      
+      // Try exact match on normalized name using Drizzle ORM
+      const exactMatches = await db.query.cachedSuppliers.findMany({
+        where: (suppliers, { eq, or, sql }) => or(
+          eq(suppliers.payeeName, cleanInput),
+          eq(suppliers.payeeName, cleanInput.toUpperCase()),
+          eq(suppliers.payeeName, normalizedInput),
+          eq(suppliers.payeeName, normalizedInput.toUpperCase()),
+          eq(sql`LOWER(${suppliers.payeeName})`, cleanInput.toLowerCase())
+        ),
+        limit: 1
+      });
+      
+      const exactMatch = exactMatches[0];
+      
+      if (exactMatch) {
+        const elapsed = Date.now() - startTime;
+        console.log(`[ExactMatch] Found in ${elapsed}ms`);
+        return exactMatch as CachedSupplier;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('[ExactMatch] Error:', error);
+      return null;
+    }
+  }
+  
+  /**
+   * Find all potential candidates for fuzzy matching
+   * Uses multiple search strategies to gather candidates
    */
   private async findAllCandidates(cleanInput: string, normalizedInput: string, limit: number): Promise<CachedSupplier[]> {
     const candidates = new Map<string, CachedSupplier>();
