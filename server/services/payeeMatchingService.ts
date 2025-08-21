@@ -9,7 +9,7 @@ import OpenAI from 'openai';
 
 // Configuration interface for matching options
 export interface MatchingOptions {
-  enableBigQuery?: boolean;
+  enableFinexio?: boolean;
   enableMastercard?: boolean;
   enableAI?: boolean;
   confidenceThreshold?: number;
@@ -53,7 +53,7 @@ export class PayeeMatchingService {
         ...options
       };
 
-      // Skip if Finexio/BigQuery is disabled
+      // Skip if Finexio matching is disabled
       if (opts.enableFinexio === false) {
         console.log('Finexio matching disabled - skipping payee matching');
         return { matched: false };
