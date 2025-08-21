@@ -407,19 +407,19 @@ export class AccurateMatchingService {
       
       if (tokens.length === 0) return [];
       
-      // Build query that requires ALL significant tokens to match
-      const whereConditions = tokens.map(token => 
-        `(LOWER(payee_name) LIKE '%${token.toLowerCase()}%' OR LOWER(mastercard_business_name) LIKE '%${token.toLowerCase()}%')`
-      ).join(' AND ');
-      
-      const result = await db.execute(sql.raw(`
+      // Build parameterized conditions requiring ALL significant tokens to match
+      const tokenConditions = tokens.map(token =>
+        sql`(LOWER(payee_name) LIKE ${'%' + token.toLowerCase() + '%'} OR LOWER(mastercard_business_name) LIKE ${'%' + token.toLowerCase() + '%'})`
+      );
+
+      const result = await db.execute(sql`
         SELECT * FROM cached_suppliers
-        WHERE ${whereConditions}
-        ORDER BY 
+        WHERE ${sql.join(tokenConditions, sql` AND `)}
+        ORDER BY
           LENGTH(payee_name),
           payee_name
         LIMIT ${limit}
-      `));
+      `);
       
       return result.rows.map(row => this.mapToCachedSupplier(row));
     } catch (error) {
