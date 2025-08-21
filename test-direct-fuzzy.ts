@@ -1,11 +1,9 @@
-import { AccurateMatchingService } from './server/services/accurateMatchingService';
+import { accurateMatchingService } from './server/services/accurateMatchingService';
 import { db } from './server/db';
 import { payeeClassifications } from './shared/schema';
 import { eq } from 'drizzle-orm';
 
 async function testDirectFuzzyMatching() {
-  const service = new AccurateMatchingService();
-  
   console.log('Testing fuzzy matching directly for key records...\n');
   
   // Get specific test records that should fuzzy match
@@ -21,7 +19,7 @@ async function testDirectFuzzyMatching() {
     console.log(`\n=== Testing: "${name}" ===`);
     
     try {
-      const result = await service.findBestMatch(name, 5);
+      const result = await accurateMatchingService.findBestMatch(name, 5);
       
       console.log(`Found ${result.matches.length} matches`);
       console.log(`Best match confidence: ${result.confidence}`);

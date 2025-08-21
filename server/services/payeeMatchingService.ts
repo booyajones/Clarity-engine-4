@@ -4,7 +4,7 @@ import { storage } from '../storage';
 import type { PayeeClassification } from '@shared/schema';
 import { supplierCacheService } from './supplierCacheService';
 import { memoryOptimizedCache } from './memoryOptimizedSupplierCache';
-import { AccurateMatchingService } from './accurateMatchingService';
+import { accurateMatchingService } from './accurateMatchingService';
 import OpenAI from 'openai';
 
 // Configuration interface for matching options
@@ -19,13 +19,11 @@ export interface MatchingOptions {
 // Service to handle payee matching workflow
 export class PayeeMatchingService {
   private openai: OpenAI | null = null;
-  private accurateMatchingService: AccurateMatchingService;
   
   constructor() {
     if (process.env.OPENAI_API_KEY) {
       this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     }
-    this.accurateMatchingService = new AccurateMatchingService();
   }
 
   async matchPayeeWithBigQuery(
@@ -62,9 +60,9 @@ export class PayeeMatchingService {
       }
       
       console.log('[PayeeMatching] Starting sophisticated Finexio match for:', classification.cleanedName);
-      
+
       // Use AccurateMatchingService for sophisticated 6-algorithm fuzzy matching
-      const matchResult = await this.accurateMatchingService.findBestMatch(classification.cleanedName);
+      const matchResult = await accurateMatchingService.findBestMatch(classification.cleanedName);
       console.log('[PayeeMatching] Sophisticated match result:', matchResult.bestMatch ? 'FOUND' : 'NO MATCH');
       
       // If no match found with sophisticated matching, return early
