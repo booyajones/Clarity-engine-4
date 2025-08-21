@@ -27,6 +27,16 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        main: path.resolve(import.meta.dirname, "client/index.html"),
+        sw: path.resolve(import.meta.dirname, "client/src/sw.ts"),
+      },
+      output: {
+        entryFileNames: (chunk) =>
+          chunk.name === "sw" ? "sw.js" : "assets/[name]-[hash].js",
+      },
+    },
   },
   server: {
     fs: {

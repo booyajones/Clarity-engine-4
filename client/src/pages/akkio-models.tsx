@@ -87,7 +87,7 @@ export function AkkioModels() {
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
             <Link href="/">
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" aria-label="Back to home">
                 <ArrowLeft className="h-5 w-5" />
               </Button>
             </Link>

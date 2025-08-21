@@ -1,11 +1,9 @@
 import { env } from '../config';
-import { bigQueryService, type BigQueryPayeeResult } from './bigQueryService';
-import { fuzzyMatcher } from './fuzzyMatcher';
+import { bigQueryService } from './bigQueryService';
 import { storage } from '../storage';
 import type { PayeeClassification } from '@shared/schema';
-import { supplierCacheService } from './supplierCacheService';
-import { memoryOptimizedCache } from './memoryOptimizedSupplierCache';
 import { accurateMatchingService } from './accurateMatchingService';
+import { memoryOptimizedCache } from './memoryOptimizedSupplierCache';
 import OpenAI from 'openai';
 
 // Configuration interface for matching options
@@ -31,7 +29,7 @@ export class PayeeMatchingService {
 
   async matchPayeeWithBigQuery(
     classification: PayeeClassification,
-    options: MatchingOptions = {}
+    options: MatchingOptions = {},
   ): Promise<{
     matched: boolean;
     matchedPayee?: {
@@ -62,14 +60,23 @@ export class PayeeMatchingService {
         return { matched: false };
       }
 
-      const cacheKey = classification.cleanedName.toLowerCase();
+      // Check in-memory cache first to avoid duplicate work
+      // Include location fields so separate addresses don't share cached results
+      const cacheKey = [
+        classification.cleanedName.toLowerCase(),
+        classification.city?.toLowerCase(),
+        classification.state?.toLowerCase(),
+        classification.zipCode,
+      ]
+        .filter(Boolean)
+        .join('|');
       const cached = this.matchCache.get(cacheKey);
       if (cached) {
         return cached;
       }
 
       console.log('[PayeeMatching] Starting sophisticated Finexio match for:', classification.cleanedName);
-
+      
       // Try memory-optimized cache first
       const cacheMatch = await memoryOptimizedCache.matchSupplier(
         classification.cleanedName,
@@ -86,7 +93,10 @@ export class PayeeMatchingService {
         bestMatch = {
           payeeId: cacheMatch.supplier.payeeId || cacheMatch.supplier.id,
           payeeName: cacheMatch.supplier.payeeName,
-          normalizedName: cacheMatch.supplier.normalizedName || cacheMatch.supplier.mastercardBusinessName || undefined,
+          normalizedName:
+            cacheMatch.supplier.normalizedName ||
+            cacheMatch.supplier.mastercardBusinessName ||
+            undefined,
           category: cacheMatch.supplier.category || undefined,
           sicCode: cacheMatch.supplier.mcc || undefined,
           industry: cacheMatch.supplier.industry || undefined,
@@ -101,7 +111,16 @@ export class PayeeMatchingService {
         matchReasoning = `${cacheMatch.matchType} match via cache`;
       } else {
         // Fallback to sophisticated matching service
-        const matchResult = await accurateMatchingService.findBestMatch(classification.cleanedName);
+        const matchResult = await accurateMatchingService.findBestMatch(
+          classification.cleanedName,
+          10,
+          {
+            address: classification.address || undefined,
+            city: classification.city || undefined,
+            state: classification.state || undefined,
+            zip: classification.zipCode || undefined,
+          }
+        );
         console.log('[PayeeMatching] Sophisticated match result:', matchResult.bestMatch ? 'FOUND' : 'NO MATCH');
 
         if (!matchResult.bestMatch || matchResult.confidence < opts.confidenceThreshold) {
@@ -140,66 +159,90 @@ export class PayeeMatchingService {
         matchReasoning =
           topMatch.reasoning ||
           `${matchType} match with ${Math.round(finalConfidence * 100)}% confidence`;
+
+        // If deterministic confidence is below threshold, try AI enhancement
+        if (finalConfidence < opts.confidenceThreshold) {
+          console.log(
+            `[PayeeMatching] Confidence ${finalConfidence} below threshold ${opts.confidenceThreshold}`
+          );
+          if (opts.enableAI && finalConfidence >= (opts.aiConfidenceThreshold ?? 0)) {
+            const aiResult = await this.enhanceWithAI(
+              classification.cleanedName,
+              bestMatch.payeeName,
+              finalConfidence,
+              matchReasoning
+            );
+            finalConfidence = aiResult.confidence;
+            matchReasoning = aiResult.reasoning;
+            if (aiResult.shouldMatch) {
+              matchType = 'ai_enhanced';
+            }
+            if (!aiResult.shouldMatch || finalConfidence < opts.confidenceThreshold) {
+              const noMatch = { matched: false };
+              this.matchCache.set(cacheKey, noMatch);
+              return noMatch;
+            }
+          } else {
+            const noMatch = { matched: false };
+            this.matchCache.set(cacheKey, noMatch);
+            return noMatch;
+          }
+        }
       }
 
       const finexioMatchScore = Math.round(finalConfidence * 100);
 
-      if (finalConfidence >= opts.confidenceThreshold) {
-        // Store the match in database only if classification has an ID
-        if (classification.id) {
-          await storage.createPayeeMatch({
-            classificationId: classification.id,
-            bigQueryPayeeId: bestMatch.payeeId,
-            bigQueryPayeeName: bestMatch.payeeName,
-            matchConfidence: finalConfidence,
-            finexioMatchScore: finexioMatchScore,
-            paymentType: bestMatch.paymentType,
-            matchType: matchType,
-            matchReasoning: matchReasoning,
-            matchDetails: {
-              originalConfidence: bestMatch.confidence,
-              city: bestMatch.city,
-              state: bestMatch.state,
-              mastercardBusinessName: bestMatch.normalizedName
-            },
-          });
-
-          // Update classification with matched payee info if available
-          if (bestMatch.category || bestMatch.sicCode) {
-            await storage.updatePayeeClassification(classification.id, {
-              sicCode: bestMatch.sicCode || classification.sicCode,
-              sicDescription: bestMatch.category || classification.sicDescription,
-            });
-          }
-        } else {
-          console.log('[PayeeMatching] Skipping database save - no classification ID (single classify endpoint)');
-        }
-
-        const result = {
-          matched: true,
-          matchedPayee: {
-            payeeId: bestMatch.payeeId,
-            payeeName: bestMatch.payeeName,
-            confidence: finalConfidence,
-            finexioMatchScore: finexioMatchScore,
-            paymentType: bestMatch.paymentType,
-            matchType: matchType,
-            matchReasoning: matchReasoning,
-            matchDetails: {
-              originalConfidence: bestMatch.confidence,
-              city: bestMatch.city,
-              state: bestMatch.state,
-              mastercardBusinessName: bestMatch.normalizedName
-            },
+      // Store the match in database only if classification has an ID
+      if (classification.id) {
+        await storage.createPayeeMatch({
+          classificationId: classification.id,
+          bigQueryPayeeId: bestMatch.payeeId,
+          bigQueryPayeeName: bestMatch.payeeName,
+          matchConfidence: finalConfidence,
+          finexioMatchScore: finexioMatchScore,
+          paymentType: bestMatch.paymentType,
+          matchType: matchType,
+          matchReasoning: matchReasoning,
+          matchDetails: {
+            originalConfidence: bestMatch.confidence,
+            city: bestMatch.city,
+            state: bestMatch.state,
+            mastercardBusinessName: bestMatch.normalizedName
           },
-        };
-        this.matchCache.set(cacheKey, result);
-        return result;
+        });
+
+        // Update classification with matched payee info if available
+        if (bestMatch.category || bestMatch.sicCode) {
+          await storage.updatePayeeClassification(classification.id, {
+            sicCode: bestMatch.sicCode || classification.sicCode,
+            sicDescription: bestMatch.category || classification.sicDescription,
+          });
+        }
+      } else {
+        console.log('[PayeeMatching] Skipping database save - no classification ID (single classify endpoint)');
       }
 
-      const noMatch = { matched: false };
-      this.matchCache.set(cacheKey, noMatch);
-      return noMatch;
+      const result = {
+        matched: true,
+        matchedPayee: {
+          payeeId: bestMatch.payeeId,
+          payeeName: bestMatch.payeeName,
+          confidence: finalConfidence,
+          finexioMatchScore: finexioMatchScore,
+          paymentType: bestMatch.paymentType,
+          matchType: matchType,
+          matchReasoning: matchReasoning,
+          matchDetails: {
+            originalConfidence: bestMatch.confidence,
+            city: bestMatch.city,
+            state: bestMatch.state,
+            mastercardBusinessName: bestMatch.normalizedName
+          },
+        },
+      };
+
+      this.matchCache.set(cacheKey, result);
+      return result;
     } catch (error) {
       console.error('Error in payee matching:', error);
       return { matched: false };
@@ -255,7 +298,7 @@ Respond with JSON:
       });
 
       const result = JSON.parse(response.choices[0].message.content || '{}');
-      
+
       return {
         shouldMatch: result.shouldMatch || false,
         confidence: Math.max(currentConfidence, result.confidence || currentConfidence),
@@ -270,7 +313,7 @@ Respond with JSON:
       };
     }
   }
-  
+
   // Batch match payees for a given upload batch
   async matchBatchPayees(
     batchId: number,
@@ -281,19 +324,19 @@ Respond with JSON:
     errors: number;
   }> {
     const classifications = await storage.getPayeeClassificationsByBatch(batchId);
-    
+
     let totalMatched = 0;
     let errors = 0;
-    
+
     // Process in batches to avoid overwhelming the system
     const batchSize = 10;
     for (let i = 0; i < classifications.length; i += batchSize) {
       const batch = classifications.slice(i, i + batchSize);
-      
+
       const results = await Promise.allSettled(
         batch.map(classification => this.matchPayeeWithBigQuery(classification, options))
       );
-      
+
       results.forEach(result => {
         if (result.status === 'fulfilled' && result.value.matched) {
           totalMatched++;
@@ -301,30 +344,30 @@ Respond with JSON:
           errors++;
         }
       });
-      
+
       // Update progress
       const progress = Math.round(((i + batch.length) / classifications.length) * 100);
       console.log(`BigQuery matching progress: ${progress}% (${totalMatched} matches found)`);
     }
-    
+
     return {
       totalProcessed: classifications.length,
       totalMatched,
       errors,
     };
   }
-  
+
   // Learn from user confirmations to improve future matching
   async confirmMatch(matchId: number, userId: number, isCorrect: boolean): Promise<void> {
     const match = await storage.getPayeeMatch(matchId);
     if (!match) return;
-    
+
     await storage.updatePayeeMatch(matchId, {
       isConfirmed: true,
       confirmedBy: userId,
       confirmedAt: new Date(),
     });
-    
+
     // If the match was correct and it's a new payee, add it to BigQuery
     if (isCorrect && bigQueryService.isServiceConfigured()) {
       const classification = await storage.getPayeeClassification(match.classificationId);
