@@ -1,3 +1,4 @@
+import { env } from '../config';
 import { bigQueryService, type BigQueryPayeeResult } from './bigQueryService';
 import { fuzzyMatcher } from './fuzzyMatcher';
 import { storage } from '../storage';
@@ -21,8 +22,8 @@ export class PayeeMatchingService {
   private openai: OpenAI | null = null;
   
   constructor() {
-    if (process.env.OPENAI_API_KEY) {
-      this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    if (env.OPENAI_API_KEY) {
+      this.openai = new OpenAI({ apiKey: env.OPENAI_API_KEY });
     }
   }
 

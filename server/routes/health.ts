@@ -1,3 +1,4 @@
+import { env } from '../config';
 import { Router } from 'express';
 import { db } from '../db';
 import { bigQueryService } from '../services/bigQueryService';
@@ -100,12 +101,12 @@ router.get('/health', async (req, res) => {
     }
 
     // Check Google Maps configuration
-    if (process.env.GOOGLE_MAPS_API_KEY) {
+    if (env.GOOGLE_MAPS_API_KEY) {
       healthCheck.checks.googleMaps = { status: 'ok' };
     }
 
     // Check OpenAI configuration
-    if (process.env.OPENAI_API_KEY) {
+    if (env.OPENAI_API_KEY) {
       healthCheck.checks.openai = { status: 'ok' };
     }
 
@@ -230,10 +231,10 @@ router.get('/health/services', async (req, res) => {
   }
 
   // Check configurations
-  if (process.env.OPENAI_API_KEY) services.openai = 'configured';
-  if (process.env.GOOGLE_MAPS_API_KEY) services.googleMaps = 'configured';
-  if (process.env.MASTERCARD_CONSUMER_KEY) services.mastercard = 'configured';
-  if (process.env.AKKIO_API_KEY) services.akkio = 'configured';
+  if (env.OPENAI_API_KEY) services.openai = 'configured';
+  if (env.GOOGLE_MAPS_API_KEY) services.googleMaps = 'configured';
+  if (env.MASTERCARD_CONSUMER_KEY) services.mastercard = 'configured';
+  if (env.AKKIO_API_KEY) services.akkio = 'configured';
 
   const allHealthy = services.database === 'healthy' && services.bigQuery === 'healthy';
 
@@ -246,30 +247,30 @@ router.get('/health/services', async (req, res) => {
 // Mastercard configuration diagnostic endpoint
 router.get('/health/mastercard', async (req, res) => {
   const diagnostics = {
-    environment: process.env.NODE_ENV,
-    mastercardEnvironment: process.env.NODE_ENV === 'production' ? 'production' : 'sandbox',
-    apiUrl: process.env.NODE_ENV === 'production' 
+    environment: env.NODE_ENV,
+    mastercardEnvironment: env.NODE_ENV === 'production' ? 'production' : 'sandbox',
+    apiUrl: env.NODE_ENV === 'production' 
       ? 'https://api.mastercard.com/track/search' 
       : 'https://sandbox.api.mastercard.com/track/search',
     configuration: {
-      hasConsumerKey: !!process.env.MASTERCARD_CONSUMER_KEY,
-      consumerKeyPreview: process.env.MASTERCARD_CONSUMER_KEY 
-        ? process.env.MASTERCARD_CONSUMER_KEY.substring(0, 10) + '...' 
+      hasConsumerKey: !!env.MASTERCARD_CONSUMER_KEY,
+      consumerKeyPreview: env.MASTERCARD_CONSUMER_KEY 
+        ? env.MASTERCARD_CONSUMER_KEY.substring(0, 10) + '...' 
         : 'NOT SET',
-      hasPrivateKey: !!process.env.MASTERCARD_KEY,
-      hasCertificate: !!process.env.MASTERCARD_CERT,
-      hasKeyAlias: !!process.env.MASTERCARD_KEY_ALIAS,
-      hasKeystorePassword: !!process.env.MASTERCARD_KEYSTORE_PASSWORD,
-      clientId: process.env.MASTERCARD_CONSUMER_KEY?.includes('!') 
-        ? process.env.MASTERCARD_CONSUMER_KEY.split('!')[1]?.substring(0, 10) + '...'
+      hasPrivateKey: !!env.MASTERCARD_KEY,
+      hasCertificate: !!env.MASTERCARD_CERT,
+      hasKeyAlias: !!env.MASTERCARD_KEY_ALIAS,
+      hasKeystorePassword: !!env.MASTERCARD_KEYSTORE_PASSWORD,
+      clientId: env.MASTERCARD_CONSUMER_KEY?.includes('!') 
+        ? env.MASTERCARD_CONSUMER_KEY.split('!')[1]?.substring(0, 10) + '...'
         : 'NOT FOUND IN CONSUMER KEY'
     },
     requiredSecrets: {
-      MASTERCARD_CONSUMER_KEY: !!process.env.MASTERCARD_CONSUMER_KEY ? '✅ SET' : '❌ MISSING',
-      MASTERCARD_KEY: !!process.env.MASTERCARD_KEY ? '✅ SET' : '❌ MISSING', 
-      MASTERCARD_CERT: !!process.env.MASTERCARD_CERT ? '✅ SET (optional)' : '⚠️ NOT SET (optional)',
-      MASTERCARD_KEY_ALIAS: !!process.env.MASTERCARD_KEY_ALIAS ? '✅ SET' : '⚠️ NOT SET',
-      MASTERCARD_KEYSTORE_PASSWORD: !!process.env.MASTERCARD_KEYSTORE_PASSWORD ? '✅ SET' : '⚠️ NOT SET'
+      MASTERCARD_CONSUMER_KEY: !!env.MASTERCARD_CONSUMER_KEY ? '✅ SET' : '❌ MISSING',
+      MASTERCARD_KEY: !!env.MASTERCARD_KEY ? '✅ SET' : '❌ MISSING', 
+      MASTERCARD_CERT: !!env.MASTERCARD_CERT ? '✅ SET (optional)' : '⚠️ NOT SET (optional)',
+      MASTERCARD_KEY_ALIAS: !!env.MASTERCARD_KEY_ALIAS ? '✅ SET' : '⚠️ NOT SET',
+      MASTERCARD_KEYSTORE_PASSWORD: !!env.MASTERCARD_KEYSTORE_PASSWORD ? '✅ SET' : '⚠️ NOT SET'
     },
     status: 'unknown'
   };
@@ -293,7 +294,7 @@ router.get('/mastercard', async (req, res) => {
     const { mastercardApi } = await import('../services/mastercardApi');
 
     const healthStatus = {
-      environment: process.env.NODE_ENV || 'development',
+      environment: env.NODE_ENV,
       mastercardConfigured: mastercardApi.isServiceConfigured(),
       timestamp: new Date().toISOString()
     };

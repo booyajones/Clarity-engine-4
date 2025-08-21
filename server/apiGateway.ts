@@ -1,3 +1,4 @@
+import { env } from './config';
 /**
  * API Gateway - Routes requests to microservices via queues
  * This replaces direct service calls with queue-based async processing
@@ -286,7 +287,7 @@ export function queueMiddleware(
  * Feature flag for gradual microservices rollout
  */
 export function useMicroservices(): boolean {
-  return process.env.ENABLE_MICROSERVICES === 'true';
+  return env.ENABLE_MICROSERVICES;
 }
 
 console.log(`🚀 API Gateway initialized (Microservices: ${useMicroservices() ? 'ENABLED' : 'DISABLED'})`);

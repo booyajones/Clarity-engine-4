@@ -1,3 +1,4 @@
+import { env } from '../config';
 import crypto from 'crypto';
 import fs from 'fs';
 import { z } from 'zod';
@@ -31,37 +32,37 @@ function generateOAuthHeader(method: string, url: string, consumerKey: string, p
 const MASTERCARD_CONFIG = {
   sandbox: {
     baseUrl: 'https://sandbox.api.mastercard.com/track/search',
-    consumerKey: process.env.MASTERCARD_CONSUMER_KEY,
-    privateKey: process.env.MASTERCARD_KEY || process.env.MASTERCARD_PRIVATE_KEY,
-    certificate: process.env.MASTERCARD_CERT,
+    consumerKey: env.MASTERCARD_CONSUMER_KEY,
+    privateKey: env.MASTERCARD_KEY || env.MASTERCARD_PRIVATE_KEY,
+    certificate: env.MASTERCARD_CERT,
     privateKeyPath: './mastercard-private-key.pem',
-    p12Path: process.env.MASTERCARD_P12_PATH || './Finexio_MasterCard_Production_2025-production.p12',
-    keystorePassword: process.env.MASTERCARD_KEYSTORE_PASSWORD,
-    keystoreAlias: process.env.MASTERCARD_KEY_ALIAS || process.env.MASTERCARD_KEYSTORE_ALIAS,
+    p12Path: env.MASTERCARD_P12_PATH || './Finexio_MasterCard_Production_2025-production.p12',
+    keystorePassword: env.MASTERCARD_KEYSTORE_PASSWORD,
+    keystoreAlias: env.MASTERCARD_KEY_ALIAS || env.MASTERCARD_KEYSTORE_ALIAS,
     // Extract clientId from consumer key (part after the !)
-    clientId: process.env.MASTERCARD_CLIENT_ID || process.env.MASTERCARD_CONSUMER_KEY?.split('!')[1],
+    clientId: env.MASTERCARD_CLIENT_ID || env.MASTERCARD_CONSUMER_KEY?.split('!')[1],
   },
   production: {
     baseUrl: 'https://api.mastercard.com/track/search',
-    consumerKey: process.env.MASTERCARD_CONSUMER_KEY,
-    privateKey: process.env.MASTERCARD_KEY || process.env.MASTERCARD_PRIVATE_KEY,
-    certificate: process.env.MASTERCARD_CERT,
+    consumerKey: env.MASTERCARD_CONSUMER_KEY,
+    privateKey: env.MASTERCARD_KEY || env.MASTERCARD_PRIVATE_KEY,
+    certificate: env.MASTERCARD_CERT,
     privateKeyPath: './mastercard-private-key.pem',
-    p12Path: process.env.MASTERCARD_P12_PATH || './Finexio_MasterCard_Production_2025-production.p12',
-    keystorePassword: process.env.MASTERCARD_KEYSTORE_PASSWORD,
-    keystoreAlias: process.env.MASTERCARD_KEY_ALIAS || process.env.MASTERCARD_KEYSTORE_ALIAS,
+    p12Path: env.MASTERCARD_P12_PATH || './Finexio_MasterCard_Production_2025-production.p12',
+    keystorePassword: env.MASTERCARD_KEYSTORE_PASSWORD,
+    keystoreAlias: env.MASTERCARD_KEY_ALIAS || env.MASTERCARD_KEYSTORE_ALIAS,
     // Extract clientId from consumer key (part after the !)
-    clientId: process.env.MASTERCARD_CLIENT_ID || process.env.MASTERCARD_CONSUMER_KEY?.split('!')[1],
+    clientId: env.MASTERCARD_CLIENT_ID || env.MASTERCARD_CONSUMER_KEY?.split('!')[1],
   }
 };
 
 // Use production environment in production, sandbox in development
-const environment = process.env.NODE_ENV === 'production' ? 'production' : (process.env.MASTERCARD_ENVIRONMENT || 'sandbox');
+const environment = env.NODE_ENV === 'production' ? 'production' : env.MASTERCARD_ENVIRONMENT;
 const config = MASTERCARD_CONFIG[environment as keyof typeof MASTERCARD_CONFIG];
 
 // Log environment configuration at startup
 console.log('🌐 Mastercard Environment Configuration:', {
-  NODE_ENV: process.env.NODE_ENV,
+  NODE_ENV: env.NODE_ENV,
   selectedEnvironment: environment,
   baseUrl: config.baseUrl,
   hasConsumerKey: !!config.consumerKey,
@@ -205,7 +206,7 @@ export class MastercardApiService {
 
   private initializeCredentials(): boolean {
     console.log('🔐 Initializing Mastercard credentials...');
-    console.log(`   Environment: ${environment} (NODE_ENV=${process.env.NODE_ENV})`);
+    console.log(`   Environment: ${environment} (NODE_ENV=${env.NODE_ENV})`);
     console.log(`   API URL: ${config.baseUrl}`);
     
     // Check for consumer key

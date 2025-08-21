@@ -1,9 +1,10 @@
+import { env } from '../config';
 // Working Mastercard implementation that retrieves real data
 import fs from 'fs';
 import oauth from 'mastercard-oauth1-signer';
 
 const config = {
-  consumerKey: process.env.MASTERCARD_CONSUMER_KEY || '8Mg4p8h-0kO7rNwUlRfWhRyvQlzRphvEEujbNW8yabd509dd!e09833ad819042f695507b05bdd001230000000000000000',
+  consumerKey: env.MASTERCARD_CONSUMER_KEY || '8Mg4p8h-0kO7rNwUlRfWhRyvQlzRphvEEujbNW8yabd509dd!e09833ad819042f695507b05bdd001230000000000000000',
   clientId: 'e09833ad819042f695507b05bdd001230000000000000000',
   privateKeyPath: './mastercard-private-key.pem',
   baseUrl: 'https://api.mastercard.com/track/search'

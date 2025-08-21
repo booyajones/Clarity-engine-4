@@ -1,3 +1,4 @@
+import { env } from '../config';
 /**
  * Akkio Predictive Analytics Service
  * Handles payment method outcome predictions and data enrichment
@@ -72,13 +73,13 @@ class AkkioService {
   private isInitialized = false;
 
   constructor() {
-    if (!process.env.AKKIO_API_KEY) {
+    if (!env.AKKIO_API_KEY) {
       throw new Error('AKKIO_API_KEY environment variable is required');
     }
     
     // Initialize with REST API approach instead of SDK for now
     this.client = {
-      apiKey: process.env.AKKIO_API_KEY,
+      apiKey: env.AKKIO_API_KEY,
       baseUrl: 'https://api.akkio.com/api/v1' // Correct v2 API base URL
     };
   }

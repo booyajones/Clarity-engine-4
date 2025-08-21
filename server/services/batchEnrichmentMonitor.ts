@@ -1,3 +1,4 @@
+import { env } from '../config';
 /**
  * Batch Enrichment Monitor Service
  * 
@@ -720,7 +721,7 @@ class BatchEnrichmentMonitor {
 export const batchEnrichmentMonitor = new BatchEnrichmentMonitor();
 
 // Auto-start if not in test environment
-if (process.env.NODE_ENV !== 'test') {
+if (env.NODE_ENV !== 'test') {
   setTimeout(() => {
     console.log('Auto-starting batch enrichment monitor...');
     batchEnrichmentMonitor.start();

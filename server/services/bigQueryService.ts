@@ -1,3 +1,4 @@
+import { env } from '../config';
 import { BigQuery } from '@google-cloud/bigquery';
 import { z } from 'zod';
 
@@ -29,10 +30,10 @@ export class BigQueryService {
   private initialize() {
     try {
       // Check if we have BigQuery credentials
-      if (process.env.BIGQUERY_PROJECT_ID && process.env.BIGQUERY_CREDENTIALS) {
-        const credentials = JSON.parse(process.env.BIGQUERY_CREDENTIALS);
+      if (env.BIGQUERY_PROJECT_ID && env.BIGQUERY_CREDENTIALS) {
+        const credentials = JSON.parse(env.BIGQUERY_CREDENTIALS);
         this.bigquery = new BigQuery({
-          projectId: process.env.BIGQUERY_PROJECT_ID,
+          projectId: env.BIGQUERY_PROJECT_ID,
           credentials: credentials,
         });
         this.isConfigured = true;
@@ -84,8 +85,8 @@ export class BigQueryService {
       throw new Error('BigQuery service not configured');
     }
     
-    const dataset = process.env.BIGQUERY_DATASET || 'SE_Enrichment';
-    const table = process.env.BIGQUERY_TABLE || 'supplier';
+    const dataset = env.BIGQUERY_DATASET;
+    const table = env.BIGQUERY_TABLE;
     
     // Query with confidence scoring based on match quality
     const query = `
@@ -122,7 +123,7 @@ export class BigQueryService {
             WHEN LOWER(COALESCE(mastercard_business_name_c, '')) LIKE CONCAT('%', LOWER(@payeeName), '%') THEN 'Mastercard name contains payee name'
             ELSE 'Partial text match'
           END AS match_reasoning
-        FROM \`${process.env.BIGQUERY_PROJECT_ID}.${dataset}.${table}\`
+        FROM \`${env.BIGQUERY_PROJECT_ID}.${dataset}.${table}\`
         WHERE COALESCE(is_deleted, false) = false
           AND (
             LOWER(name) LIKE CONCAT('%', LOWER(@payeeName), '%')
@@ -195,8 +196,8 @@ export class BigQueryService {
       throw new Error('BigQuery service not configured');
     }
     
-    const dataset = process.env.BIGQUERY_DATASET || 'SE_Enrichment';
-    const table = process.env.BIGQUERY_TABLE || 'supplier';
+    const dataset = env.BIGQUERY_DATASET;
+    const table = env.BIGQUERY_TABLE;
     
     // Query to get DISTINCT suppliers with proper handling of duplicates
     const query = `
@@ -212,7 +213,7 @@ export class BigQueryService {
           primary_address_city_c,
           primary_address_state_c,
           ROW_NUMBER() OVER (PARTITION BY LOWER(name) ORDER BY id) as rn
-        FROM \`${process.env.BIGQUERY_PROJECT_ID}.${dataset}.${table}\`
+        FROM \`${env.BIGQUERY_PROJECT_ID}.${dataset}.${table}\`
         WHERE COALESCE(is_deleted, false) = false
           AND name IS NOT NULL
           AND LENGTH(TRIM(name)) > 0
@@ -285,8 +286,8 @@ export class BigQueryService {
     }
 
     try {
-      const dataset = process.env.BIGQUERY_DATASET || 'SE_Enrichment';
-      const table = process.env.BIGQUERY_MATCH_METRICS_TABLE || 'fuzzy_match_metrics';
+      const dataset = env.BIGQUERY_DATASET;
+      const table = env.BIGQUERY_MATCH_METRICS_TABLE;
       await this.bigquery.dataset(dataset).table(table).insert([record]);
     } catch (error) {
       console.error('Error logging match metric to BigQuery:', error);
