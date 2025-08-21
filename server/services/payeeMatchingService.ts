@@ -1,11 +1,9 @@
 import { env } from '../config';
-import { bigQueryService, type BigQueryPayeeResult } from './bigQueryService';
-import { fuzzyMatcher } from './fuzzyMatcher';
+import { bigQueryService } from './bigQueryService';
 import { storage } from '../storage';
 import type { PayeeClassification } from '@shared/schema';
-import { supplierCacheService } from './supplierCacheService';
-import { memoryOptimizedCache } from './memoryOptimizedSupplierCache';
 import { accurateMatchingService } from './accurateMatchingService';
+import { memoryOptimizedCache } from './memoryOptimizedSupplierCache';
 import OpenAI from 'openai';
 
 // Configuration interface for matching options
@@ -62,14 +60,23 @@ export class PayeeMatchingService {
         return { matched: false };
       }
 
-      const cacheKey = classification.cleanedName.toLowerCase();
+      // Check in-memory cache first to avoid duplicate work
+      // Include location fields so separate addresses don't share cached results
+      const cacheKey = [
+        classification.cleanedName.toLowerCase(),
+        classification.city?.toLowerCase(),
+        classification.state?.toLowerCase(),
+        classification.zipCode,
+      ]
+        .filter(Boolean)
+        .join('|');
       const cached = this.matchCache.get(cacheKey);
       if (cached) {
         return cached;
       }
 
       console.log('[PayeeMatching] Starting sophisticated Finexio match for:', classification.cleanedName);
-
+      
       // Try memory-optimized cache first
       const cacheMatch = await memoryOptimizedCache.matchSupplier(
         classification.cleanedName,
@@ -86,7 +93,10 @@ export class PayeeMatchingService {
         bestMatch = {
           payeeId: cacheMatch.supplier.payeeId || cacheMatch.supplier.id,
           payeeName: cacheMatch.supplier.payeeName,
-          normalizedName: cacheMatch.supplier.normalizedName || cacheMatch.supplier.mastercardBusinessName || undefined,
+          normalizedName:
+            cacheMatch.supplier.normalizedName ||
+            cacheMatch.supplier.mastercardBusinessName ||
+            undefined,
           category: cacheMatch.supplier.category || undefined,
           sicCode: cacheMatch.supplier.mcc || undefined,
           industry: cacheMatch.supplier.industry || undefined,
@@ -101,7 +111,16 @@ export class PayeeMatchingService {
         matchReasoning = `${cacheMatch.matchType} match via cache`;
       } else {
         // Fallback to sophisticated matching service
-        const matchResult = await accurateMatchingService.findBestMatch(classification.cleanedName);
+        const matchResult = await accurateMatchingService.findBestMatch(
+          classification.cleanedName,
+          10,
+          {
+            address: classification.address || undefined,
+            city: classification.city || undefined,
+            state: classification.state || undefined,
+            zip: classification.zipCode || undefined,
+          }
+        );
         console.log('[PayeeMatching] Sophisticated match result:', matchResult.bestMatch ? 'FOUND' : 'NO MATCH');
 
         if (!matchResult.bestMatch || matchResult.confidence < opts.confidenceThreshold) {
@@ -142,8 +161,10 @@ export class PayeeMatchingService {
           `${matchType} match with ${Math.round(finalConfidence * 100)}% confidence`;
       }
 
+      // Calculate Finexio-specific match score (0-100)
       const finexioMatchScore = Math.round(finalConfidence * 100);
 
+      // Apply confidence threshold (sophisticated matcher finds all matches, we filter here)
       if (finalConfidence >= opts.confidenceThreshold) {
         // Store the match in database only if classification has an ID
         if (classification.id) {
