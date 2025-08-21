@@ -42,25 +42,40 @@ export class AccurateMatchingService {
       };
     }
     
-    console.log(`[SophisticatedMatching] Found ${candidates.length} candidates, running 6-algorithm analysis...`);
+    // PERFORMANCE OPTIMIZATION: Limit candidates and add early exit
+    const maxCandidatesToAnalyze = 10; // Analyze only top 10 candidates for performance
+    const candidatesToAnalyze = candidates.slice(0, maxCandidatesToAnalyze);
     
-    // Run ALL candidates through sophisticated 6-algorithm fuzzy matching
-    const fuzzyMatches = await Promise.all(
-      candidates.map(async (supplier) => {
-        const supplierName = supplier.payeeName || '';
-        
-        // Run sophisticated fuzzy matching with ALL 6 algorithms
-        const fuzzyResult = await fuzzyMatcher.matchPayee(cleanInput, supplierName);
-        
-        return {
-          supplier,
-          score: fuzzyResult.confidence,
-          matchType: fuzzyResult.matchType,
-          reasoning: this.generateReasoning(fuzzyResult),
-          details: fuzzyResult.details
-        };
-      })
-    );
+    console.log(`[SophisticatedMatching] Found ${candidates.length} candidates, analyzing top ${candidatesToAnalyze.length}...`);
+    
+    // Run sophisticated 6-algorithm fuzzy matching with early exit
+    const fuzzyMatches = [];
+    
+    for (const supplier of candidatesToAnalyze) {
+      const supplierName = supplier.payeeName || '';
+      
+      // Quick pre-filter: Skip if names are vastly different in length
+      const lengthRatio = Math.min(cleanInput.length, supplierName.length) / 
+                         Math.max(cleanInput.length, supplierName.length);
+      if (lengthRatio < 0.3) continue; // Skip if one name is more than 3x longer
+      
+      // Run sophisticated fuzzy matching with ALL 6 algorithms
+      const fuzzyResult = await fuzzyMatcher.matchPayee(cleanInput, supplierName);
+      
+      fuzzyMatches.push({
+        supplier,
+        score: fuzzyResult.confidence,
+        matchType: fuzzyResult.matchType,
+        reasoning: this.generateReasoning(fuzzyResult),
+        details: fuzzyResult.details
+      });
+      
+      // EARLY EXIT: If we find a very high confidence match, stop searching
+      if (fuzzyResult.confidence >= 0.95) {
+        console.log(`[SophisticatedMatching] Found high-confidence match (${(fuzzyResult.confidence * 100).toFixed(1)}%), stopping search`);
+        break;
+      }
+    }
     
     // Sort by confidence score from fuzzy matching
     fuzzyMatches.sort((a, b) => b.score - a.score);
@@ -120,56 +135,60 @@ export class AccurateMatchingService {
    */
   private async findAllCandidates(cleanInput: string, normalizedInput: string, limit: number): Promise<CachedSupplier[]> {
     const candidates = new Map<string, CachedSupplier>();
+    const maxCandidatesPerStrategy = 5; // PERFORMANCE: Limit candidates per strategy
     
-    // Strategy 1: Exact and prefix matches
-    const exactAndPrefix = await this.findExactAndPrefixMatches(cleanInput, normalizedInput, limit);
+    // Strategy 1: Exact and prefix matches (PRIORITY)
+    const exactAndPrefix = await this.findExactAndPrefixMatches(cleanInput, normalizedInput, maxCandidatesPerStrategy);
     exactAndPrefix.forEach(c => {
       const id = c.payeeId || c.id || c.payeeName;
       if (id) candidates.set(id.toString(), c);
     });
     
-    // Strategy 2: Token-based search (for multi-word names)
-    const tokens = cleanInput.split(/\s+/).filter(t => t.length >= 3);
-    if (tokens.length > 0) {
-      const tokenMatches = await this.findTokenMatches(tokens, limit);
-      tokenMatches.forEach(c => {
-        const id = c.payeeId || c.id || c.payeeName;
-        if (id) candidates.set(id.toString(), c);
-      });
+    // If we already have good candidates, skip other strategies
+    if (candidates.size >= 10) {
+      return Array.from(candidates.values()).slice(0, 10);
     }
     
-    // Strategy 3: Substring matches (for typos and variations)
-    if (cleanInput.length >= 4) {
-      const substringMatches = await this.findSubstringMatches(cleanInput, limit);
-      substringMatches.forEach(c => {
-        const id = c.payeeId || c.id || c.payeeName;
-        if (id) candidates.set(id.toString(), c);
-      });
-    }
-    
-    // Strategy 4: Fuzzy variant matches for typos (CRITICAL for "Amazone" -> "Amazon")
-    if (cleanInput.length >= 4) {
-      // Try removing last 1-2 characters for typos
+    // Strategy 2: Fuzzy variant matches for typos (CRITICAL for "Amazone" -> "Amazon", "Microsft" -> "Microsoft")
+    if (cleanInput.length >= 4 && candidates.size < 10) {
+      // Try multiple fuzzy strategies for typos
       const fuzzyVariants = [
         cleanInput.substring(0, cleanInput.length - 1),  // Remove last char
-        cleanInput.substring(0, Math.max(3, cleanInput.length - 2))  // Remove last 2 chars
+        cleanInput.substring(0, Math.max(4, cleanInput.length - 2)),  // Remove last 2 chars
       ];
+      
+      // For single words, also try the first few characters to catch more typos
+      if (!cleanInput.includes(' ') && cleanInput.length >= 5) {
+        fuzzyVariants.push(cleanInput.substring(0, Math.min(5, cleanInput.length))); // First 5 chars
+      }
       
       console.log(`[SophisticatedMatching] Trying fuzzy variants for "${cleanInput}":`, fuzzyVariants);
       
       for (const variant of fuzzyVariants) {
-        if (variant.length >= 3) {
-          const fuzzyMatches = await this.findFuzzyVariantMatches(variant, limit);
+        if (variant.length >= 3 && candidates.size < 10) {
+          const fuzzyMatches = await this.findFuzzyVariantMatches(variant, 5); // Get top 5 per variant
           console.log(`[SophisticatedMatching] Found ${fuzzyMatches.length} matches for variant "${variant}"`);
           fuzzyMatches.forEach(c => {
             const id = c.payeeId || c.id || c.payeeName;
-            if (id) candidates.set(id.toString(), c);
+            if (id && candidates.size < 10) candidates.set(id.toString(), c);
           });
         }
       }
     }
     
-    return Array.from(candidates.values()).slice(0, limit * 2); // Return more candidates for fuzzy scoring
+    // Strategy 3: Token-based search (only if needed)
+    if (candidates.size < 5) {
+      const tokens = cleanInput.split(/\s+/).filter(t => t.length >= 4); // Increase min token length
+      if (tokens.length > 0) {
+        const tokenMatches = await this.findTokenMatches(tokens.slice(0, 2), 3); // Limit tokens and results
+        tokenMatches.forEach(c => {
+          const id = c.payeeId || c.id || c.payeeName;
+          if (id && candidates.size < 10) candidates.set(id.toString(), c);
+        });
+      }
+    }
+    
+    return Array.from(candidates.values()).slice(0, 10); // Hard limit to 10 candidates
   }
   
   /**
