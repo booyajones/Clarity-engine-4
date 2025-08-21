@@ -90,7 +90,7 @@ export interface IStorage {
   createExclusionLog(log: InsertExclusionLog): Promise<ExclusionLog>;
 
   // Delete operations
-  deleteUploadBatch(id: number): Promise<void>;
+  deleteUploadBatch(id: number): Promise<{ batchId: number; classificationsDeleted: number }>;
   deleteBatchClassifications(batchId: number): Promise<void>;
   
   // Payee matching operations
@@ -471,8 +471,20 @@ export class DatabaseStorage implements IStorage {
     return exclusionLog;
   }
 
-  async deleteUploadBatch(id: number): Promise<void> {
-    await db.delete(uploadBatches).where(eq(uploadBatches.id, id));
+  async deleteUploadBatch(id: number): Promise<{ batchId: number; classificationsDeleted: number }> {
+    return await db.transaction(async (tx) => {
+      const deletedClassifications = await tx
+        .delete(payeeClassifications)
+        .where(eq(payeeClassifications.batchId, id))
+        .returning({ id: payeeClassifications.id });
+
+      await tx.delete(uploadBatches).where(eq(uploadBatches.id, id));
+
+      return {
+        batchId: id,
+        classificationsDeleted: deletedClassifications.length,
+      };
+    });
   }
 
   async deleteBatchClassifications(batchId: number): Promise<void> {
