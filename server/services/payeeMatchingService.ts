@@ -29,7 +29,7 @@ export class PayeeMatchingService {
 
   async matchPayeeWithBigQuery(
     classification: PayeeClassification,
-    options: MatchingOptions = {}
+    options: MatchingOptions = {},
   ): Promise<{
     matched: boolean;
     matchedPayee?: {
