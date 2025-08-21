@@ -42,41 +42,50 @@ class FinexioModule implements PipelineModule {
       let matchedCount = 0;
       let processedCount = 0;
 
-      // Process each classification
-      for (const classification of classifications) {
-        try {
-          const result = await payeeMatchingService.matchPayeeWithBigQuery(
-            classification,
-            {
+      // Process classifications in concurrent batches
+      const batchSize = options.batchSize || 10;
+      for (let i = 0; i < classifications.length; i += batchSize) {
+        const batch = classifications.slice(i, i + batchSize);
+
+        const results = await Promise.allSettled(
+          batch.map((classification) =>
+            payeeMatchingService.matchPayeeWithBigQuery(classification, {
               enableFinexio: options.enableFinexio !== false,
-              confidenceThreshold: options.confidenceThreshold || 0.85
+              confidenceThreshold: options.confidenceThreshold || 0.85,
+            })
+          )
+        );
+
+        for (let j = 0; j < results.length; j++) {
+          const result = results[j];
+          const classification = batch[j];
+
+          if (result.status === 'fulfilled') {
+            processedCount++;
+
+            if (result.value.matched && result.value.matchedPayee) {
+              matchedCount++;
+
+              // Update classification with Finexio match
+              await storage.updatePayeeClassification(classification.id, {
+                finexioSupplierId: result.value.matchedPayee.payeeId,
+                finexioSupplierName: result.value.matchedPayee.payeeName,
+                finexioConfidence: result.value.matchedPayee.confidence,
+                finexioMatchType: result.value.matchedPayee.matchType,
+                finexioMatchReasoning: result.value.matchedPayee.matchReasoning,
+              });
             }
-          );
-
-          if (result.matched && result.matchedPayee) {
-            matchedCount++;
-            
-            // Update classification with Finexio match
-            await storage.updatePayeeClassification(classification.id, {
-              finexioSupplierId: result.matchedPayee.payeeId,
-              finexioSupplierName: result.matchedPayee.payeeName,
-              finexioConfidence: result.matchedPayee.confidence,
-              finexioMatchType: result.matchedPayee.matchType,
-              finexioMatchReasoning: result.matchedPayee.matchReasoning
-            });
+          } else {
+            processedCount++;
+            console.error(`Error matching payee ${classification.id}:`, result.reason);
           }
+        }
 
-          processedCount++;
-
-          // Update progress periodically
-          if (processedCount % 10 === 0) {
-            await storage.updateUploadBatch(batchId, {
-              progressMessage: `Matched ${matchedCount}/${processedCount} with Finexio suppliers...`
-            });
-          }
-        } catch (error) {
-          console.error(`Error matching payee ${classification.id}:`, error);
-          // Continue with next payee
+        // Update progress periodically
+        if (processedCount % 10 === 0 || processedCount === classifications.length) {
+          await storage.updateUploadBatch(batchId, {
+            progressMessage: `Matched ${matchedCount}/${processedCount} with Finexio suppliers...`,
+          });
         }
       }
 

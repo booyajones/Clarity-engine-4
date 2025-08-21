@@ -20,7 +20,7 @@ export class PayeeMatchingService {
   private openai: OpenAI | null = null;
   // Cache results to avoid redundant lookups across classifications
   private matchCache = new Map<string, any>();
-
+  
   constructor() {
     if (env.OPENAI_API_KEY) {
       this.openai = new OpenAI({ apiKey: env.OPENAI_API_KEY });
@@ -60,14 +60,23 @@ export class PayeeMatchingService {
         return { matched: false };
       }
 
-      const cacheKey = classification.cleanedName.toLowerCase();
+      // Check in-memory cache first to avoid duplicate work
+      // Include location fields so separate addresses don't share cached results
+      const cacheKey = [
+        classification.cleanedName.toLowerCase(),
+        classification.city?.toLowerCase(),
+        classification.state?.toLowerCase(),
+        classification.zipCode,
+      ]
+        .filter(Boolean)
+        .join('|');
       const cached = this.matchCache.get(cacheKey);
       if (cached) {
         return cached;
       }
 
       console.log('[PayeeMatching] Starting sophisticated Finexio match for:', classification.cleanedName);
-
+      
       // Try memory-optimized cache first
       const cacheMatch = await memoryOptimizedCache.matchSupplier(
         classification.cleanedName,
@@ -102,10 +111,20 @@ export class PayeeMatchingService {
         matchReasoning = `${cacheMatch.matchType} match via cache`;
       } else {
         // Fallback to sophisticated matching service
-        const matchResult = await accurateMatchingService.findBestMatch(classification.cleanedName);
+        const matchResult = await accurateMatchingService.findBestMatch(
+          classification.cleanedName,
+          10,
+          {
+            address: classification.address || undefined,
+            city: classification.city || undefined,
+            state: classification.state || undefined,
+            zip: classification.zipCode || undefined,
+          }
+        );
         console.log('[PayeeMatching] Sophisticated match result:', matchResult.bestMatch ? 'FOUND' : 'NO MATCH');
 
-        if (!matchResult.bestMatch) {
+        if (!matchResult.bestMatch || matchResult.confidence < opts.confidenceThreshold) {
+          console.log(`[PayeeMatching] No acceptable match found (confidence: ${matchResult.confidence}, threshold: ${opts.confidenceThreshold})`);
           const noMatch = { matched: false };
           this.matchCache.set(cacheKey, noMatch);
           return noMatch;
@@ -365,4 +384,3 @@ Respond with JSON:
 }
 
 export const payeeMatchingService = new PayeeMatchingService();
-
