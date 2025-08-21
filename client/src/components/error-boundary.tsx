@@ -42,12 +42,21 @@ export class ErrorBoundary extends Component<
     window.location.reload();
   };
 
+  handleReport = () => {
+    window.open("mailto:support@example.com?subject=App%20Error&body=Describe%20what%20happened", "_blank");
+  };
+
   render() {
     if (this.state.hasError) {
       return (
         <div className="flex h-screen flex-col items-center justify-center gap-4">
           <h1 className="text-2xl font-semibold">Something went wrong.</h1>
-          <Button onClick={this.handleReload}>Reload Page</Button>
+          <div className="flex gap-2">
+            <Button onClick={this.handleReload}>Reload Page</Button>
+            <Button variant="outline" onClick={this.handleReport}>
+              Report Issue
+            </Button>
+          </div>
         </div>
       );
     }
