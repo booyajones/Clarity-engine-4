@@ -151,13 +151,13 @@ export default function Home() {
 
   const [, forceUpdate] = useState({});
 
-  const { data: batches, isLoading, refetch: refetchBatches } = useQuery<UploadBatch[]>({
+  const { data: batches, isLoading, error: batchesError, refetch: refetchBatches } = useQuery<UploadBatch[], Error>({
     queryKey: ["/api/upload/batches"],
     refetchInterval: (query) => {
       // Only poll when there are active processing or enriching batches
       const hasProcessingBatches = query.state.data?.some(
-        batch => batch.status === "processing" || (batch.status as string) === "enriching" || 
-        batch.status === "pending" || 
+        batch => batch.status === "processing" || (batch.status as string) === "enriching" ||
+        batch.status === "pending" ||
         (!batch.completedAt && batch.status !== "failed" && batch.status !== "cancelled")
       );
       return hasProcessingBatches ? 5000 : false; // Poll every 5 seconds only when processing or enriching
@@ -182,7 +182,7 @@ export default function Home() {
   }, [batches]);
 
   // Dashboard stats query
-  const { data: dashboardStats } = useQuery<DashboardStats>({
+  const { data: dashboardStats, error: statsError, refetch: refetchStats } = useQuery<DashboardStats, Error>({
     queryKey: ["/api/dashboard/stats"],
     refetchInterval: 30000, // Refresh every 30 seconds
   });
@@ -651,11 +651,39 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Data loading errors */}
+      {batchesError && (
+        <Alert variant="destructive" className="mx-8 mt-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Failed to load batches</AlertTitle>
+          <AlertDescription className="flex flex-col gap-2">
+            <span>{batchesError.message}</span>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => refetchBatches()}>Retry</Button>
+              <span className="text-xs text-muted-foreground">or refresh the page</span>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+      {statsError && (
+        <Alert variant="destructive" className="mx-8 mt-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Failed to load dashboard stats</AlertTitle>
+          <AlertDescription className="flex flex-col gap-2">
+            <span>{statsError.message}</span>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => refetchStats()}>Retry</Button>
+              <span className="text-xs text-muted-foreground">or refresh the page</span>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Critical Mastercard Error Alert */}
-      {batches?.some(batch => 
-        batch.mastercardEnrichmentStatus === 'error' || 
+      {batches?.some(batch =>
+        batch.mastercardEnrichmentStatus === 'error' ||
         batch.mastercardEnrichmentStatus === 'failed' ||
-        (batch.currentStep && batch.currentStep.toLowerCase().includes('mastercard') && 
+        (batch.currentStep && batch.currentStep.toLowerCase().includes('mastercard') &&
          batch.currentStep.toLowerCase().includes('error'))
       ) && (
         <Alert className="mx-8 mt-4 border-red-500 bg-red-50">
