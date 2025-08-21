@@ -19,12 +19,14 @@ import { MastercardApiService } from './mastercardApi';
 import { akkioService } from './akkioService';
 import { supplierCacheService } from './supplierCacheService';
 
-const MONITOR_INTERVAL = 10000; // Check every 10 seconds
+const MONITOR_INTERVAL = 60000; // Check every 60 seconds (REDUCED from 10s for production)
 const BATCH_TIMEOUT = 30 * 60 * 1000; // 30 minutes timeout for stuck batches
+const MAX_CONCURRENT_BATCHES = 1; // Process only 1 batch at a time to save memory
 
 class BatchEnrichmentMonitor {
   private isRunning = false;
   private monitorInterval: NodeJS.Timeout | null = null;
+  private processingBatch = false; // PRODUCTION FIX: Track if processing to prevent overlap
 
   /**
    * Start monitoring batches for enrichment
@@ -64,11 +66,17 @@ class BatchEnrichmentMonitor {
    */
   private async monitorBatches() {
     try {
+      // PRODUCTION FIX: Skip if already processing to prevent memory overload
+      if (this.processingBatch) {
+        return;
+      }
+      
       // Get all batches that need enrichment processing
       // Simply get all batches in 'enriching' status and let the processing logic determine what to do
       const batches = await db.select()
         .from(uploadBatches)
-        .where(eq(uploadBatches.status, 'enriching'));
+        .where(eq(uploadBatches.status, 'enriching'))
+        .limit(MAX_CONCURRENT_BATCHES); // PRODUCTION FIX: Limit to 1 batch at a time
 
       for (const batch of batches) {
         // Skip cancelled batches - safety check
@@ -76,7 +84,9 @@ class BatchEnrichmentMonitor {
           console.log(`Skipping cancelled batch ${batch.id}`);
           continue;
         }
+        this.processingBatch = true; // PRODUCTION FIX: Mark as processing
         await this.processBatchEnrichment(batch);
+        this.processingBatch = false; // PRODUCTION FIX: Mark as done
       }
 
       // Also check for stuck batches

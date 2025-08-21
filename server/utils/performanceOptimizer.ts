@@ -1,9 +1,9 @@
 import { LRUCache } from 'lru-cache';
 
-// LRU Cache for frequently accessed data
+// LRU Cache for frequently accessed data - OPTIMIZED FOR PRODUCTION
 export const supplierCache = new LRUCache<string, any>({
-  max: 5000, // Maximum number of items
-  ttl: 1000 * 60 * 30, // 30 minutes TTL
+  max: 500, // REDUCED from 5000 for production memory optimization
+  ttl: 1000 * 60 * 10, // REDUCED to 10 minutes TTL (from 30)
   updateAgeOnGet: true,
   updateAgeOnHas: true,
   allowStale: true,
@@ -13,8 +13,8 @@ export const supplierCache = new LRUCache<string, any>({
     return JSON.stringify(value).length;
   },
   
-  // Maximum size in bytes (50MB)
-  maxSize: 50 * 1024 * 1024,
+  // Maximum size in bytes (5MB) - REDUCED from 50MB for production
+  maxSize: 5 * 1024 * 1024,
   
   // Dispose function to clean up resources
   dispose: (value, key) => {
@@ -22,17 +22,17 @@ export const supplierCache = new LRUCache<string, any>({
   }
 });
 
-// Classification cache for repeated queries
+// Classification cache for repeated queries - OPTIMIZED FOR PRODUCTION
 export const classificationCache = new LRUCache<string, any>({
-  max: 1000,
-  ttl: 1000 * 60 * 60 * 24, // 24 hours TTL
+  max: 200, // REDUCED from 1000 for production memory optimization
+  ttl: 1000 * 60 * 60, // REDUCED to 1 hour TTL (from 24 hours)
   updateAgeOnGet: true
 });
 
-// Query result cache
+// Query result cache - OPTIMIZED FOR PRODUCTION
 export const queryCache = new LRUCache<string, any>({
-  max: 100,
-  ttl: 1000 * 60 * 5, // 5 minutes TTL
+  max: 50, // REDUCED from 100 for production memory optimization
+  ttl: 1000 * 60 * 2, // REDUCED to 2 minutes TTL (from 5)
 });
 
 // Database connection pool optimization

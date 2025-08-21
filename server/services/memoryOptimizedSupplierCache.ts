@@ -11,9 +11,9 @@ import { eq, sql, ilike, or, and } from 'drizzle-orm';
 export class MemoryOptimizedSupplierCache {
   private static instance: MemoryOptimizedSupplierCache;
   
-  // Small LRU cache for recently accessed suppliers (max 1000 entries)
+  // Small LRU cache for recently accessed suppliers (max 100 entries for production)
   private recentCache: Map<string, any> = new Map();
-  private maxCacheSize = 1000;
+  private maxCacheSize = 100; // REDUCED from 1000 for production memory optimization
   
   static getInstance(): MemoryOptimizedSupplierCache {
     if (!this.instance) {
