@@ -26,6 +26,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { CardSkeleton } from "@/components/ui/card-skeleton";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ProgressTracker } from "@/components/progress-tracker";
 import { ClassificationViewer } from "@/components/classification-viewer";
 import { KeywordManager } from "@/components/keyword-manager";
@@ -1023,6 +1026,10 @@ export default function Home() {
               Processing Pipeline Status
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              {isLoading ? (
+                Array.from({ length: 5 }).map((_, i) => <CardSkeleton key={i} />)
+              ) : (
+                <>
               {/* Stage 1: Classification */}
               <Card className="hover:shadow-xl transition-all border-2 border-blue-100 bg-gradient-to-br from-blue-50 to-white">
                 <CardHeader className="pb-3">
@@ -1277,11 +1284,17 @@ export default function Home() {
                   </div>
                 </CardContent>
               </Card>
+                </>
+              )}
             </div>
           </div>
 
           {/* System Performance Overview */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            {isLoading ? (
+              Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={i} />)
+            ) : (
+              <>
             {/* Today's Activity */}
             <Card className="hover:shadow-lg transition-shadow">
               <CardHeader className="pb-3">
@@ -1293,11 +1306,11 @@ export default function Home() {
               <CardContent>
                 <div className="text-2xl font-bold">
                   {(() => {
-                    const today = new Date();
-                    today.setHours(0,0,0,0);
-                    const todayJobs = batches?.filter(b => new Date(b.createdAt) >= today) || [];
-                    const totalRecords = todayJobs.reduce((sum, b) => sum + b.totalRecords, 0);
-                    return totalRecords.toLocaleString();
+                    const today = new Date()
+                    today.setHours(0,0,0,0)
+                    const todayJobs = batches?.filter(b => new Date(b.createdAt) >= today) || []
+                    const totalRecords = todayJobs.reduce((sum, b) => sum + b.totalRecords, 0)
+                    return totalRecords.toLocaleString()
                   })()}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -1306,10 +1319,10 @@ export default function Home() {
                 <div className="mt-2 flex items-center gap-2">
                   <Badge variant="outline" className="text-xs">
                     {(() => {
-                      const today = new Date();
-                      today.setHours(0,0,0,0);
-                      const todayJobs = batches?.filter(b => new Date(b.createdAt) >= today) || [];
-                      return `${todayJobs.length} jobs`;
+                      const today = new Date()
+                      today.setHours(0,0,0,0)
+                      const todayJobs = batches?.filter(b => new Date(b.createdAt) >= today) || []
+                      return `${todayJobs.length} jobs`
                     })()}
                   </Badge>
                 </div>
@@ -1327,10 +1340,10 @@ export default function Home() {
               <CardContent>
                 <div className="text-2xl font-bold">
                   {(() => {
-                    const successfulJobs = completedBatches?.filter(b => b.status === 'completed').length || 0;
-                    const totalJobs = batches?.length || 0;
-                    if (totalJobs === 0) return "N/A";
-                    return `${Math.round((successfulJobs / totalJobs) * 100)}%`;
+                    const successfulJobs = completedBatches?.filter(b => b.status === 'completed').length || 0
+                    const totalJobs = batches?.length || 0
+                    if (totalJobs === 0) return "N/A"
+                    return `${Math.round((successfulJobs / totalJobs) * 100)}%`
                   })()}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -1395,16 +1408,21 @@ export default function Home() {
                 </div>
               </CardContent>
             </Card>
+              </>
+            )}
           </div>
 
           {/* Current Activity */}
+          {isLoading ? (
+            <CardSkeleton />
+          ) : (
           <Card className="hover:shadow-lg transition-shadow mb-4">
             <CardHeader>
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Activity className="h-4 w-4 text-green-600" />
                 Current Activity
                 </CardTitle>
-              </CardHeader>
+            </CardHeader>
               <CardContent>
                 <div className="space-y-3">
                   {processingBatches.length > 0 ? (
@@ -1513,6 +1531,7 @@ export default function Home() {
                 </div>
               </CardContent>
             </Card>
+          )}
 
 
 
@@ -1605,9 +1624,9 @@ export default function Home() {
               )}
             </div>
             {selectedFile && !previewData && isUploading && (
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Analyzing file structure...</span>
+              <div className="space-y-2 w-full">
+                <Skeleton className="h-4 w-1/3" />
+                <Skeleton className="h-4 w-full" />
               </div>
             )}
             
@@ -1914,7 +1933,9 @@ export default function Home() {
           </div>
         </CardHeader>
         <CardContent>
-          {!batches || batches.length === 0 ? (
+          {isLoading ? (
+            <TableSkeleton columns={9} rows={5} />
+          ) : !batches || batches.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <FileSpreadsheet className="h-12 w-12 text-gray-300 mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No classification history</h3>
@@ -1923,7 +1944,7 @@ export default function Home() {
               </p>
             </div>
           ) : (
-            <Table>
+            <Table className="animate-fade-in">
               <TableHeader>
                 <TableRow>
                   <TableHead>File Name</TableHead>
