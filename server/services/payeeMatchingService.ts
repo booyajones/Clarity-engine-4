@@ -1,10 +1,7 @@
 import { env } from '../config';
-import { bigQueryService, type BigQueryPayeeResult } from './bigQueryService';
-import { fuzzyMatcher } from './fuzzyMatcher';
+import { bigQueryService } from './bigQueryService';
 import { storage } from '../storage';
 import type { PayeeClassification } from '@shared/schema';
-import { supplierCacheService } from './supplierCacheService';
-import { memoryOptimizedCache } from './memoryOptimizedSupplierCache';
 import { accurateMatchingService } from './accurateMatchingService';
 import OpenAI from 'openai';
 
@@ -66,12 +63,12 @@ export class PayeeMatchingService {
       const matchResult = await accurateMatchingService.findBestMatch(classification.cleanedName);
       console.log('[PayeeMatching] Sophisticated match result:', matchResult.bestMatch ? 'FOUND' : 'NO MATCH');
       
-      // If no match found with sophisticated matching, return early
-      if (!matchResult.bestMatch || matchResult.confidence < opts.confidenceThreshold) {
-        console.log(`[PayeeMatching] No acceptable match found (confidence: ${matchResult.confidence}, threshold: ${opts.confidenceThreshold})`);
+      // If no deterministic match found, return early
+      if (!matchResult.bestMatch) {
+        console.log('[PayeeMatching] No deterministic match found');
         return { matched: false };
       }
-      
+
       // Get the best match and its details
       const topMatch = matchResult.matches[0];
       if (!topMatch) {
@@ -103,68 +100,89 @@ export class PayeeMatchingService {
       
       // Use the sophisticated matcher's confidence and reasoning
       let finalConfidence = bestMatchResult.confidence;
-      let matchReasoning = bestMatchResult.reasoning || 
+      let matchReasoning =
+        bestMatchResult.reasoning ||
         `${bestMatchResult.matchType} match with ${Math.round(finalConfidence * 100)}% confidence`;
       let matchType = bestMatchResult.matchType || 'sophisticated_fuzzy';
-      
-      // The sophisticated matcher already handles all 6 algorithms internally
-      
-      // Calculate Finexio-specific match score (0-100)
-      const finexioMatchScore = Math.round(finalConfidence * 100);
-      
-      // Apply confidence threshold (sophisticated matcher finds all matches, we filter here)
-      if (finalConfidence >= opts.confidenceThreshold) {
-        // Store the match in database only if classification has an ID
-        if (classification.id) {
-          await storage.createPayeeMatch({
-            classificationId: classification.id,
-            bigQueryPayeeId: bestMatch.payeeId,
-            bigQueryPayeeName: bestMatch.payeeName,
-            matchConfidence: finalConfidence,
-            finexioMatchScore: finexioMatchScore,
-            paymentType: bestMatch.paymentType,
-            matchType: matchType,
-            matchReasoning: matchReasoning,
-            matchDetails: {
-              originalConfidence: bestMatch.confidence,
-              city: bestMatch.city,
-              state: bestMatch.state,
-              mastercardBusinessName: bestMatch.normalizedName
-            },
-          });
-        
-          // Update classification with matched payee info if available
-          if (bestMatch.category || bestMatch.sicCode) {
-            await storage.updatePayeeClassification(classification.id, {
-              sicCode: bestMatch.sicCode || classification.sicCode,
-              sicDescription: bestMatch.category || classification.sicDescription,
-            });
+
+      // If deterministic confidence is below threshold, try AI enhancement
+      if (finalConfidence < opts.confidenceThreshold) {
+        console.log(
+          `[PayeeMatching] Confidence ${finalConfidence} below threshold ${opts.confidenceThreshold}`
+        );
+        if (opts.enableAI && finalConfidence >= (opts.aiConfidenceThreshold ?? 0)) {
+          const aiResult = await this.enhanceWithAI(
+            classification.cleanedName,
+            bestMatch.payeeName,
+            finalConfidence,
+            matchReasoning
+          );
+          finalConfidence = aiResult.confidence;
+          matchReasoning = aiResult.reasoning;
+          if (aiResult.shouldMatch) {
+            matchType = 'ai_enhanced';
+          }
+          if (!aiResult.shouldMatch || finalConfidence < opts.confidenceThreshold) {
+            return { matched: false };
           }
         } else {
-          console.log('[PayeeMatching] Skipping database save - no classification ID (single classify endpoint)');
+          return { matched: false };
         }
-        
-        return {
-          matched: true,
-          matchedPayee: {
-            payeeId: bestMatch.payeeId,
-            payeeName: bestMatch.payeeName,
-            confidence: finalConfidence,
-            finexioMatchScore: finexioMatchScore,
-            paymentType: bestMatch.paymentType,
-            matchType: matchType,
-            matchReasoning: matchReasoning,
-            matchDetails: {
-              originalConfidence: bestMatch.confidence,
-              city: bestMatch.city,
-              state: bestMatch.state,
-              mastercardBusinessName: bestMatch.normalizedName
-            },
-          },
-        };
       }
-      
-      return { matched: false };
+
+      // The sophisticated matcher already handles all 6 algorithms internally
+
+      // Calculate Finexio-specific match score (0-100)
+      const finexioMatchScore = Math.round(finalConfidence * 100);
+
+      // Store the match in database only if classification has an ID
+      if (classification.id) {
+        await storage.createPayeeMatch({
+          classificationId: classification.id,
+          bigQueryPayeeId: bestMatch.payeeId,
+          bigQueryPayeeName: bestMatch.payeeName,
+          matchConfidence: finalConfidence,
+          finexioMatchScore: finexioMatchScore,
+          paymentType: bestMatch.paymentType,
+          matchType: matchType,
+          matchReasoning: matchReasoning,
+          matchDetails: {
+            originalConfidence: bestMatch.confidence,
+            city: bestMatch.city,
+            state: bestMatch.state,
+            mastercardBusinessName: bestMatch.normalizedName
+          },
+        });
+
+        // Update classification with matched payee info if available
+        if (bestMatch.category || bestMatch.sicCode) {
+          await storage.updatePayeeClassification(classification.id, {
+            sicCode: bestMatch.sicCode || classification.sicCode,
+            sicDescription: bestMatch.category || classification.sicDescription,
+          });
+        }
+      } else {
+        console.log('[PayeeMatching] Skipping database save - no classification ID (single classify endpoint)');
+      }
+
+      return {
+        matched: true,
+        matchedPayee: {
+          payeeId: bestMatch.payeeId,
+          payeeName: bestMatch.payeeName,
+          confidence: finalConfidence,
+          finexioMatchScore: finexioMatchScore,
+          paymentType: bestMatch.paymentType,
+          matchType: matchType,
+          matchReasoning: matchReasoning,
+          matchDetails: {
+            originalConfidence: bestMatch.confidence,
+            city: bestMatch.city,
+            state: bestMatch.state,
+            mastercardBusinessName: bestMatch.normalizedName
+          },
+        },
+      };
     } catch (error) {
       console.error('Error in payee matching:', error);
       return { matched: false };
