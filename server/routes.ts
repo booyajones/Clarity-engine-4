@@ -24,6 +24,7 @@ import { mastercardSearchRequests } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 import { mastercardApi } from "./services/mastercardApi";
 import apiGateway from "./apiGateway";
+import logger from "./logger";
 // Simple address field detection function
 function detectAddressFields(headers: string[]): Record<string, string> {
   const addressMapping: Record<string, string> = {};
@@ -78,7 +79,7 @@ function detectAddressFields(headers: string[]): Record<string, string> {
   // Always set country to USA for Mastercard
   addressMapping.country = 'USA';
   
-  console.log('🗺️ Auto-detected address fields:', addressMapping);
+  logger.info('🗺️ Auto-detected address fields:', addressMapping);
   return addressMapping;
 }
 
@@ -236,11 +237,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Test database connection on startup
   try {
-    console.log("Testing database connection...");
+    logger.info("Testing database connection...");
     await storage.getClassificationStats();
-    console.log("Database connection successful");
+    logger.info("Database connection successful");
   } catch (error) {
-    console.error("Database connection failed:", error);
+    logger.error("Database connection failed:", error);
     // Don't crash the server, but log the error
   }
 
@@ -349,7 +350,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
     } catch (error) {
-      console.error("Error fetching dashboard stats:", error);
+      logger.error("Error fetching dashboard stats:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -378,7 +379,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(performance);
     } catch (error) {
-      console.error("Error fetching batch performance:", error);
+      logger.error("Error fetching batch performance:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -419,7 +420,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .on("error", reject);
         });
       } else if (ext === ".xlsx" || ext === ".xls") {
-        console.log(`Processing Excel file: ${filePath}, extension: ${ext}`);
+        logger.info(`Processing Excel file: ${filePath}, extension: ${ext}`);
 
         const workbookReader = new ExcelJS.stream.xlsx.WorkbookReader(filePath);
         let rowIndex = 0;
@@ -453,11 +454,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Auto-detect address fields for Google validation
       let addressFields: Record<string, string> = {};
       try {
-        console.log('🔍 Auto-detecting address fields...');
+        logger.info('🔍 Auto-detecting address fields...');
         addressFields = detectAddressFields(headers);
-        console.log('✅ Address fields detected:', addressFields);
+        logger.info('✅ Address fields detected:', addressFields);
       } catch (error) {
-        console.error('❌ Address field detection failed:', error);
+        logger.error('❌ Address field detection failed:', error);
         // Continue without auto-detection if it fails
       }
 
@@ -470,7 +471,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         addressFields // Send detected address fields
       });
     } catch (error) {
-      console.error("Error previewing file:", error);
+      logger.error("Error previewing file:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -491,7 +492,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const predictions = await fieldPredictionService.predictFields(headers, sampleData);
       res.json(predictions);
     } catch (error) {
-      console.error('Field prediction API error:', error);
+      logger.error('Field prediction API error:', error);
       throw new AppError("Field prediction analysis failed", 500);
     }
   }));
@@ -532,7 +533,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         filename: batch.filename
       });
     } catch (error) {
-      console.error("Error processing file:", error);
+      logger.error("Error processing file:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -572,7 +573,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "File uploaded successfully and processing has started"
       });
     } catch (error) {
-      console.error("Upload error:", error);
+      logger.error("Upload error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -584,7 +585,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const batches = await storage.getUserUploadBatches(userId);
       res.json(batches);
     } catch (error) {
-      console.error("Error fetching upload batches:", error);
+      logger.error("Error fetching upload batches:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -601,7 +602,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(batch);
     } catch (error) {
-      console.error("Error fetching batch:", error);
+      logger.error("Error fetching batch:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -613,7 +614,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const classifications = await storage.getBatchClassifications(batchId);
       res.json(classifications);
     } catch (error) {
-      console.error("Error fetching batch classifications:", error);
+      logger.error("Error fetching batch classifications:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -625,7 +626,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const classifications = await storage.getPendingReviewClassifications(limit);
       res.json(classifications);
     } catch (error) {
-      console.error("Error fetching pending review classifications:", error);
+      logger.error("Error fetching pending review classifications:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -646,7 +647,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const classification = await storage.updatePayeeClassification(id, updates);
       res.json(classification);
     } catch (error) {
-      console.error("Error updating classification:", error);
+      logger.error("Error updating classification:", error);
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: "Invalid request data", details: error.errors });
       }
@@ -658,7 +659,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/upload/batches/:id", async (req, res) => {
     try {
       const batchId = parseInt(req.params.id);
-      console.log(`Deleting batch ${batchId} and stopping all background processes...`);
+      logger.info(`Deleting batch ${batchId} and stopping all background processes...`);
       
       // 1. First cancel all active processes (same as cancel operation)
       try {
@@ -684,7 +685,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           );
         
         if (activeSearches.length > 0) {
-          console.log(`Cancelling ${activeSearches.length} active Mastercard searches before deletion`);
+          logger.info(`Cancelling ${activeSearches.length} active Mastercard searches before deletion`);
           await db.update(mastercardSearchRequests)
             .set({ 
               status: 'cancelled',
@@ -698,16 +699,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .where(eq(mastercardSearchRequests.batchId, batchId));
           
       } catch (error) {
-        console.error('Error cancelling background processes before deletion:', error);
+        logger.error('Error cancelling background processes before deletion:', error);
       }
       
       // 2. Delete the batch and cascade classifications
       const result = await storage.deleteUploadBatch(batchId);
 
-      console.log(`Batch ${batchId} successfully deleted with all background processes stopped`);
+      logger.info(`Batch ${batchId} successfully deleted with all background processes stopped`);
       res.json({ success: true, ...result });
     } catch (error) {
-      console.error("Error deleting batch:", error);
+      logger.error("Error deleting batch:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -736,7 +737,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(summary);
     } catch (error) {
-      console.error("Error deleting all batches:", error);
+      logger.error("Error deleting all batches:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -745,7 +746,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/upload/batches/:id/cancel", async (req, res) => {
     try {
       const batchId = parseInt(req.params.id);
-      console.log(`Cancelling batch ${batchId} and all associated background processes...`);
+      logger.info(`Cancelling batch ${batchId} and all associated background processes...`);
       
       // 1. Cancel the classification job
       const { optimizedClassificationService } = await import('./services/classificationV2');
@@ -772,7 +773,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Cancel each search
         if (activeSearches.length > 0) {
-          console.log(`Cancelling ${activeSearches.length} active Mastercard searches for batch ${batchId}`);
+          logger.info(`Cancelling ${activeSearches.length} active Mastercard searches for batch ${batchId}`);
           await db.update(mastercardSearchRequests)
             .set({ 
               status: 'cancelled',
@@ -790,7 +791,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             );
         }
       } catch (error) {
-        console.error('Error cancelling Mastercard searches:', error);
+        logger.error('Error cancelling Mastercard searches:', error);
       }
       
       // 3. Stop any Akkio processing
@@ -803,7 +804,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           })
           .where(eq(payeeClassifications.batchId, batchId));
       } catch (error) {
-        console.error('Error cancelling Akkio processing:', error);
+        logger.error('Error cancelling Akkio processing:', error);
       }
       
       // 4. Update batch status to cancelled and mark all enrichment phases as cancelled
@@ -817,10 +818,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         akkioEnrichmentStatus: "cancelled"
       });
       
-      console.log(`Batch ${batchId} successfully cancelled with all background processes stopped`);
+      logger.info(`Batch ${batchId} successfully cancelled with all background processes stopped`);
       res.json(batch);
     } catch (error) {
-      console.error("Error cancelling batch:", error);
+      logger.error("Error cancelling batch:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -857,7 +858,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         completedAt: batch.completedAt
       });
     } catch (error) {
-      console.error("Error getting batch progress:", error);
+      logger.error("Error getting batch progress:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1015,7 +1016,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
     } catch (error) {
-      console.error("Error fetching classifications:", error);
+      logger.error("Error fetching classifications:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1051,7 +1052,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
     } catch (error) {
-      console.error("Error checking Mastercard status:", error);
+      logger.error("Error checking Mastercard status:", error);
       res.status(500).json({ error: "Failed to check Mastercard status" });
     }
   });
@@ -1071,7 +1072,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const status = await mastercardApi.getSearchStatus(searchId);
       res.json(status);
     } catch (error) {
-      console.error("Error checking Mastercard search status:", error);
+      logger.error("Error checking Mastercard search status:", error);
       res.status(500).json({ 
         error: "Failed to check search status",
         status: "FAILED"
@@ -1106,7 +1107,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
     } catch (error) {
-      console.error("Error getting Mastercard search results:", error);
+      logger.error("Error getting Mastercard search results:", error);
       res.status(500).json({ 
         success: false,
         error: "Failed to get search results" 
@@ -1261,7 +1262,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.send(csvContent);
     } catch (error) {
-      console.error("Error exporting classifications:", error);
+      logger.error("Error exporting classifications:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1271,7 +1272,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { batchId, filePath, payeeColumn } = req.body;
       
-      console.log(`Testing classification for batch ${batchId}, file: ${filePath}`);
+      logger.info(`Testing classification for batch ${batchId}, file: ${filePath}`);
       
       // Directly call the classification service
       const { optimizedClassificationService } = await import("./services/classificationV2.js");
@@ -1279,7 +1280,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ success: true, message: "Classification test started" });
     } catch (error) {
-      console.error("Test classification error:", error);
+      logger.error("Test classification error:", error);
       res.status(500).json({ error: (error as Error).message });
     }
   });
@@ -1365,7 +1366,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
             };
           }
         } catch (error) {
-          console.error("Finexio matching error:", error);
+          logger.error("Finexio matching error:", error);
         }
       }
       
@@ -1386,7 +1387,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
 
       res.json(result);
     } catch (error) {
-      console.error("Single classification error:", error);
+      logger.error("Single classification error:", error);
       res.status(500).json({ error: (error as Error).message });
     }
   });
@@ -1397,7 +1398,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
       const rules = await storage.getClassificationRules();
       res.json(rules);
     } catch (error) {
-      console.error("Error fetching classification rules:", error);
+      logger.error("Error fetching classification rules:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1427,7 +1428,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
         apiVersion: "v1"
       });
     } catch (error) {
-      console.error("Error getting Mastercard status:", error);
+      logger.error("Error getting Mastercard status:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1440,7 +1441,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
       const keywords = await storage.getExclusionKeywords();
       res.json(keywords);
     } catch (error) {
-      console.error("Error fetching keywords:", error);
+      logger.error("Error fetching keywords:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1467,7 +1468,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
         keywords: results 
       });
     } catch (error) {
-      console.error("Error adding keywords:", error);
+      logger.error("Error adding keywords:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1481,7 +1482,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
       const updatedKeyword = await storage.updateExclusionKeyword(id, updates);
       res.json(updatedKeyword);
     } catch (error) {
-      console.error("Error updating keyword:", error);
+      logger.error("Error updating keyword:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1493,7 +1494,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
       await storage.deleteExclusionKeyword(id);
       res.json({ success: true });
     } catch (error) {
-      console.error("Error deleting keyword:", error);
+      logger.error("Error deleting keyword:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1512,7 +1513,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
       
       res.json(results);
     } catch (error) {
-      console.error("Error testing keyword:", error);
+      logger.error("Error testing keyword:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1531,7 +1532,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
       
       res.json(result);
     } catch (error) {
-      console.error("Error checking exclusion:", error);
+      logger.error("Error checking exclusion:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1549,7 +1550,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
         jobs: status
       });
     } catch (error) {
-      console.error("Error getting scheduler status:", error);
+      logger.error("Error getting scheduler status:", error);
       res.status(500).json({ error: "Failed to get scheduler status" });
     }
   });
@@ -1558,7 +1559,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
   app.post("/api/scheduler/refresh-cache", async (req, res) => {
     try {
       const { schedulerService } = await import("./services/schedulerService");
-      console.log("🔄 Manual cache refresh triggered via API");
+      logger.info("🔄 Manual cache refresh triggered via API");
       
       const result = await schedulerService.triggerSupplierRefresh();
       
@@ -1568,7 +1569,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
         result
       });
     } catch (error) {
-      console.error("Error triggering cache refresh:", error);
+      logger.error("Error triggering cache refresh:", error);
       res.status(500).json({ error: "Failed to trigger cache refresh" });
     }
   });
@@ -1591,7 +1592,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
   
   // Single payee classification endpoint - NOW WITH PROGRESSIVE RESULTS
   app.post("/api/classify-single", classificationLimiter, validateRequestBody(classifySingleSchema), async (req, res) => {
-    console.log('Single classification request received:', JSON.stringify(req.body, null, 2));
+    logger.info('Single classification request received:', JSON.stringify(req.body, null, 2));
     try {
       const { payeeName, address, city, state, zipCode, matchingOptions } = req.body;
 
@@ -1617,7 +1618,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
       );
       
       // Return immediate response with job ID for polling
-      console.log(`Progressive classification started with job ID: ${jobId}`);
+      logger.info(`Progressive classification started with job ID: ${jobId}`);
       res.json({
         jobId,
         status: 'processing',
@@ -1630,7 +1631,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
       });
       
     } catch (error) {
-      console.error("Single classification error:", error);
+      logger.error("Single classification error:", error);
       res.status(500).json({ error: (error as Error).message });
     }
   });
@@ -1656,7 +1657,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
         error: job.error
       });
     } catch (error) {
-      console.error("Status check error:", error);
+      logger.error("Status check error:", error);
       res.status(500).json({ error: (error as Error).message });
     }
   });
@@ -1692,7 +1693,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
         responsePayload: searchData.responsePayload
       });
     } catch (error) {
-      console.error("Mastercard search status error:", error);
+      logger.error("Mastercard search status error:", error);
       res.status(500).json({ error: (error as Error).message });
     }
   });
@@ -1709,7 +1710,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
       
       res.json(searches);
     } catch (error) {
-      console.error("Error fetching Mastercard searches:", error);
+      logger.error("Error fetching Mastercard searches:", error);
       res.status(500).json({ error: (error as Error).message });
     }
   });
@@ -1737,7 +1738,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
             const extractedName = match[1].replace(/[,.].*$/, '').trim();
             if (extractedName.length > 0 && extractedName !== payeeName) {
               cleanedName = extractedName;
-              console.log(`Detected name correction/similarity: "${payeeName}" → "${cleanedName}"`);
+              logger.info(`Detected name correction/similarity: "${payeeName}" → "${cleanedName}"`);
               break;
             }
           }
@@ -1751,7 +1752,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
           const extractedName = businessMatch[1].trim();
           if (extractedName !== payeeName) {
             cleanedName = extractedName;
-            console.log(`Extracted well-known business name: "${cleanedName}"`);
+            logger.info(`Extracted well-known business name: "${cleanedName}"`);
           }
         }
       }
@@ -1767,7 +1768,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
         
         if (cleanedName === payeeName.trim() && result.payeeType === 'Business' && result.confidence >= 0.90) {
           // No correction found, but high confidence business - try fuzzy search
-          console.log(`No AI correction found for business "${payeeName}", will try fuzzy matching`);
+          logger.info(`No AI correction found for business "${payeeName}", will try fuzzy matching`);
           
           // Also try the original name in case fuzzy matching finds something
           if (!namesToTry.includes(payeeName.trim())) {
@@ -1856,14 +1857,14 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
         zipCode: zipCode || ''
       };
       
-      console.log('Address validation check:', {
+      logger.info('Address validation check:', {
         enabled: matchingOptions?.enableGoogleAddressValidation,
         hasAddress: !!(address || city || state || zipCode),
         address, city, state, zipCode
       });
       
       if (matchingOptions?.enableGoogleAddressValidation && (address || city || state || zipCode)) {
-        console.log('Performing address validation...');
+        logger.info('Performing address validation...');
         try {
           const { addressValidationService } = await import("./services/addressValidationService");
           
@@ -1912,7 +1913,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
           
           if (validationResult.intelligentEnhancement?.used && validationResult.intelligentEnhancement.enhancedAddress) {
             const enhanced = validationResult.intelligentEnhancement.enhancedAddress;
-            console.log(`OpenAI enhanced address: ${validationResult.intelligentEnhancement.reason}`);
+            logger.info(`OpenAI enhanced address: ${validationResult.intelligentEnhancement.reason}`);
             
             // Use enhanced components
             finalComponents = {
@@ -1947,7 +1948,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
             state: finalComponents.state || cleanedAddressData.state,
             zipCode: finalComponents.postalCode || cleanedAddressData.zipCode
           };
-          console.log('Updated address data with validated/enhanced components:', cleanedAddressData);
+          logger.info('Updated address data with validated/enhanced components:', cleanedAddressData);
         } else {
           addressValidation = {
             status: 'failed',
@@ -1955,7 +1956,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
           };
         }
         } catch (error) {
-          console.error('Address validation error:', error);
+          logger.error('Address validation error:', error);
           addressValidation = {
             status: 'error',
             error: error instanceof Error ? error.message : 'Address validation failed unexpectedly'
@@ -1973,9 +1974,9 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
         
         try {
           const searchName = cleanedName || payeeName.trim();
-          console.log('=== STARTING ASYNC MASTERCARD SEARCH ===');
-          console.log('Searching for company:', searchName);
-          console.log('Address data:', cleanedAddressData);
+          logger.info('=== STARTING ASYNC MASTERCARD SEARCH ===');
+          logger.info('Searching for company:', searchName);
+          logger.info('Address data:', cleanedAddressData);
           
           // Generate unique search ID for polling
           mastercardSearchId = `single${Date.now()}${Math.random().toString(36).substr(2, 9)}`;
@@ -2032,9 +2033,9 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
                 }
               };
             }
-            console.log(`✅ Mastercard result cached for ${mastercardSearchId}`);
+            logger.info(`✅ Mastercard result cached for ${mastercardSearchId}`);
           }).catch(error => {
-            console.error('Mastercard enrichment error:', error);
+            logger.error('Mastercard enrichment error:', error);
             if (!global.mastercardResults) {
               global.mastercardResults = {};
             }
@@ -2060,9 +2061,9 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
             data: null
           };
           
-          console.log('Mastercard search started in background, returning initial results immediately');
+          logger.info('Mastercard search started in background, returning initial results immediately');
         } catch (error) {
-          console.error('Error starting Mastercard search:', error);
+          logger.error('Error starting Mastercard search:', error);
           mastercardEnrichment = {
             enriched: false,
             status: "error",
@@ -2087,7 +2088,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
         addressValidation
       });
     } catch (error) {
-      console.error("Single classification error:", error);
+      logger.error("Single classification error:", error);
       res.status(500).json({ 
         error: "Classification failed", 
         details: (error as Error).message 
@@ -2123,7 +2124,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
         error: searchRequest.error
       });
     } catch (error) {
-      console.error('Error fetching Mastercard search status:', error);
+      logger.error('Error fetching Mastercard search status:', error);
       res.status(500).json({ error: 'Failed to fetch search status' });
     }
   });
@@ -2134,7 +2135,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
       const batchId = parseInt(req.params.batchId);
       const { fullBatch } = req.body; // Allow full batch processing
       
-      console.log(`📍 Manual Mastercard enrichment triggered for batch ${batchId}${fullBatch ? ' (FULL BATCH)' : ''}`);
+      logger.info(`📍 Manual Mastercard enrichment triggered for batch ${batchId}${fullBatch ? ' (FULL BATCH)' : ''}`);
       
       // Get business classifications
       const businessClassifications = await storage.getBusinessClassificationsForEnrichment(batchId);
@@ -2146,7 +2147,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
         });
       }
       
-      console.log(`Found ${businessClassifications.length} business classifications to enrich`);
+      logger.info(`Found ${businessClassifications.length} business classifications to enrich`);
       
       // Import the optimized batch service
       const { mastercardBatchOptimizedService } = await import('./services/mastercardBatchOptimized');
@@ -2162,12 +2163,12 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
         zipCode: c.zipCode || undefined,
       }));
       
-      console.log(`Processing ${payeesForEnrichment.length} payees${fullBatch ? ' (full batch)' : ' (test mode)'}`);
+      logger.info(`Processing ${payeesForEnrichment.length} payees${fullBatch ? ' (full batch)' : ' (test mode)'}`);
       
       // Run enrichment
       const enrichmentResults = await mastercardBatchOptimizedService.enrichBatch(payeesForEnrichment);
       
-      console.log(`Enrichment completed with ${enrichmentResults.size} results`);
+      logger.info(`Enrichment completed with ${enrichmentResults.size} results`);
       
       // Update database
       await mastercardBatchOptimizedService.updateDatabaseWithResults(enrichmentResults);
@@ -2185,7 +2186,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
       });
       
     } catch (error) {
-      console.error('Manual enrichment error:', error);
+      logger.error('Manual enrichment error:', error);
       res.status(500).json({ 
         success: false, 
         error: error instanceof Error ? error.message : 'Enrichment failed' 
@@ -2198,7 +2199,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
     try {
       const { searchId, status } = req.body;
       
-      console.log(`Received Mastercard webhook: searchId=${searchId}, status=${status}`);
+      logger.info(`Received Mastercard webhook: searchId=${searchId}, status=${status}`);
       
       // Handle the webhook notification
       if (status === 'COMPLETED') {
@@ -2207,7 +2208,7 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
         
         try {
           const results = await mastercardApi.getSearchResults(searchId);
-          console.log(`Received ${results.results.length} results from Mastercard search ${searchId}`);
+          logger.info(`Received ${results.results.length} results from Mastercard search ${searchId}`);
           
           // Process the results and update the database
           for (const result of results.results) {
@@ -2226,14 +2227,14 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
           
           res.json({ success: true, message: `Processed ${results.results.length} enrichment results` });
         } catch (error) {
-          console.error('Error processing Mastercard results:', error);
+          logger.error('Error processing Mastercard results:', error);
           res.status(500).json({ error: 'Error processing results' });
         }
       } else {
         res.json({ success: true, message: `Webhook received for status: ${status}` });
       }
     } catch (error) {
-      console.error('Mastercard webhook error:', error);
+      logger.error('Mastercard webhook error:', error);
       res.status(500).json({ error: 'Webhook processing failed' });
     }
   });
@@ -2250,10 +2251,10 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
 
 async function processFileAsync(file: any, batchId: number, payeeColumn?: string, matchingOptions?: any, addressColumns?: any) {
   try {
-    console.log(`Starting optimized file processing for batch ${batchId}, file: ${file.originalname}`);
-    console.log(`File extension: ${file.extension}, file path: ${file.path}`);
-    console.log(`Matching options:`, matchingOptions);
-    console.log(`Address columns:`, addressColumns);
+    logger.info(`Starting optimized file processing for batch ${batchId}, file: ${file.originalname}`);
+    logger.info(`File extension: ${file.extension}, file path: ${file.path}`);
+    logger.info(`Matching options:`, matchingOptions);
+    logger.info(`Address columns:`, addressColumns);
     
     // Use the new optimized classification service
     const { optimizedClassificationService } = await import('./services/classificationV2');
@@ -2261,9 +2262,9 @@ async function processFileAsync(file: any, batchId: number, payeeColumn?: string
     // Process file with streaming to avoid memory issues, pass extension info and matching options
     await optimizedClassificationService.processFileStream(batchId, file.path, payeeColumn, file.extension, matchingOptions, addressColumns);
     
-    console.log(`File processing completed for batch ${batchId}`);
+    logger.info(`File processing completed for batch ${batchId}`);
   } catch (error) {
-    console.error("Error processing file:", error);
+    logger.error("Error processing file:", error);
     await storage.updateUploadBatch(batchId, { 
       status: "failed",
       currentStep: "Failed",
