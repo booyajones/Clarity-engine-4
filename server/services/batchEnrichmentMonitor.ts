@@ -20,22 +20,25 @@ import { MastercardApiService } from './mastercardApi';
 import { akkioService } from './akkioService';
 import { supplierCacheService } from './supplierCacheService';
 import { accurateMatchingService } from './accurateMatchingService';
+import { batchQueue } from './queueService';
 
-const MONITOR_INTERVAL = 60000; // Check every 60 seconds (REDUCED from 10s for production)
 const BATCH_TIMEOUT = 30 * 60 * 1000; // 30 minutes timeout for stuck batches
-const MAX_CONCURRENT_BATCHES = 1; // Process only 1 batch at a time to save memory
+const DEFAULT_CONCURRENCY = 1; // Default to a single batch at a time
 
 class BatchEnrichmentMonitor {
   private isRunning = false;
-  private monitorInterval: NodeJS.Timeout | null = null;
-  private processingBatch = false; // PRODUCTION FIX: Track if processing to prevent overlap
+  private batchListener: (() => void) | null = null;
+  private processingBatches: Set<number> = new Set();
+  private concurrency: number;
 
-  constructor() {}
+  constructor(concurrency = DEFAULT_CONCURRENCY) {
+    this.concurrency = concurrency;
+  }
 
   /**
    * Start monitoring batches for enrichment
    */
-  start() {
+  start(concurrency = this.concurrency) {
     if (this.isRunning) {
       console.log('Batch enrichment monitor already running');
       return;
@@ -43,23 +46,27 @@ class BatchEnrichmentMonitor {
 
     console.log('🚀 Starting batch enrichment monitor...');
     this.isRunning = true;
-    
-    // Run immediately
-    this.monitorBatches();
-    
-    // Then run periodically
-    this.monitorInterval = setInterval(() => {
-      this.monitorBatches();
-    }, MONITOR_INTERVAL);
+    this.concurrency = concurrency;
+
+    const handler = () => {
+      void this.monitorBatches(this.concurrency);
+    };
+
+    // Process existing batches immediately
+    handler();
+
+    // Listen for new batch events via the queue
+    this.batchListener = handler;
+    batchQueue.on('waiting', handler);
   }
 
   /**
    * Stop monitoring
    */
   stop() {
-    if (this.monitorInterval) {
-      clearInterval(this.monitorInterval);
-      this.monitorInterval = null;
+    if (this.batchListener) {
+      batchQueue.off('waiting', this.batchListener);
+      this.batchListener = null;
     }
     this.isRunning = false;
     console.log('🛑 Batch enrichment monitor stopped');
@@ -68,34 +75,43 @@ class BatchEnrichmentMonitor {
   /**
    * Main monitoring function - checks batches and triggers next enrichment phase
    */
-  private async monitorBatches() {
+  private async monitorBatches(concurrency = this.concurrency) {
     try {
-      // PRODUCTION FIX: Skip if already processing to prevent memory overload
-      if (this.processingBatch) {
+      const availableSlots = concurrency - this.processingBatches.size;
+      if (availableSlots <= 0) {
         return;
       }
-      
-      // Get all batches that need enrichment processing
-      // Simply get all batches in 'enriching' status and let the processing logic determine what to do
+
+      // Get batches that need enrichment processing
       const batches = await db.select()
         .from(uploadBatches)
         .where(eq(uploadBatches.status, 'enriching'))
-        .limit(MAX_CONCURRENT_BATCHES); // PRODUCTION FIX: Limit to 1 batch at a time
+        .limit(availableSlots);
 
-      for (const batch of batches) {
+      const tasks = batches.map(async (batch) => {
         // Skip cancelled batches - safety check
         if (batch.status === 'cancelled') {
           console.log(`Skipping cancelled batch ${batch.id}`);
-          continue;
+          return;
         }
-        this.processingBatch = true; // PRODUCTION FIX: Mark as processing
-        await this.processBatchEnrichment(batch);
-        this.processingBatch = false; // PRODUCTION FIX: Mark as done
-      }
+
+        if (this.processingBatches.has(batch.id)) {
+          return;
+        }
+
+        this.processingBatches.add(batch.id);
+        try {
+          await this.processBatchEnrichment(batch);
+        } finally {
+          this.processingBatches.delete(batch.id);
+        }
+      });
+
+      await Promise.all(tasks);
 
       // Also check for stuck batches
       await this.checkStuckBatches();
-      
+
     } catch (error) {
       console.error('Error in batch enrichment monitor:', error);
     }

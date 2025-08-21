@@ -3,11 +3,19 @@ import OpenAI from 'openai';
 import { LRUCache } from 'lru-cache';
 import { bigQueryService } from './bigQueryService';
 import { unifiedFuzzyMatcher } from './unifiedFuzzyMatcher';
+import { logger } from './logger';
+
+// Precompiled regular expressions
+const BUSINESS_INDICATOR_REGEX = /\b(inc|corp|llc|ltd|co|company|partners|services|group)\b/i;
+const NORMALIZE_BUSINESS_SUFFIX_REGEX = /\b(inc|incorporated|llc|ltd|limited|corp|corporation|company|co)\b\.?/gi;
+const NORMALIZE_SPECIAL_CHARS_REGEX = /[^\w\s]/g;
+const NORMALIZE_MULTI_SPACES_REGEX = /\s+/g;
 
 // Advanced fuzzy matching algorithms for payee name comparison
 export class FuzzyMatcher {
   private openai: OpenAI | null = null;
   private aiDisabled = false;
+  private wordBoundaryCache = new Map<string, RegExp>();
   // Cache to store AI match decisions for normalized name pairs with eviction
   private aiDecisionCache = new LRUCache<string, {
     isMatch: boolean;
@@ -25,11 +33,11 @@ export class FuzzyMatcher {
 
     if (env.OPENAI_API_KEY && !this.aiDisabled) {
       this.openai = new OpenAI({ apiKey: env.OPENAI_API_KEY });
-      console.log('FuzzyMatcher: OpenAI initialized successfully');
+      logger.info('FuzzyMatcher: OpenAI initialized successfully');
     } else if (this.aiDisabled) {
-      console.log('FuzzyMatcher: OpenAI disabled via configuration');
+      logger.info('FuzzyMatcher: OpenAI disabled via configuration');
     } else {
-      console.log('FuzzyMatcher: OpenAI not initialized - no API key');
+      logger.info('FuzzyMatcher: OpenAI not initialized - no API key');
     }
   }
   
@@ -45,7 +53,7 @@ export class FuzzyMatcher {
     // Check for common name patterns (First Last, First Middle Last)
     if (words.length === 2 || words.length === 3) {
       // No business indicators
-      const hasBusinessIndicator = /\b(inc|corp|llc|ltd|co|company|partners|services|group)\b/i.test(name);
+      const hasBusinessIndicator = BUSINESS_INDICATOR_REGEX.test(name);
       return !hasBusinessIndicator;
     }
     
@@ -89,6 +97,15 @@ export class FuzzyMatcher {
     return 0;
   }
 
+  private getWordBoundaryPattern(lowerInput: string): RegExp {
+    let pattern = this.wordBoundaryCache.get(lowerInput);
+    if (!pattern) {
+      pattern = new RegExp(`\\b${lowerInput.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+      this.wordBoundaryCache.set(lowerInput, pattern);
+    }
+    return pattern;
+  }
+
   // Main matching function that combines multiple algorithms
   async matchPayee(inputName: string, candidateName: string): Promise<{
     isMatch: boolean;
@@ -108,31 +125,31 @@ export class FuzzyMatcher {
     
     // Check for exact case-insensitive match
     if (lowerInput === lowerCandidate) {
-      console.log(`Exact case-insensitive match detected: "${inputName}" vs "${candidateName}"`);
+      logger.debug(`Exact case-insensitive match detected: "${inputName}" vs "${candidateName}"`);
       exactBoost = 0.3; // Boost final score by 30%
     }
     
     // Check for exact normalized match
     if (normalizedInput === normalizedCandidate && normalizedInput.length > 0) {
-      console.log(`Exact normalized match detected: "${inputName}" vs "${candidateName}"`);
+      logger.debug(`Exact normalized match detected: "${inputName}" vs "${candidateName}"`);
       exactBoost = Math.max(exactBoost, 0.25); // Boost by 25%
     }
     
     // Check for exact prefix match (e.g., "AMAZON" matches "AMAZON BUSINESS")
-    if (lowerCandidate.startsWith(lowerInput + ' ') || 
+    if (lowerCandidate.startsWith(lowerInput + ' ') ||
         lowerCandidate.startsWith(lowerInput + '.') ||
         lowerCandidate.startsWith(lowerInput + ',') ||
         lowerCandidate.startsWith(lowerInput + '-')) {
-      console.log(`Exact prefix match detected: "${inputName}" in "${candidateName}"`);
+      logger.debug(`Exact prefix match detected: "${inputName}" in "${candidateName}"`);
       prefixBoost = 0.2; // Boost final score by 20%
     }
     
     // Check if input is a significant word in candidate
-    const wordBoundaryPattern = new RegExp(`\\b${lowerInput.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    const wordBoundaryPattern = this.getWordBoundaryPattern(lowerInput);
     if (wordBoundaryPattern.test(lowerCandidate) && lowerInput.length >= 4) {
       const lengthRatio = lowerInput.length / lowerCandidate.length;
       wordBoundaryBoost = Math.max(0.1, Math.min(0.15, lengthRatio * 0.2)); // 10-15% boost
-      console.log(`Word boundary match detected: "${inputName}" in "${candidateName}"`);
+      logger.debug(`Word boundary match detected: "${inputName}" in "${candidateName}"`);
     }
     
     // Run multiple matching algorithms
@@ -180,11 +197,11 @@ export class FuzzyMatcher {
     averageConfidence = averageConfidence * (1 - ambiguityPenalty);
     
     // Log comprehensive matching details
-    console.log(`Cascading match analysis: "${inputName}" vs "${candidateName}"`);
-    console.log(`  Algorithms: Levenshtein=${(matchDetails.levenshtein * 100).toFixed(1)}%, JaroWinkler=${(matchDetails.jaroWinkler * 100).toFixed(1)}%, TokenSet=${(matchDetails.tokenSet * 100).toFixed(1)}%`);
-    console.log(`  Phonetic: Metaphone=${(matchDetails.metaphone * 100).toFixed(1)}%, N-gram=${(matchDetails.nGram * 100).toFixed(1)}%`);
-    console.log(`  Boosts: Exact=${(exactBoost * 100).toFixed(0)}%, Prefix=${(prefixBoost * 100).toFixed(0)}%, WordBoundary=${(wordBoundaryBoost * 100).toFixed(0)}%`);
-    console.log(`  Final confidence: ${(averageConfidence * 100).toFixed(2)}% (penalty: ${(ambiguityPenalty * 100).toFixed(0)}%)`);
+    logger.debug(`Cascading match analysis: "${inputName}" vs "${candidateName}"`);
+    logger.debug(`  Algorithms: Levenshtein=${(matchDetails.levenshtein * 100).toFixed(1)}%, JaroWinkler=${(matchDetails.jaroWinkler * 100).toFixed(1)}%, TokenSet=${(matchDetails.tokenSet * 100).toFixed(1)}%`);
+    logger.debug(`  Phonetic: Metaphone=${(matchDetails.metaphone * 100).toFixed(1)}%, N-gram=${(matchDetails.nGram * 100).toFixed(1)}%`);
+    logger.debug(`  Boosts: Exact=${(exactBoost * 100).toFixed(0)}%, Prefix=${(prefixBoost * 100).toFixed(0)}%, WordBoundary=${(wordBoundaryBoost * 100).toFixed(0)}%`);
+    logger.debug(`  Final confidence: ${(averageConfidence * 100).toFixed(2)}% (penalty: ${(ambiguityPenalty * 100).toFixed(0)}%)`);
     
     // Determine match type based on confidence and special conditions
     let matchType = 'cascading';
@@ -213,7 +230,7 @@ export class FuzzyMatcher {
       // Skip AI for single-word matches with heavy penalties (likely just surnames)
       const isLikelySurname = inputName.split(/\s+/).length === 1 && ambiguityPenalty >= 0.3;
       if (isLikelySurname) {
-        console.log(`Skipping AI for likely surname match: "${inputName}" (penalty: ${(ambiguityPenalty * 100).toFixed(0)}%)`);
+        logger.debug(`Skipping AI for likely surname match: "${inputName}" (penalty: ${(ambiguityPenalty * 100).toFixed(0)}%)`);
         result = {
           isMatch: false,
           confidence: averageConfidence,
@@ -223,12 +240,12 @@ export class FuzzyMatcher {
       } else {
         const cached = this.aiDecisionCache.get(cacheKey);
         if (cached) {
-          console.log(`Using cached AI decision for "${inputName}" vs "${candidateName}"`);
+          logger.debug(`Using cached AI decision for "${inputName}" vs "${candidateName}"`);
           result = { ...cached, matchType: `ai_cached_${matchType}` };
         } else {
-          console.log(`Triggering AI enhancement for confidence ${(averageConfidence * 100).toFixed(2)}% (below 90% threshold)`);
+          logger.debug(`Triggering AI enhancement for confidence ${(averageConfidence * 100).toFixed(2)}% (below 90% threshold)`);
           const aiResult = await this.aiMatch(inputName, candidateName, matchDetails);
-          console.log(`AI result: isMatch=${aiResult.isMatch}, confidence=${(aiResult.confidence * 100).toFixed(2)}%, type=${aiResult.matchType}`);
+          logger.debug(`AI result: isMatch=${aiResult.isMatch}, confidence=${(aiResult.confidence * 100).toFixed(2)}%, type=${aiResult.matchType}`);
           this.aiDecisionCache.set(cacheKey, aiResult);
           result = { ...aiResult, matchType: `ai_enhanced_${matchType}` };
           aiUsed = true;
@@ -245,7 +262,7 @@ export class FuzzyMatcher {
     }
 
     const latencyMs = Date.now() - startTime;
-    console.log(
+    logger.debug(
       `FuzzyMatcher metrics: isMatch=${result.isMatch}, confidence=${(result.confidence * 100).toFixed(2)}%, aiUsed=${aiUsed}, latency=${latencyMs}ms`
     );
     try {
@@ -259,7 +276,7 @@ export class FuzzyMatcher {
         latencyMs,
       });
     } catch (err) {
-      console.error('Failed to log match metrics:', err);
+      logger.error('Failed to log match metrics:', err);
     }
 
     return result;
@@ -282,16 +299,16 @@ export class FuzzyMatcher {
   // Normalize strings for comparison
   private normalize(name: string | null | undefined): string {
     if (!name) return '';
-    
+
     return name
       .toLowerCase()
       .trim()
       // Remove common business suffixes
-      .replace(/\b(inc|incorporated|llc|ltd|limited|corp|corporation|company|co)\b\.?/gi, '')
+      .replace(NORMALIZE_BUSINESS_SUFFIX_REGEX, '')
       // Remove special characters but keep spaces
-      .replace(/[^\w\s]/g, '')
+      .replace(NORMALIZE_SPECIAL_CHARS_REGEX, '')
       // Collapse multiple spaces
-      .replace(/\s+/g, ' ')
+      .replace(NORMALIZE_MULTI_SPACES_REGEX, ' ')
       .trim();
   }
   
@@ -453,7 +470,7 @@ Respond with JSON: { "isMatch": boolean, "confidence": 0-1, "reasoning": "brief 
         },
       };
     } catch (error) {
-      console.error('AI matching error:', error);
+      logger.error('AI matching error:', error);
       return {
         isMatch: false,
         confidence: 0,

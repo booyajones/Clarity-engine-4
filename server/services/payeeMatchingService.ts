@@ -59,14 +59,14 @@ export class PayeeMatchingService {
         console.log('Finexio matching disabled - skipping payee matching');
         return { matched: false };
       }
-      
+
       // Check in-memory cache first to avoid duplicate work
       // Include location fields so separate addresses don't share cached results
       const cacheKey = [
         classification.cleanedName.toLowerCase(),
         classification.city?.toLowerCase(),
         classification.state?.toLowerCase(),
-        classification.zipCode
+        classification.zipCode,
       ]
         .filter(Boolean)
         .join('|');
@@ -76,7 +76,7 @@ export class PayeeMatchingService {
       }
 
       console.log('[PayeeMatching] Starting sophisticated Finexio match for:', classification.cleanedName);
-
+      
       // Try memory-optimized cache first
       const cacheMatch = await memoryOptimizedCache.matchSupplier(
         classification.cleanedName,
