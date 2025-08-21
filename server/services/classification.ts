@@ -4,7 +4,7 @@ import { type InsertPayeeClassification } from "@shared/schema";
 import OpenAI from 'openai';
 
 // Rate limiting for OpenAI API calls - optimized for high-tier access
-class RateLimiter {
+export class RateLimiter {
   private requests: number[] = [];
   private readonly maxRequests: number;
   private readonly timeWindow: number;
