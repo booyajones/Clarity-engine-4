@@ -1,10 +1,7 @@
 import { env } from '../config';
-import { bigQueryService, type BigQueryPayeeResult } from './bigQueryService';
-import { fuzzyMatcher } from './fuzzyMatcher';
+import { bigQueryService } from './bigQueryService';
 import { storage } from '../storage';
 import type { PayeeClassification } from '@shared/schema';
-import { supplierCacheService } from './supplierCacheService';
-import { memoryOptimizedCache } from './memoryOptimizedSupplierCache';
 import { accurateMatchingService } from './accurateMatchingService';
 import OpenAI from 'openai';
 
