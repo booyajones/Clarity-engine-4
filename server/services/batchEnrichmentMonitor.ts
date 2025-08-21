@@ -241,9 +241,9 @@ class BatchEnrichmentMonitor {
         // Process batch with parallel promises but with timeout protection
         const promises = batch.map(async (classification) => {
           try {
-            // Use the best available name for searching (cleaned or original)
-            // Google-validated address will be used by Finexio for better matching
-            const searchName = classification.cleanedName || classification.originalName;
+            // Use original name for better matching (cleaned names are too simplified)
+            // Original names preserve important business suffixes like INC, LLC, etc.
+            const searchName = classification.originalName || classification.cleanedName;
             
             // Create a promise for the sophisticated fuzzy matching
             const searchPromise = this.accurateMatchingService.findBestMatch(searchName, 5);

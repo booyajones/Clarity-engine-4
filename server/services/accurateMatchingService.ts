@@ -148,10 +148,14 @@ export class AccurateMatchingService {
   
   /**
    * Try exact match first - SUPER FAST <50ms
+   * Enhanced to handle common business name variations
    */
   private async tryExactMatch(cleanInput: string, normalizedInput: string): Promise<CachedSupplier | null> {
     try {
       const startTime = Date.now();
+      
+      // Create variations for better exact matching
+      const variations = this.createExactMatchVariations(cleanInput);
       
       // Try exact match on normalized name using Drizzle ORM
       const exactMatches = await db.query.cachedSuppliers.findMany({
@@ -160,7 +164,9 @@ export class AccurateMatchingService {
           eq(suppliers.payeeName, cleanInput.toUpperCase()),
           eq(suppliers.payeeName, normalizedInput),
           eq(suppliers.payeeName, normalizedInput.toUpperCase()),
-          eq(sql`LOWER(${suppliers.payeeName})`, cleanInput.toLowerCase())
+          eq(sql`LOWER(${suppliers.payeeName})`, cleanInput.toLowerCase()),
+          // Add variations for better matching
+          ...variations.map(v => eq(sql`LOWER(${suppliers.payeeName})`, v.toLowerCase()))
         ),
         limit: 1
       });
@@ -560,6 +566,52 @@ export class AccurateMatchingService {
     
     // Return unique variants, limit to 8 for performance
     return Array.from(variants).slice(0, 8);
+  }
+  
+  /**
+   * Create variations for exact matching to handle common business formats
+   */
+  private createExactMatchVariations(name: string): string[] {
+    const variations = new Set<string>();
+    const cleanName = name.trim();
+    
+    // Original
+    variations.add(cleanName);
+    
+    // Remove common suffixes
+    const withoutSuffixes = cleanName
+      .replace(/\b(inc|llc|ltd|corp|corporation|company|co|holdings|group|services|solutions)\b\.?/gi, '')
+      .replace(/[,.-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    if (withoutSuffixes && withoutSuffixes !== cleanName) {
+      variations.add(withoutSuffixes);
+    }
+    
+    // Handle DBA (doing business as)
+    if (cleanName.toLowerCase().includes(' dba ')) {
+      const parts = cleanName.split(/\s+dba\s+/i);
+      variations.add(parts[0].trim()); // Company name before DBA
+      if (parts[1]) variations.add(parts[1].trim()); // DBA name
+    }
+    
+    // Handle hyphenated suffixes (e.g., "RED BOOK SOLUTIONS")
+    const lastDashIndex = cleanName.lastIndexOf(' - ');
+    if (lastDashIndex > 0) {
+      variations.add(cleanName.substring(0, lastDashIndex).trim());
+    }
+    
+    // Remove trailing descriptors after company type
+    const withoutDescriptors = cleanName
+      .replace(/\s+(red book solutions|solutions|services|group|holdings)$/i, '')
+      .trim();
+    
+    if (withoutDescriptors && withoutDescriptors !== cleanName) {
+      variations.add(withoutDescriptors);
+    }
+    
+    return Array.from(variations);
   }
   
   /**

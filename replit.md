@@ -57,7 +57,8 @@ Clarity Engine 3 is an AI-powered web application for finance and accounting pro
 - **Intelligent Address Enhancement**: OpenAI-powered system for selective address enhancement.
 - **Akkio Payment Prediction**: Integrated as the final enrichment step for payment method and outcome prediction.
 - **Keyword Exclusion System**: 593 permanent exclusion keywords for government/financial entities.
-- **Sophisticated Fuzzy Matching**: 6-algorithm fuzzy matching system (Levenshtein, Jaro-Winkler, Token Set, Metaphone, N-gram, AI enhancement) for intelligent typo tolerance and variation handling. Completely eliminates simple exact matching in favor of sophisticated algorithmic matching with confidence scoring.
+- **Sophisticated Fuzzy Matching**: 6-algorithm fuzzy matching system (Levenshtein, Jaro-Winkler, Token Set, Metaphone, N-gram, AI enhancement) for intelligent typo tolerance and variation handling. Uses original business names (not cleaned) for optimal matching accuracy.
+- **Exact Match Enhancements**: Smart variations handling for LLC/INC differences, commas, DBA names, and business suffixes to maximize exact match rate before fuzzy matching.
 
 ### File Processing Pipeline
 - **Handling**: Asynchronous processing with status tracking.
