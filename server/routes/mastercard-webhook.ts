@@ -1,3 +1,4 @@
+import { env } from '../config';
 import { Request, Response, Router } from 'express';
 import crypto from 'crypto';
 import { db } from '../db';
@@ -6,7 +7,7 @@ import { sql } from 'drizzle-orm';
 const router = Router();
 
 // Store webhook secret for signature verification
-const WEBHOOK_SECRET = process.env.MASTERCARD_WEBHOOK_SECRET || '';
+const WEBHOOK_SECRET = env.MASTERCARD_WEBHOOK_SECRET || '';
 
 /**
  * Verify webhook signature from Mastercard

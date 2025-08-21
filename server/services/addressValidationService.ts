@@ -1,10 +1,11 @@
+import { env } from '../config';
 import { z } from 'zod';
 import { storage } from '../storage.js';
 import type { PayeeClassification } from '@shared/schema.js';
 import { intelligentAddressService } from './intelligentAddressService.js';
 
 // Configuration
-const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
+const GOOGLE_MAPS_API_KEY = env.GOOGLE_MAPS_API_KEY;
 const GOOGLE_ADDRESS_VALIDATION_API = 'https://addressvalidation.googleapis.com/v1:validateAddress';
 
 // Response types from Google Address Validation API

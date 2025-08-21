@@ -1,3 +1,4 @@
+import { env } from '../config';
 /**
  * Enterprise Health Monitoring Service
  * Comprehensive health checks and monitoring
@@ -256,10 +257,10 @@ class HealthMonitor {
 
   private async checkDependencies(): Promise<ComponentHealth> {
     const dependencies = {
-      openai: !!process.env.OPENAI_API_KEY,
-      mastercard: !!process.env.MASTERCARD_CONSUMER_KEY,
-      database: !!process.env.DATABASE_URL,
-      redis: !!process.env.REDIS_URL
+      openai: !!env.OPENAI_API_KEY,
+      mastercard: !!env.MASTERCARD_CONSUMER_KEY,
+      database: !!env.DATABASE_URL,
+      redis: !!env.REDIS_URL
     };
     
     const missing = Object.entries(dependencies)

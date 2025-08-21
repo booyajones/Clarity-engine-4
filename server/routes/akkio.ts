@@ -1,3 +1,4 @@
+import { env } from '../config';
 /**
  * Akkio Predictive Analytics API Routes
  * Handles dataset creation, model training, and payment predictions
@@ -47,7 +48,7 @@ router.get('/datasets', async (req, res) => {
 router.get('/models', async (req, res) => {
   try {
     // Check if Akkio is configured
-    if (!process.env.AKKIO_API_KEY) {
+    if (!env.AKKIO_API_KEY) {
       return res.json([]);  // Return empty array when no API key
     }
     

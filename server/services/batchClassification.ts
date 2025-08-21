@@ -1,3 +1,4 @@
+import { env } from '../config';
 import OpenAI from "openai";
 import type { 
   InsertPayeeClassification 
@@ -5,7 +6,7 @@ import type {
 import { storage } from "../storage";
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || "",
+  apiKey: env.OPENAI_API_KEY || "",
 });
 
 interface BatchPayee {

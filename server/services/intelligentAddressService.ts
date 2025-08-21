@@ -1,3 +1,4 @@
+import { env } from '../config';
 import OpenAI from 'openai';
 import { addressValidationService } from './addressValidationService';
 
@@ -32,8 +33,8 @@ export class IntelligentAddressService {
   private openai: OpenAI | null;
   
   constructor() {
-    if (process.env.OPENAI_API_KEY) {
-      this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    if (env.OPENAI_API_KEY) {
+      this.openai = new OpenAI({ apiKey: env.OPENAI_API_KEY });
     } else {
       this.openai = null;
       console.warn('⚠️ OpenAI API key not configured - intelligent address enhancement disabled');

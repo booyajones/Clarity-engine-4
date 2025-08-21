@@ -1,3 +1,4 @@
+import { env } from '../config';
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 
@@ -101,7 +102,7 @@ export function errorHandler(
   res.status(statusCode).json({
     error: message,
     ...(details && { details }),
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    ...(env.NODE_ENV === 'development' && { stack: err.stack })
   });
 }
 

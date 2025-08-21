@@ -1,7 +1,8 @@
+import { env } from '../config';
 import { OpenAI } from "openai";
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: env.OPENAI_API_KEY,
 });
 
 export interface FieldPrediction {

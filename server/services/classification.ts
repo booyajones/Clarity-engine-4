@@ -1,3 +1,4 @@
+import { env } from '../config';
 import { storage } from "../storage";
 import { type InsertPayeeClassification } from "@shared/schema";
 import OpenAI from 'openai';
@@ -49,7 +50,7 @@ class RateLimiter {
 }
 
 // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY });
 const rateLimiter = new RateLimiter();
 
 export interface ClassificationResult {

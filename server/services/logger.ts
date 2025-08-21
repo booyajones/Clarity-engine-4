@@ -1,5 +1,6 @@
+import { env } from '../config';
 export class Logger {
-  private isProduction = process.env.NODE_ENV === 'production';
+  private isProduction = env.NODE_ENV === 'production';
   
   debug(message: string, ...args: any[]) {
     if (!this.isProduction) {

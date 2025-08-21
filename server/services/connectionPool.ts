@@ -1,3 +1,4 @@
+import { env } from '../config';
 /**
  * Enterprise Database Connection Pool Manager
  * Manages database connections with health checks and recovery
@@ -63,9 +64,9 @@ class ConnectionPoolManager {
     this.pool = new Pool({
       ...this.config,
       // Connection string from environment
-      connectionString: process.env.DATABASE_URL,
+      connectionString: env.DATABASE_URL,
       // SSL for production
-      ssl: process.env.NODE_ENV === 'production' ? {
+      ssl: env.NODE_ENV === 'production' ? {
         rejectUnauthorized: false
       } : undefined,
       // Statement timeout to prevent long-running queries
@@ -296,8 +297,8 @@ class ConnectionPoolManager {
 
 // Create singleton instance with enterprise configuration
 export const poolManager = new ConnectionPoolManager({
-  max: parseInt(process.env.DB_POOL_SIZE || '20'),
-  min: parseInt(process.env.DB_POOL_MIN || '5'),
+  max: env.DB_POOL_SIZE,
+  min: env.DB_POOL_MIN,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
   healthCheckInterval: 30000,

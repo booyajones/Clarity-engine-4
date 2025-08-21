@@ -1,3 +1,4 @@
+import { env } from './config';
 import { Pool, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
 import ws from "ws";
@@ -10,14 +11,14 @@ neonConfig.webSocketConstructor = ws;
 neonConfig.pipelineConnect = false;
 neonConfig.pipelineTLS = false;
 
-if (!process.env.DATABASE_URL) {
+if (!env.DATABASE_URL) {
   throw new Error(
     "DATABASE_URL must be set. Did you forget to provision a database?",
   );
 }
 
 export const pool = new Pool({ 
-  connectionString: process.env.DATABASE_URL,
+  connectionString: env.DATABASE_URL,
   connectionTimeoutMillis: 30000,  // 30 second timeout for high load
   idleTimeoutMillis: 300000,       // 5 minute idle timeout
   max: 20,                         // Reduced for better memory management

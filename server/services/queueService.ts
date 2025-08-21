@@ -1,3 +1,4 @@
+import { env } from '../config';
 /**
  * Queue Service - Central message queue management for microservices
  * This service manages all Bull queues for async processing and service communication
@@ -8,8 +9,8 @@ import Redis from 'ioredis';
 
 // Redis connection configuration
 const redisConfig = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
+  host: env.REDIS_HOST,
+  port: env.REDIS_PORT,
   maxRetriesPerRequest: 3,
   connectTimeout: 10000, // 10 seconds
   lazyConnect: true, // Don't connect immediately
@@ -25,14 +26,14 @@ const redisConfig = {
 // Create Redis clients for Bull (only if microservices enabled)
 const createRedisClient = () => {
   // Don't connect to Redis if microservices disabled
-  if (process.env.ENABLE_MICROSERVICES !== 'true') {
+  if (!env.ENABLE_MICROSERVICES) {
     return null as any; // Return null to prevent connection attempts
   }
   
   const client = new Redis(redisConfig);
   
   client.on('error', (err) => {
-    if (process.env.ENABLE_MICROSERVICES === 'true') {
+    if (env.ENABLE_MICROSERVICES) {
       console.error('Redis connection error:', err);
     }
   });
@@ -67,7 +68,7 @@ const defaultQueueOptions: Bull.QueueOptions = {
 
 // Initialize queues only if microservices enabled
 const createQueue = (name: string, options?: Bull.QueueOptions) => {
-  if (process.env.ENABLE_MICROSERVICES !== 'true') {
+  if (!env.ENABLE_MICROSERVICES) {
     // Return a mock queue that does nothing when microservices disabled
     return {
       add: async () => ({ id: 'mock' }),
@@ -160,15 +161,15 @@ const queues = [
 ];
 
 queues.forEach(({ name, queue }) => {
-  queue.on('completed', (job) => {
+  queue.on('completed', (job: Bull.Job) => {
     console.log(`✅ [${name}] Job ${job.id} completed`);
   });
-  
-  queue.on('failed', (job, err) => {
+
+  queue.on('failed', (job: Bull.Job, err: Error) => {
     console.error(`❌ [${name}] Job ${job?.id} failed:`, err.message);
   });
-  
-  queue.on('stalled', (job) => {
+
+  queue.on('stalled', (job: Bull.Job) => {
     console.warn(`⚠️ [${name}] Job ${job.id} stalled`);
   });
 });

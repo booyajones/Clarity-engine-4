@@ -1,3 +1,4 @@
+import { env } from '../config';
 import { BigQuery } from '@google-cloud/bigquery';
 import { db } from '../db';
 import { cachedSuppliers } from '@shared/schema';
@@ -9,10 +10,10 @@ export class DailySupplierSync {
   
   private constructor() {
     this.bigquery = new BigQuery({
-      projectId: process.env.BIGQUERY_PROJECT_ID,
-      keyFilename: process.env.BIGQUERY_KEY_FILE,
-      credentials: process.env.BIGQUERY_CREDENTIALS ? 
-        JSON.parse(process.env.BIGQUERY_CREDENTIALS) : undefined
+      projectId: env.BIGQUERY_PROJECT_ID,
+      keyFilename: env.BIGQUERY_KEY_FILE,
+      credentials: env.BIGQUERY_CREDENTIALS ? 
+        JSON.parse(env.BIGQUERY_CREDENTIALS) : undefined
     });
   }
   
@@ -27,8 +28,8 @@ export class DailySupplierSync {
     console.log('🚀 Starting daily supplier sync from BigQuery...');
     
     try {
-      const dataset = process.env.BIGQUERY_DATASET || 'SE_Enrichment';
-      const table = process.env.BIGQUERY_TABLE || 'supplier';
+      const dataset = env.BIGQUERY_DATASET;
+      const table = env.BIGQUERY_TABLE;
       
       // Query ALL distinct suppliers from BigQuery
       const query = `
@@ -38,7 +39,7 @@ export class DailySupplierSync {
             name,
             payment_type_c,
             ROW_NUMBER() OVER (PARTITION BY LOWER(name) ORDER BY id) as rn
-          FROM \`${process.env.BIGQUERY_PROJECT_ID}.${dataset}.${table}\`
+          FROM \`${env.BIGQUERY_PROJECT_ID}.${dataset}.${table}\`
           WHERE COALESCE(is_deleted, false) = false
             AND name IS NOT NULL
             AND LENGTH(TRIM(name)) > 0

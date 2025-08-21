@@ -1,3 +1,4 @@
+import { env } from '../config';
 /**
  * Enterprise Rate Limiting Service
  * Advanced rate limiting with multiple strategies
@@ -162,7 +163,7 @@ export class RateLimiterFactory {
   
   static create(name: string, options: RateLimitOptions): RateLimitStore {
     if (!this.limiters.has(name)) {
-      const limiter = process.env.REDIS_URL 
+      const limiter = env.REDIS_URL 
         ? new DistributedRateLimiter(options)
         : new SlidingWindowRateLimiter(options);
       

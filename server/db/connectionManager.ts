@@ -1,3 +1,4 @@
+import { env } from '../config';
 import { Pool, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
 import ws from "ws";
@@ -18,7 +19,7 @@ class DatabaseConnectionManager {
   private reconnectTimer: NodeJS.Timeout | null = null;
   
   constructor() {
-    if (!process.env.DATABASE_URL) {
+    if (!env.DATABASE_URL) {
       throw new Error(
         "DATABASE_URL must be set. Did you forget to provision a database?",
       );
@@ -36,7 +37,7 @@ class DatabaseConnectionManager {
       
       // Create new pool with connection settings
       this.pool = new Pool({ 
-        connectionString: process.env.DATABASE_URL,
+        connectionString: env.DATABASE_URL,
         connectionTimeoutMillis: CONNECTION_TIMEOUT,
         idleTimeoutMillis: 300000, // 5 minutes
         max: 20, // maximum pool size

@@ -1,3 +1,4 @@
+import { env } from '../config';
 import { storage } from "../storage";
 import { type InsertPayeeClassification, type PayeeClassification, payeeClassifications } from "@shared/schema";
 import { db } from "../db";
@@ -17,13 +18,13 @@ import { eq, desc, and } from 'drizzle-orm';
 import { FuzzyMatcher } from './fuzzyMatcher';
 
 // Validate OpenAI API key
-if (!process.env.OPENAI_API_KEY) {
+if (!env.OPENAI_API_KEY) {
   throw new Error('OPENAI_API_KEY environment variable is required');
 }
 
 // Initialize OpenAI with Tier 5 performance settings
 const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: env.OPENAI_API_KEY,
   maxRetries: 5,
   timeout: 20000 // 20 second timeout for faster retries
 });
@@ -1541,7 +1542,7 @@ Example: [["JPMorgan Chase", "Chase Bank"], ["Bank of America", "BofA"]]`
       }
 
       // Check if Akkio API is configured
-      if (!process.env.AKKIO_API_KEY) {
+      if (!env.AKKIO_API_KEY) {
         console.log('Akkio API not configured, skipping predictions');
         
         await storage.updateUploadBatch(batchId, {

@@ -1,3 +1,4 @@
+import { env } from '../config';
 /**
  * Enterprise Graceful Shutdown Handler
  * Ensures clean shutdown of all services and connections
@@ -153,7 +154,7 @@ class GracefulShutdown {
     const tasks = [];
     
     // Close Redis connections if available
-    if (process.env.REDIS_URL) {
+    if (env.REDIS_URL) {
       tasks.push(this.closeRedis());
     }
     

@@ -1,3 +1,4 @@
+import { env } from '../config';
 import { db } from '../db';
 import { cachedSuppliers, type InsertCachedSupplier } from '@shared/schema';
 import { bigQueryService } from './bigQueryService';
@@ -95,15 +96,15 @@ export class SupplierCacheService {
           mastercard_business_name_c as mastercardBusinessName,
           primary_address_city_c as city,
           primary_address_state_c as state
-        FROM \`${process.env.BIGQUERY_PROJECT_ID}.${process.env.BIGQUERY_DATASET || 'SE_Enrichment'}.${process.env.BIGQUERY_TABLE || 'supplier'}\`
+        FROM \`${env.BIGQUERY_PROJECT_ID}.${env.BIGQUERY_DATASET}.${env.BIGQUERY_TABLE}\`
         WHERE COALESCE(is_deleted, false) = false
         LIMIT ${limit}
       `;
 
       // Use the public searchKnownPayees method to get all suppliers
       // For syncing, we'll use a generic query
-      const dataset = process.env.BIGQUERY_DATASET || 'SE_Enrichment';
-      const table = process.env.BIGQUERY_TABLE || 'supplier';
+      const dataset = env.BIGQUERY_DATASET;
+      const table = env.BIGQUERY_TABLE;
       
       // Create a temporary method to get all suppliers
       const allSuppliersQuery = `
@@ -117,7 +118,7 @@ export class SupplierCacheService {
           mastercard_business_name_c as mastercardBusinessName,
           primary_address_city_c as city,
           primary_address_state_c as state
-        FROM \`${process.env.BIGQUERY_PROJECT_ID}.${dataset}.${table}\`
+        FROM \`${env.BIGQUERY_PROJECT_ID}.${dataset}.${table}\`
         WHERE COALESCE(is_deleted, false) = false
         LIMIT ${limit}
       `;

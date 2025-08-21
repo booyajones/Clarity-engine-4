@@ -1,3 +1,4 @@
+import { env } from '../config';
 import OpenAI from 'openai';
 import { LRUCache } from 'lru-cache';
 import { bigQueryService } from './bigQueryService';
@@ -20,10 +21,10 @@ export class FuzzyMatcher {
 
   constructor() {
     // Allow OpenAI usage to be disabled for low latency requirements
-    this.aiDisabled = process.env.DISABLE_OPENAI === 'true';
+    this.aiDisabled = env.DISABLE_OPENAI;
 
-    if (process.env.OPENAI_API_KEY && !this.aiDisabled) {
-      this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    if (env.OPENAI_API_KEY && !this.aiDisabled) {
+      this.openai = new OpenAI({ apiKey: env.OPENAI_API_KEY });
       console.log('FuzzyMatcher: OpenAI initialized successfully');
     } else if (this.aiDisabled) {
       console.log('FuzzyMatcher: OpenAI disabled via configuration');

@@ -1,3 +1,4 @@
+import { env } from './config';
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
@@ -208,7 +209,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(compression());
   
   // Request logging
-  if (process.env.NODE_ENV === 'production') {
+  if (env.NODE_ENV === 'production') {
     app.use(morgan('combined'));
   } else {
     app.use(morgan('dev'));
@@ -249,7 +250,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // API Gateway health check for microservices
   app.get("/api/gateway/health", asyncHandler(async (req, res) => {
-    if (process.env.ENABLE_MICROSERVICES === 'true') {
+    if (env.ENABLE_MICROSERVICES) {
       try {
         const health = await apiGateway.gatewayHealth();
         res.json(health);
@@ -1298,7 +1299,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Import OpenAI for classification
       const openai = await (async () => {
         const OpenAI = (await import('openai')).default;
-        return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        return new OpenAI({ apiKey: env.OPENAI_API_KEY });
       })();
       
       // Perform classification using OpenAI
@@ -1406,9 +1407,9 @@ Also provide a SIC code and description if applicable. Respond in JSON format:
   // Mastercard service status
   app.get("/api/mastercard/status", async (req, res) => {
     try {
-      const hasConsumerKey = !!process.env.MASTERCARD_CONSUMER_KEY;
-      const hasKeystorePassword = !!process.env.MASTERCARD_KEYSTORE_PASSWORD;
-      const hasKeystoreAlias = !!process.env.MASTERCARD_KEYSTORE_ALIAS;
+      const hasConsumerKey = !!env.MASTERCARD_CONSUMER_KEY;
+      const hasKeystorePassword = !!env.MASTERCARD_KEYSTORE_PASSWORD;
+      const hasKeystoreAlias = !!env.MASTERCARD_KEYSTORE_ALIAS;
       
       // Check if private key file exists
       const fs = await import('fs');
