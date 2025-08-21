@@ -24,7 +24,7 @@ if (!routesFile.includes('app.post("/api/upload"')) {
       const enableFinexio = req.body.enableFinexio !== 'false';
       const enableMastercard = req.body.enableMastercard !== 'false';
       
-      const userId = 1; // TODO: Get from session/auth
+      const userId = req.user.id;
       const batch = await storage.createUploadBatch({
         filename: generateFinancialBatchName(),
         originalFilename: req.file.originalname,

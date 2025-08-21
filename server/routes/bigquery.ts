@@ -92,7 +92,7 @@ router.post('/matches/:matchId/confirm', async (req, res) => {
   try {
     const matchId = parseInt(req.params.matchId);
     const { isCorrect } = req.body;
-    const userId = 1; // TODO: Get from session/auth
+    const userId = req.user.id;
     
     if (isNaN(matchId)) {
       return res.status(400).json({ error: 'Invalid match ID' });
