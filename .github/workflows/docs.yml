@@ -34,22 +34,34 @@ jobs:
     - name: Generate API documentation
       run: |
         echo "Generating updated documentation..."
-        # Add any doc generation scripts here
-        
-    - name: Update README badges
-      run: |
         # Create docs directory if it doesn't exist
         mkdir -p docs
-        # Update any dynamic badges or stats in README
-        echo "Documentation updated on $(date)" >> docs/LAST_UPDATED.md
+        
+        # Generate basic API documentation
+        echo "# API Documentation" > docs/API_AUTO.md
+        echo "" >> docs/API_AUTO.md
+        echo "Last updated: $(date)" >> docs/API_AUTO.md
+        echo "" >> docs/API_AUTO.md
+        echo "## Available Endpoints" >> docs/API_AUTO.md
+        echo "- /api/health - Health check endpoint" >> docs/API_AUTO.md
+        echo "- /api/upload - File upload endpoint" >> docs/API_AUTO.md
+        echo "- /api/dashboard - Dashboard statistics" >> docs/API_AUTO.md
+        
+    - name: Update documentation timestamp
+      run: |
+        # Update timestamp file
+        echo "Documentation updated on $(date)" > docs/LAST_UPDATED.md
     
     - name: Check for changes
       id: verify-changed-files
       run: |
-        if [ -n "$(git status --porcelain)" ]; then
-          echo "changed=true" >> $GITHUB_OUTPUT
-        else
+        git add -A
+        if git diff --staged --quiet; then
           echo "changed=false" >> $GITHUB_OUTPUT
+          echo "No documentation changes detected"
+        else
+          echo "changed=true" >> $GITHUB_OUTPUT
+          echo "Documentation changes detected"
         fi
     
     - name: Commit documentation changes
@@ -57,6 +69,10 @@ jobs:
       run: |
         git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
-        git add .
         git commit -m "docs: auto-update documentation [skip ci]"
         git push
+    
+    - name: Skip commit (no changes)
+      if: steps.verify-changed-files.outputs.changed == 'false'
+      run: |
+        echo "No documentation changes to commit"
