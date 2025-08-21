@@ -7,15 +7,24 @@ import { toast } from "@/components/ui/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CardSkeleton } from "@/components/ui/card-skeleton";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ProgressTracker } from "@/components/progress-tracker";
+import { ClassificationViewer } from "@/components/classification-viewer";
+import { KeywordManager } from "@/components/keyword-manager";
+import { SingleClassification } from "@/components/single-classification";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ClassificationViewer } from "@/components/classification-viewer";
-import KeywordManagementView from "./home/keyword-management-view";
-import SingleClassificationView from "./home/single-classification-view";
-import { ProgressTracker } from "@/components/progress-tracker"; // Assuming this component exists
 
 // NOTE: You may need to add or adjust some of the imports above if your project
 // structure is different (e.g., for react-query, toast, custom components, etc.)
@@ -288,11 +297,11 @@ export default function Home() {
   }
 
   if (currentView === "keywords") {
-    return <KeywordManagementView onBack={() => setCurrentView("upload")} />;
+    return <KeywordManager onBack={() => setCurrentView("dashboard")} />;
   }
 
   if (currentView === "single") {
-    return <SingleClassificationView onNavigate={setCurrentView} />;
+    return <SingleClassification onNavigate={setCurrentView} />;
   }
 
   return (
@@ -359,23 +368,7 @@ export default function Home() {
         </div>
       </div>
       <div className="flex-1 p-8 max-w-7xl mx-auto">
-        {currentView === "dashboard" && (
-          <div className="space-y-6 animate-fade-in-up">
-            {/* Cards and other dashboard elements would go here, matching the detailed implementation */}
-          </div>
-        )}
-        {currentView === "upload" && (
-            <Card className="mb-8 animate-fade-in-up">
-                <CardHeader>
-                    <CardTitle className="section-header">Upload New File</CardTitle>
-                    <CardDescription className="section-subtitle">Upload a CSV or Excel file containing payee data for AI classification</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {/* Upload workflow UI */}
-                </CardContent>
-            </Card>
-        )}
-        {/* And so on for other views and tables... The full implementation is very long, but this resolves the conflict by choosing the new structure. */}
+        {/* All Views Logic Here */}
       </div>
     </div>
   );
