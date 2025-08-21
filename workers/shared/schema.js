@@ -35,7 +35,7 @@ exports.uploadBatches = (0, pg_core_1.pgTable)("upload_batches", {
 });
 exports.payeeClassifications = (0, pg_core_1.pgTable)("payee_classifications", {
     id: (0, pg_core_1.serial)("id").primaryKey(),
-    batchId: (0, pg_core_1.integer)("batch_id").notNull(),
+    batchId: (0, pg_core_1.integer)("batch_id").references(() => exports.uploadBatches.id, { onDelete: "cascade" }).notNull(),
     originalName: (0, pg_core_1.text)("original_name").notNull(),
     cleanedName: (0, pg_core_1.text)("cleaned_name").notNull(),
     address: (0, pg_core_1.text)("address"),

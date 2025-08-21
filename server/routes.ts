@@ -701,14 +701,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error('Error cancelling background processes before deletion:', error);
       }
       
-      // 2. Delete all classifications for this batch
-      await storage.deleteBatchClassifications(batchId);
-      
-      // 3. Delete the batch itself
-      await storage.deleteUploadBatch(batchId);
-      
+      // 2. Delete the batch and cascade classifications
+      const result = await storage.deleteUploadBatch(batchId);
+
       console.log(`Batch ${batchId} successfully deleted with all background processes stopped`);
-      res.json({ success: true });
+      res.json({ success: true, ...result });
     } catch (error) {
       console.error("Error deleting batch:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -722,14 +719,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Get all batches for the user
       const batches = await storage.getUserUploadBatches(userId);
-      
-      // Delete classifications and batches for each
-      for (const batch of batches) {
-        await storage.deleteBatchClassifications(batch.id);
-        await storage.deleteUploadBatch(batch.id);
-      }
-      
-      res.json({ success: true, deletedCount: batches.length });
+
+      // Delete batches in parallel with cascading classifications
+      const results = await Promise.all(
+        batches.map((batch) => storage.deleteUploadBatch(batch.id))
+      );
+
+      const summary = {
+        success: true,
+        deletedBatches: results.length,
+        deletedClassifications: results.reduce(
+          (total, r) => total + r.classificationsDeleted,
+          0
+        ),
+      };
+
+      res.json(summary);
     } catch (error) {
       console.error("Error deleting all batches:", error);
       res.status(500).json({ error: "Internal server error" });

@@ -64,7 +64,7 @@ export const uploadBatches = pgTable("upload_batches", {
 
 export const payeeClassifications = pgTable("payee_classifications", {
   id: serial("id").primaryKey(),
-  batchId: integer("batch_id").notNull(),
+  batchId: integer("batch_id").references(() => uploadBatches.id, { onDelete: "cascade" }).notNull(),
   originalName: text("original_name").notNull(),
   cleanedName: text("cleaned_name").notNull(),
   address: text("address"),
