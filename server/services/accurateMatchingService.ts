@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '../db';
 import type { CachedSupplier } from '@shared/schema';
 import { fuzzyMatcher } from './fuzzyMatcher';
+import { unifiedFuzzyMatcher } from './unifiedFuzzyMatcher';
 
 /**
  * Sophisticated Matching Service using 6-algorithm fuzzy matching
@@ -199,18 +200,10 @@ export class AccurateMatchingService {
       return Array.from(candidates.values()).slice(0, 10);
     }
     
-    // Strategy 2: Fuzzy variant matches for typos (CRITICAL for "Amazone" -> "Amazon", "Microsft" -> "Microsoft")
+    // Strategy 2: Fuzzy variant matches for typos (CRITICAL for "Amazone" -> "Amazon", "Gooogle" -> "Google")
     if (cleanInput.length >= 4 && candidates.size < 10) {
-      // Try multiple fuzzy strategies for typos
-      const fuzzyVariants = [
-        cleanInput.substring(0, cleanInput.length - 1),  // Remove last char
-        cleanInput.substring(0, Math.max(4, cleanInput.length - 2)),  // Remove last 2 chars
-      ];
-      
-      // For single words, also try the first few characters to catch more typos
-      if (!cleanInput.includes(' ') && cleanInput.length >= 5) {
-        fuzzyVariants.push(cleanInput.substring(0, Math.min(5, cleanInput.length))); // First 5 chars
-      }
+      // Generate intelligent fuzzy variants to handle common typos
+      const fuzzyVariants = this.generateSmartFuzzyVariants(cleanInput);
       
       console.log(`[SophisticatedMatching] Trying fuzzy variants for "${cleanInput}":`, fuzzyVariants);
       
@@ -504,6 +497,69 @@ export class AccurateMatchingService {
     
     const tokenScore = matchedTokens / inputTokens.size;
     return tokenScore * 0.7;
+  }
+  
+  /**
+   * Generate smart fuzzy variants to handle common typos
+   * Handles: double letters, missing letters, extra letters, swapped letters
+   */
+  private generateSmartFuzzyVariants(input: string): string[] {
+    const variants = new Set<string>();
+    const lower = input.toLowerCase();
+    
+    // 1. Remove double letters (Gooogle -> Google)
+    const doubleLetterPattern = /(.)\1+/g;
+    const deduplicated = lower.replace(doubleLetterPattern, '$1');
+    if (deduplicated !== lower && deduplicated.length >= 3) {
+      variants.add(deduplicated);
+    }
+    
+    // 2. Remove last character (Amazone -> Amazon)
+    if (lower.length > 4) {
+      variants.add(lower.substring(0, lower.length - 1));
+    }
+    
+    // 3. Remove last 2 characters
+    if (lower.length > 5) {
+      variants.add(lower.substring(0, lower.length - 2));
+    }
+    
+    // 4. First N characters (to catch prefixes)
+    if (lower.length >= 5) {
+      variants.add(lower.substring(0, Math.min(5, lower.length)));
+      if (lower.length >= 7) {
+        variants.add(lower.substring(0, 6));
+      }
+    }
+    
+    // 5. For each position, try removing one character (handles extra letters)
+    if (lower.length <= 10 && lower.length >= 5) {
+      for (let i = 1; i < lower.length - 1; i++) {
+        const variant = lower.substring(0, i) + lower.substring(i + 1);
+        if (variant.length >= 3) {
+          variants.add(variant);
+        }
+      }
+    }
+    
+    // 6. Common typo patterns for well-known companies
+    const commonTypos: Record<string, string[]> = {
+      'gooogle': ['google'],
+      'googl': ['google'],
+      'amazone': ['amazon'],
+      'amazn': ['amazon'],
+      'microsft': ['microsoft'],
+      'microsofy': ['microsoft'],
+      'facebok': ['facebook'],
+      'facbook': ['facebook']
+    };
+    
+    if (commonTypos[lower]) {
+      commonTypos[lower].forEach(v => variants.add(v));
+    }
+    
+    // Return unique variants, limit to 8 for performance
+    return Array.from(variants).slice(0, 8);
   }
   
   /**

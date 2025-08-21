@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { bigQueryService } from './bigQueryService';
+import { unifiedFuzzyMatcher } from './unifiedFuzzyMatcher';
 
 // Advanced fuzzy matching algorithms for payee name comparison
 export class FuzzyMatcher {
@@ -54,10 +55,8 @@ export class FuzzyMatcher {
         const lowerInput = inputWords[0].toLowerCase();
         const lowerCandidate = candidateWords[0].toLowerCase();
         
-        // Calculate simple edit distance ratio
-        const maxLen = Math.max(lowerInput.length, lowerCandidate.length);
-        const distance = this.levenshteinDistance(lowerInput, lowerCandidate);
-        const similarity = 1 - (distance / maxLen);
+        // Calculate simple edit distance ratio using unified implementation
+        const similarity = unifiedFuzzyMatcher.levenshtein(lowerInput, lowerCandidate);
         
         // If words are very similar (>80%), likely a typo - reduce penalty
         if (similarity > 0.8) {
@@ -236,100 +235,21 @@ export class FuzzyMatcher {
   
   // Levenshtein distance
   private async levenshteinMatch(s1: string, s2: string): Promise<{ confidence: number }> {
-    const maxLen = Math.max(s1.length, s2.length);
-    if (maxLen === 0) return { confidence: 1.0 };
-    
-    const distance = this.levenshteinDistance(s1, s2);
-    const confidence = 1 - (distance / maxLen);
-    
-    return { confidence: Math.max(0, confidence) };
-  }
-  
-  private levenshteinDistance(s1: string, s2: string): number {
-    const m = s1.length;
-    const n = s2.length;
-    const dp: number[][] = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
-    
-    for (let i = 0; i <= m; i++) dp[i][0] = i;
-    for (let j = 0; j <= n; j++) dp[0][j] = j;
-    
-    for (let i = 1; i <= m; i++) {
-      for (let j = 1; j <= n; j++) {
-        if (s1[i - 1] === s2[j - 1]) {
-          dp[i][j] = dp[i - 1][j - 1];
-        } else {
-          dp[i][j] = 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
-        }
-      }
-    }
-    
-    return dp[m][n];
+    // Use unified implementation (returns 0-1 consistently)
+    const confidence = unifiedFuzzyMatcher.levenshtein(s1, s2);
+    return { confidence };
   }
   
   // Jaro-Winkler distance
   private async jaroWinklerMatch(s1: string, s2: string): Promise<{ confidence: number }> {
-    const jaroSim = this.jaro(s1, s2);
-    const commonPrefixLen = Math.min(
-      this.commonPrefixLength(s1, s2),
-      4 // Jaro-Winkler uses max prefix of 4
-    );
-    
-    const confidence = jaroSim + (commonPrefixLen * 0.1 * (1 - jaroSim));
+    // Use unified implementation (returns 0-1 consistently)
+    const confidence = unifiedFuzzyMatcher.jaroWinkler(s1, s2);
     return { confidence };
-  }
-  
-  private jaro(s1: string, s2: string): number {
-    if (s1 === s2) return 1.0;
-    
-    const len1 = s1.length;
-    const len2 = s2.length;
-    
-    if (len1 === 0 || len2 === 0) return 0.0;
-    
-    const matchWindow = Math.floor(Math.max(len1, len2) / 2) - 1;
-    const s1Matches = new Array(len1).fill(false);
-    const s2Matches = new Array(len2).fill(false);
-    
-    let matches = 0;
-    let transpositions = 0;
-    
-    // Find matches
-    for (let i = 0; i < len1; i++) {
-      const start = Math.max(0, i - matchWindow);
-      const end = Math.min(i + matchWindow + 1, len2);
-      
-      for (let j = start; j < end; j++) {
-        if (s2Matches[j] || s1[i] !== s2[j]) continue;
-        s1Matches[i] = true;
-        s2Matches[j] = true;
-        matches++;
-        break;
-      }
-    }
-    
-    if (matches === 0) return 0.0;
-    
-    // Count transpositions
-    let k = 0;
-    for (let i = 0; i < len1; i++) {
-      if (!s1Matches[i]) continue;
-      while (!s2Matches[k]) k++;
-      if (s1[i] !== s2[k]) transpositions++;
-      k++;
-    }
-    
-    return (matches / len1 + matches / len2 + (matches - transpositions / 2) / matches) / 3;
-  }
-  
-  private commonPrefixLength(s1: string, s2: string): number {
-    const minLen = Math.min(s1.length, s2.length);
-    let i = 0;
-    while (i < minLen && s1[i] === s2[i]) i++;
-    return i;
   }
   
   // Token set matching (handles word order variations)
   private async tokenSetMatch(s1: string, s2: string): Promise<{ confidence: number }> {
+    // Use unified implementation with special handling for subsets
     const tokens1 = new Set(s1.split(' ').filter(t => t.length > 0));
     const tokens2 = new Set(s2.split(' ').filter(t => t.length > 0));
     
@@ -343,10 +263,8 @@ export class FuzzyMatcher {
       return { confidence: 0.9 + (sizeRatio * 0.1) }; // 90-100% based on size similarity
     }
     
-    const intersection = new Set(Array.from(tokens1).filter(x => tokens2.has(x)));
-    const union = new Set([...Array.from(tokens1), ...Array.from(tokens2)]);
-    
-    const confidence = union.size > 0 ? intersection.size / union.size : 0;
+    // Otherwise use unified implementation
+    const confidence = unifiedFuzzyMatcher.tokenSetRatio(s1, s2);
     return { confidence };
   }
   
@@ -355,10 +273,9 @@ export class FuzzyMatcher {
     const meta1 = this.metaphone(s1);
     const meta2 = this.metaphone(s2);
     
-    const confidence = meta1 === meta2 ? 1.0 : 
-      this.levenshteinDistance(meta1, meta2) / Math.max(meta1.length, meta2.length);
-    
-    return { confidence: Math.max(0, 1 - confidence) };
+    // Use unified Levenshtein for consistency
+    const similarity = meta1 === meta2 ? 1.0 : unifiedFuzzyMatcher.levenshtein(meta1, meta2);
+    return { confidence: similarity };
   }
   
   private metaphone(word: string): string {
