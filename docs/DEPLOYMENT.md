@@ -54,7 +54,10 @@ NODE_ENV=production
 PORT=3000
 OPENAI_API_KEY=your_key
 DATABASE_URL=your_db_url
+ENABLE_DEBUG=false # set to true to enable fuzzy matcher debug logs
 ```
+
+- `ENABLE_DEBUG`: Enables detailed fuzzy matcher logs. Defaults to `false` in production.
 
 ## Database Setup
 

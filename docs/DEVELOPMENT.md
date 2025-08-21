@@ -161,4 +161,7 @@ NODE_ENV=development|production
 OPENAI_API_KEY=your_key
 DATABASE_URL=postgresql://...
 PORT=3000
+ENABLE_DEBUG=false # set to true to enable fuzzy matcher debug logs
 ```
+
+- `ENABLE_DEBUG`: Enables detailed logging in the fuzzy matcher. Defaults to `true` in development and `false` in production.
