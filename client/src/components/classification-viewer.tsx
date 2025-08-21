@@ -1053,7 +1053,7 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
               
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" size="icon">
+                  <Button variant="outline" size="icon" aria-label="Open settings">
                     <Settings className="h-4 w-4" />
                   </Button>
                 </PopoverTrigger>
@@ -1336,6 +1336,8 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                                 setSelectedClassification(classification);
                                 fetchPayeeMatches(classification.id);
                               }}
+                              aria-label="View details"
+                              title="View Details"
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -1963,6 +1965,7 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                       size="sm"
                       onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                       disabled={currentPage === 1}
+                      aria-label="Previous page"
                     >
                       <ArrowLeft className="h-4 w-4" />
                     </Button>
@@ -2003,6 +2006,7 @@ export function ClassificationViewer({ batchId, onBack }: ClassificationViewerPr
                       size="sm"
                       onClick={() => setCurrentPage(Math.min(data.pagination?.totalPages || 1, currentPage + 1))}
                       disabled={currentPage === data.pagination?.totalPages}
+                      aria-label="Next page"
                     >
                       <ArrowRight className="h-4 w-4" />
                     </Button>

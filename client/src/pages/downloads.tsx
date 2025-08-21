@@ -141,12 +141,14 @@ export default function Downloads() {
                     >
                       Download CSV
                     </Button>
-                    <Button 
+                    <Button
                       variant="outline"
                       size="sm"
                       onClick={() => deleteMutation.mutate(batch.id)}
                       disabled={deleteMutation.isPending}
                       className="text-red-600 hover:text-red-700"
+                      aria-label="Delete batch"
+                      title="Delete Batch"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
