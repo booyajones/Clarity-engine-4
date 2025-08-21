@@ -6,14 +6,20 @@
 
 import { db } from '../db';
 import { cachedSuppliers } from '@shared/schema';
-import { eq, sql, ilike, or, and } from 'drizzle-orm';
+import { eq, sql, ilike, or } from 'drizzle-orm';
+import { LRUCache } from 'lru-cache';
 
 export class MemoryOptimizedSupplierCache {
   private static instance: MemoryOptimizedSupplierCache;
   
-  // Small LRU cache for recently accessed suppliers (max 100 entries for production)
-  private recentCache: Map<string, any> = new Map();
-  private maxCacheSize = 100; // REDUCED from 1000 for production memory optimization
+  // LRU cache for recently accessed suppliers
+  private recentCache = new LRUCache<string, any>({
+    max: 100,
+    ttl: 1000 * 60 * 5 // 5 minutes
+  });
+
+  private cacheHits = 0;
+  private cacheMisses = 0;
   
   static getInstance(): MemoryOptimizedSupplierCache {
     if (!this.instance) {
@@ -32,6 +38,8 @@ export class MemoryOptimizedSupplierCache {
    */
   clearCache() {
     this.recentCache.clear();
+    this.cacheHits = 0;
+    this.cacheMisses = 0;
     if (global.gc) {
       global.gc();
     }
@@ -42,13 +50,6 @@ export class MemoryOptimizedSupplierCache {
    * Add to recent cache with LRU eviction
    */
   private addToRecentCache(key: string, value: any) {
-    // Remove oldest if at capacity
-    if (this.recentCache.size >= this.maxCacheSize) {
-      const firstKey = this.recentCache.keys().next().value;
-      if (firstKey) {
-        this.recentCache.delete(firstKey);
-      }
-    }
     this.recentCache.set(key, value);
   }
   
@@ -57,11 +58,13 @@ export class MemoryOptimizedSupplierCache {
    */
   async searchSuppliers(searchTerm: string, limit: number = 10): Promise<any[]> {
     const cacheKey = `search:${searchTerm}:${limit}`;
-    
-    // Check recent cache first
-    if (this.recentCache.has(cacheKey)) {
-      return this.recentCache.get(cacheKey);
+
+    const cached = this.recentCache.get(cacheKey);
+    if (cached !== undefined) {
+      this.cacheHits++;
+      return cached;
     }
+    this.cacheMisses++;
     
     try {
       // Normalize search term
@@ -97,7 +100,6 @@ export class MemoryOptimizedSupplierCache {
         .orderBy(sql`confidence DESC`)
         .limit(limit);
       
-      // Add to recent cache
       this.addToRecentCache(cacheKey, results);
       
       return results;
@@ -112,11 +114,13 @@ export class MemoryOptimizedSupplierCache {
    */
   async getExactMatch(payeeName: string): Promise<any | null> {
     const cacheKey = `exact:${payeeName}`;
-    
-    // Check recent cache
-    if (this.recentCache.has(cacheKey)) {
-      return this.recentCache.get(cacheKey);
+
+    const cached = this.recentCache.get(cacheKey);
+    if (cached !== undefined) {
+      this.cacheHits++;
+      return cached;
     }
+    this.cacheMisses++;
     
     try {
       const normalized = payeeName.trim().toLowerCase();
@@ -135,7 +139,7 @@ export class MemoryOptimizedSupplierCache {
       
       const match = result[0] || null;
       this.addToRecentCache(cacheKey, match);
-      
+
       return match;
     } catch (error) {
       console.error('Error getting exact match:', error);
@@ -148,10 +152,13 @@ export class MemoryOptimizedSupplierCache {
    */
   async getSupplierById(supplierId: string): Promise<any | null> {
     const cacheKey = `id:${supplierId}`;
-    
-    if (this.recentCache.has(cacheKey)) {
-      return this.recentCache.get(cacheKey);
+
+    const cached = this.recentCache.get(cacheKey);
+    if (cached !== undefined) {
+      this.cacheHits++;
+      return cached;
     }
+    this.cacheMisses++;
     
     try {
       const result = await db
@@ -162,7 +169,7 @@ export class MemoryOptimizedSupplierCache {
       
       const supplier = result[0] || null;
       this.addToRecentCache(cacheKey, supplier);
-      
+
       return supplier;
     } catch (error) {
       console.error('Error getting supplier by ID:', error);
@@ -221,14 +228,19 @@ export class MemoryOptimizedSupplierCache {
   }
   
   /**
-   * Get memory usage stats
+   * Get cache statistics for monitoring
    */
-  getMemoryStats() {
+  getCacheStats() {
+    const hits = this.cacheHits;
+    const misses = this.cacheMisses;
+    const total = hits + misses;
     return {
-      recentCacheSize: this.recentCache.size,
-      maxCacheSize: this.maxCacheSize,
-      estimatedMemoryMB: Math.round(this.recentCache.size * 0.001), // Rough estimate
-      mode: 'database-optimized'
+      size: this.recentCache.size,
+      max: this.recentCache.max,
+      ttl: this.recentCache.ttl,
+      hits,
+      misses,
+      hitRate: total ? hits / total : 0
     };
   }
 }
