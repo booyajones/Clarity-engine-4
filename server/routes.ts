@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { classificationService } from "./services/classification";
 import multer from "multer";
 import csv from "csv-parser";
-import XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import fs from "fs";
 import path from "path";
 import { z } from "zod";
@@ -393,46 +393,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const filePath = req.file.path;
       const ext = path.extname(req.file.originalname).toLowerCase();
       let headers: string[] = [];
-
-      if (ext === ".csv") {
-        // Read first row to get headers
-        const firstRow = await new Promise<string[]>((resolve, reject) => {
-          const headerRow: string[] = [];
-          fs.createReadStream(filePath)
-            .pipe(csv())
-            .on("headers", (headerList: string[]) => {
-              resolve(headerList);
-            })
-            .on("error", reject);
-        });
-        headers = firstRow;
-      } else if (ext === ".xlsx" || ext === ".xls") {
-        console.log(`Processing Excel file: ${filePath}, extension: ${ext}`);
-        console.log(`XLSX object:`, typeof XLSX, Object.keys(XLSX));
-        
-        try {
-          const workbook = XLSX.readFile(filePath);
-          const sheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][];
-          headers = jsonData[0] || [];
-          console.log(`Excel headers extracted:`, headers);
-        } catch (xlsxError) {
-          console.error("XLSX processing error:", xlsxError);
-          throw xlsxError;
-        }
-      }
-
-      // Parse first few rows for preview and field prediction
       let preview: any[] = [];
       let sampleData: any[][] = [];
-      
+
       if (ext === ".csv") {
-        // Read first 10 rows for preview and analysis
+        // Read headers and first 10 rows for preview and analysis
         const rows: any[] = [];
         await new Promise((resolve, reject) => {
           fs.createReadStream(filePath)
             .pipe(csv())
+            .on("headers", (headerList: string[]) => {
+              headers = headerList;
+            })
             .on("data", (data: any) => {
               if (rows.length < 10) {
                 rows.push(data);
@@ -440,31 +412,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             })
             .on("end", () => {
-              // Convert rows to array format for field prediction
-              sampleData = rows.map(row => headers.map(header => row[header] || ''));
+              sampleData = rows.map(row => headers.map(header => row[header] || ""));
               preview = rows.slice(0, 5);
               resolve(rows);
             })
             .on("error", reject);
         });
       } else if (ext === ".xlsx" || ext === ".xls") {
-        // Excel preview - already have data
-        const workbook = XLSX.readFile(filePath);
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][];
-        
-        // Convert to sample data format for prediction
-        sampleData = jsonData.slice(1, 11); // Skip header row, take next 10
-        
-        // Convert rows to objects using headers for preview
-        preview = jsonData.slice(1, 6).map(row => {
-          const obj: any = {};
-          headers.forEach((header, index) => {
-            obj[header] = row[index] || "";
-          });
-          return obj;
-        });
+        console.log(`Processing Excel file: ${filePath}, extension: ${ext}`);
+
+        const workbookReader = new ExcelJS.stream.xlsx.WorkbookReader(filePath);
+        let rowIndex = 0;
+
+        for await (const worksheetReader of workbookReader) {
+          for await (const row of worksheetReader) {
+            const rowValues = (row.values as any[]).slice(1).map(v => v ?? "");
+            if (rowIndex === 0) {
+              headers = rowValues.map(v => String(v));
+            } else if (rowIndex <= 10) {
+              const values = rowValues.map(v => String(v));
+              sampleData.push(values);
+              if (rowIndex <= 5) {
+                const obj: any = {};
+                headers.forEach((header, idx) => {
+                  obj[header] = values[idx] || "";
+                });
+                preview.push(obj);
+              }
+              if (rowIndex === 10) {
+                worksheetReader.stream.destroy();
+                break;
+              }
+            }
+            rowIndex++;
+          }
+          break; // Only process first worksheet
+        }
       }
 
       // Auto-detect address fields for Google validation
