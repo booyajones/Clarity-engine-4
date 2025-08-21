@@ -135,14 +135,14 @@ export class FuzzyMatcher {
     }
     
     // Run multiple matching algorithms
-    const results = await Promise.all([
+    const results = [
       this.exactMatch(normalizedInput, normalizedCandidate),
       this.levenshteinMatch(normalizedInput, normalizedCandidate),
       this.jaroWinklerMatch(normalizedInput, normalizedCandidate),
       this.tokenSetMatch(normalizedInput, normalizedCandidate),
       this.metaphoneMatch(normalizedInput, normalizedCandidate),
       this.nGramMatch(normalizedInput, normalizedCandidate),
-    ]);
+    ];
     
     // Calculate weighted average confidence
     const weights = {
@@ -295,26 +295,26 @@ export class FuzzyMatcher {
   }
   
   // Exact match
-  private async exactMatch(s1: string, s2: string): Promise<{ confidence: number }> {
+  private exactMatch(s1: string, s2: string): { confidence: number } {
     return { confidence: s1 === s2 ? 1.0 : 0.0 };
   }
   
   // Levenshtein distance
-  private async levenshteinMatch(s1: string, s2: string): Promise<{ confidence: number }> {
+  private levenshteinMatch(s1: string, s2: string): { confidence: number } {
     // Use unified implementation (returns 0-1 consistently)
     const confidence = unifiedFuzzyMatcher.levenshtein(s1, s2);
     return { confidence };
   }
   
   // Jaro-Winkler distance
-  private async jaroWinklerMatch(s1: string, s2: string): Promise<{ confidence: number }> {
+  private jaroWinklerMatch(s1: string, s2: string): { confidence: number } {
     // Use unified implementation (returns 0-1 consistently)
     const confidence = unifiedFuzzyMatcher.jaroWinkler(s1, s2);
     return { confidence };
   }
   
   // Token set matching (handles word order variations)
-  private async tokenSetMatch(s1: string, s2: string): Promise<{ confidence: number }> {
+  private tokenSetMatch(s1: string, s2: string): { confidence: number } {
     // Use unified implementation with special handling for subsets
     const tokens1 = new Set(s1.split(' ').filter(t => t.length > 0));
     const tokens2 = new Set(s2.split(' ').filter(t => t.length > 0));
@@ -335,7 +335,7 @@ export class FuzzyMatcher {
   }
   
   // Metaphone matching (phonetic similarity)
-  private async metaphoneMatch(s1: string, s2: string): Promise<{ confidence: number }> {
+  private metaphoneMatch(s1: string, s2: string): { confidence: number } {
     const meta1 = this.metaphone(s1);
     const meta2 = this.metaphone(s2);
     
@@ -368,7 +368,7 @@ export class FuzzyMatcher {
   }
   
   // N-gram matching
-  private async nGramMatch(s1: string, s2: string, n: number = 3): Promise<{ confidence: number }> {
+  private nGramMatch(s1: string, s2: string, n: number = 3): { confidence: number } {
     const ngrams1 = this.getNGrams(s1, n);
     const ngrams2 = this.getNGrams(s2, n);
     
