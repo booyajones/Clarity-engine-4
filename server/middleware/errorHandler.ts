@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import logger from '../logger';
 
 // Custom error class for application errors
 export class AppError extends Error {
@@ -17,7 +18,7 @@ export class AppError extends Error {
 
 // Database error handler
 export function handleDatabaseError(error: any): AppError {
-  console.error('Database error:', error);
+  logger.error('Database error:', error);
   
   // Handle specific PostgreSQL error codes
   if (error.code === '57P01') {
@@ -85,7 +86,7 @@ export function errorHandler(
   }
   
   // Log error details
-  console.error('Error handler caught:', {
+  logger.error('Error handler caught:', {
     statusCode,
     message,
     stack: err.stack,
