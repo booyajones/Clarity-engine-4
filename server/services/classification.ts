@@ -67,20 +67,16 @@ export class ClassificationService {
 
   constructor() {
     // Don't initialize rules in constructor to avoid blocking startup
-    
+
     // Monitor for stalled jobs every 30 seconds
     setInterval(() => {
       this.checkForStalledJobs();
     }, 30000);
-    
-    // Check for orphaned jobs on startup
-    this.recoverOrphanedJobs();
   }
   
-  private async recoverOrphanedJobs() {
+  async recoverOrphanedJobs(userId: number) {
     try {
       // Check for jobs that were left in "processing" state but aren't being tracked
-      const userId = 1; // TODO: Get from session/auth
       const batches = await storage.getUserUploadBatches(userId);
       
       for (const batch of batches) {

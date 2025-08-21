@@ -19,6 +19,7 @@ import pipelineRoutes from "./routes/pipelineRoutes";
 import mastercardWebhookRouter from "./routes/mastercard-webhook";
 import { AppError, errorHandler, notFoundHandler, asyncHandler } from "./middleware/errorHandler";
 import { generalLimiter, uploadLimiter, classificationLimiter, expensiveLimiter } from "./middleware/rateLimiter";
+import { authMiddleware } from "./middleware/auth";
 import { db } from "./db";
 import { mastercardSearchRequests } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
@@ -219,6 +220,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Health check routes (no rate limiting) - using middleware pattern
   app.use('/api', healthRoutes);
+
+  // Authentication middleware - applied after health checks
+  app.use('/api', authMiddleware);
   
   // Akkio predictive analytics routes
   app.use('/api/akkio', akkioRoutes);
@@ -358,7 +362,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Enhanced batch monitoring for large datasets
   app.get("/api/dashboard/batch-performance", async (req, res) => {
     try {
-      const userId = 1; // TODO: Get from session/auth
+      const userId = req.user.id;
+      await classificationService.recoverOrphanedJobs(userId);
       const batches = await storage.getUserUploadBatches(userId);
       
       const performance = batches.map(batch => ({
@@ -506,7 +511,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Missing required parameters" });
       }
 
-      const userId = 1; // TODO: Get from session/auth
+      const userId = req.user.id;
       const batch = await storage.createUploadBatch({
         filename: generateFinancialBatchName(),
         originalFilename: originalFilename || "test-advanced-duplicates.csv",
@@ -550,8 +555,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const enableMastercard = req.body.enableMastercard !== 'false';
       const enableGoogleAddressValidation = req.body.enableGoogleAddressValidation === 'true';
       const enableAkkio = req.body.enableAkkio === 'true';
-      
-      const userId = 1; // TODO: Get from session/auth
+
+      const userId = req.user.id;
       const batch = await storage.createUploadBatch({
         filename: generateFinancialBatchName(),
         originalFilename: req.file.originalname,
@@ -581,7 +586,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get upload batches
   app.get("/api/upload/batches", async (req, res) => {
     try {
-      const userId = 1; // TODO: Get from session/auth
+      const userId = req.user.id;
+      await classificationService.recoverOrphanedJobs(userId);
       const batches = await storage.getUserUploadBatches(userId);
       res.json(batches);
     } catch (error) {
@@ -716,8 +722,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Delete all upload batches for the current user
   app.delete("/api/upload/batches", async (req, res) => {
     try {
-      const userId = 1; // TODO: Get from session/auth
-      
+      const userId = req.user.id;
+
       // Get all batches for the user
       const batches = await storage.getUserUploadBatches(userId);
 
