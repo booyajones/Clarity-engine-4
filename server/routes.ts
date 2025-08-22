@@ -27,6 +27,8 @@ import { eq, desc } from "drizzle-orm";
 import { mastercardApi } from "./services/mastercardApi";
 import apiGateway from "./apiGateway";
 import logger from "./logger";
+import { batchEvents } from "./utils/batchEvents";
+import type { UploadBatch } from "@shared/schema";
 // Simple address field detection function
 function detectAddressFields(headers: string[]): Record<string, string> {
   const addressMapping: Record<string, string> = {};
@@ -595,6 +597,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       logger.error("Error fetching upload batches:", error);
       res.status(500).json({ error: "Internal server error" });
     }
+  });
+
+  // Real-time batch updates via Server-Sent Events
+  app.get("/api/upload/batches/subscribe", (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    const sendUpdate = (batch: UploadBatch) => {
+      res.write(`event: update\ndata: ${JSON.stringify(batch)}\n\n`);
+    };
+    const sendDelete = ({ id }: { id: number }) => {
+      res.write(`event: delete\ndata: ${JSON.stringify({ id })}\n\n`);
+    };
+
+    batchEvents.on("update", sendUpdate);
+    batchEvents.on("delete", sendDelete);
+
+    req.on("close", () => {
+      batchEvents.off("update", sendUpdate);
+      batchEvents.off("delete", sendDelete);
+    });
   });
 
   // Get batch status

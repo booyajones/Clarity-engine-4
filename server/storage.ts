@@ -29,6 +29,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, lt, count, sql, inArray, or } from "drizzle-orm";
+import { batchEvents } from "./utils/batchEvents";
 
 export interface IStorage {
   // User operations
@@ -143,6 +144,7 @@ export class DatabaseStorage implements IStorage {
       .insert(uploadBatches)
       .values(batch)
       .returning();
+    batchEvents.emit('update', uploadBatch);
     return uploadBatch;
   }
 
@@ -165,6 +167,7 @@ export class DatabaseStorage implements IStorage {
       .set(cleanUpdates)
       .where(eq(uploadBatches.id, id))
       .returning();
+    batchEvents.emit('update', batch);
     return batch;
   }
 
@@ -473,7 +476,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteUploadBatch(id: number): Promise<{ batchId: number; classificationsDeleted: number }> {
-    return await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
       const deletedClassifications = await tx
         .delete(payeeClassifications)
         .where(eq(payeeClassifications.batchId, id))
@@ -486,6 +489,8 @@ export class DatabaseStorage implements IStorage {
         classificationsDeleted: deletedClassifications.length,
       };
     });
+    batchEvents.emit('delete', { id });
+    return result;
   }
 
   async deleteBatchClassifications(batchId: number): Promise<void> {
