@@ -11,6 +11,7 @@ import ProgressTracker from "@/components/ui/progress-tracker";
 import { Badge } from "@/components/ui/badge";
 import { Trash2 } from "lucide-react";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
+import { validateFile } from "@/lib/validateUpload";
 
 interface FilePreview {
   filename: string;
@@ -44,6 +45,7 @@ export default function Upload() {
       const response = await fetch("/api/upload/preview", {
         method: "POST",
         body: formData,
+        credentials: "include",
       });
       
       if (!response.ok) {
@@ -82,6 +84,7 @@ export default function Upload() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tempFileName, originalFilename, payeeColumn }),
+        credentials: "include",
       });
       
       if (!response.ok) {
@@ -137,24 +140,15 @@ export default function Upload() {
   };
 
   const handleFileUpload = (file: File) => {
-    // Validate file type
-    const allowedTypes = [".csv", ".xlsx", ".xls"];
-    const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf("."));
-    
-    if (!allowedTypes.includes(fileExtension)) {
-      toast({
-        title: "Invalid file type",
-        description: "Please upload a CSV or Excel file.",
-        variant: "destructive",
-      });
-      return;
-    }
+    const validationError = validateFile(file, {
+      allowedExtensions: [".csv", ".xlsx", ".xls"],
+      maxSize: 10 * 1024 * 1024,
+    });
 
-    // Validate file size (max 10MB)
-    if (file.size > 10 * 1024 * 1024) {
+    if (validationError) {
       toast({
-        title: "File too large",
-        description: "Please upload a file smaller than 10MB.",
+        title: "Invalid file",
+        description: validationError,
         variant: "destructive",
       });
       return;

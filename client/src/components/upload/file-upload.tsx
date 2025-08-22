@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { validateFile } from "@/lib/validateUpload";
 
 interface FileUploadProps {
   onUploadSuccess?: (result: any) => void;
@@ -56,6 +57,7 @@ export default function FileUpload({
         });
 
         xhr.open("POST", "/api/upload");
+        xhr.withCredentials = true;
         xhr.send(formData);
       });
     },
@@ -79,26 +81,14 @@ export default function FileUpload({
     },
   });
 
-  const validateFile = (file: File): string | null => {
-    // Check file type
-    const allowedExtensions = accept.split(",").map(ext => ext.trim().toLowerCase());
-    const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf("."));
-    
-    if (!allowedExtensions.includes(fileExtension)) {
-      return `Invalid file type. Allowed types: ${allowedExtensions.join(", ")}`;
-    }
-
-    // Check file size
-    if (file.size > maxSize) {
-      const maxSizeMB = Math.round(maxSize / (1024 * 1024));
-      return `File too large. Maximum size: ${maxSizeMB}MB`;
-    }
-
-    return null;
-  };
-
   const handleFileUpload = (file: File) => {
-    const validationError = validateFile(file);
+    const allowedExtensions = accept
+      .split(",")
+      .map((ext) => ext.trim().toLowerCase());
+    const validationError = validateFile(file, {
+      allowedExtensions,
+      maxSize,
+    });
     if (validationError) {
       toast({
         title: "Invalid file",
@@ -148,14 +138,21 @@ export default function FileUpload({
     fileInputRef.current?.click();
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      handleChooseFile();
+    }
+  };
+
   const isUploading = uploadMutation.isPending;
 
   return (
     <div className="w-full">
       <div
-        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${
           dragActive && !disabled && !isUploading
-            ? "border-primary-500 bg-primary-50" 
+            ? "border-primary-500 bg-primary-50"
             : disabled || isUploading
             ? "border-gray-200 bg-gray-50 cursor-not-allowed"
             : "border-gray-300 hover:border-primary-400 hover:bg-primary-50 cursor-pointer"
@@ -165,6 +162,10 @@ export default function FileUpload({
         onDragOver={handleDrag}
         onDrop={handleDrop}
         onClick={handleChooseFile}
+        onKeyDown={handleKeyDown}
+        role="button"
+        tabIndex={0}
+        aria-label="File upload area. Press Enter or Space to browse for files"
       >
         <input
           ref={fileInputRef}
