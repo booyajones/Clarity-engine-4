@@ -56,6 +56,7 @@ export default function FileUpload({
         });
 
         xhr.open("POST", "/api/upload");
+        xhr.withCredentials = true;
         xhr.send(formData);
       });
     },
