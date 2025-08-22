@@ -5,8 +5,8 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useRef } from "react";
-import type { UploadBatch, ClassificationStats } from "@/lib/types";
+import { useState, useRef, useEffect } from "react";
+import type { UploadBatch } from "@/lib/types";
 import ProgressTracker from "@/components/ui/progress-tracker";
 import { Badge } from "@/components/ui/badge";
 import { Trash2 } from "lucide-react";
@@ -30,10 +30,53 @@ export default function Upload() {
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [batchToDelete, setBatchToDelete] = useState<UploadBatch | null>(null);
 
+  const [pollInterval, setPollInterval] = useState<number | false>(false);
   const { data: batches = [] } = useQuery<UploadBatch[]>({
     queryKey: ["/api/upload/batches"],
-    refetchInterval: 1000, // Poll every 1 second for faster progress updates
+    refetchInterval: pollInterval,
   });
+
+  useEffect(() => {
+    if (typeof EventSource === "undefined") {
+      setPollInterval(10000);
+      return;
+    }
+
+    const source = new EventSource("/api/upload/batches/subscribe");
+
+    const handleUpdate = (e: MessageEvent) => {
+      const batch: UploadBatch = JSON.parse(e.data);
+      queryClient.setQueryData<UploadBatch[]>(["/api/upload/batches"], (old = []) => {
+        const index = old.findIndex(b => b.id === batch.id);
+        if (index === -1) {
+          return [batch, ...old];
+        }
+        const updated = [...old];
+        updated[index] = { ...updated[index], ...batch };
+        return updated;
+      });
+    };
+
+    const handleDelete = (e: MessageEvent) => {
+      const { id } = JSON.parse(e.data) as { id: number };
+      queryClient.setQueryData<UploadBatch[]>(["/api/upload/batches"], (old = []) =>
+        old.filter(b => b.id !== id)
+      );
+    };
+
+    source.addEventListener("update", handleUpdate);
+    source.addEventListener("delete", handleDelete);
+    source.onerror = () => {
+      source.close();
+      setPollInterval(10000);
+    };
+
+    return () => {
+      source.removeEventListener("update", handleUpdate);
+      source.removeEventListener("delete", handleDelete);
+      source.close();
+    };
+  }, [queryClient]);
 
 
 
