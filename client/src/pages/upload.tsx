@@ -40,6 +40,7 @@ export default function Upload() {
       const response = await fetch("/api/upload/preview", {
         method: "POST",
         body: formData,
+        credentials: "include",
       });
       
       if (!response.ok) {
@@ -78,6 +79,7 @@ export default function Upload() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tempFileName, originalFilename, payeeColumn }),
+        credentials: "include",
       });
       
       if (!response.ok) {
