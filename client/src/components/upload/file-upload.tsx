@@ -148,14 +148,21 @@ export default function FileUpload({
     fileInputRef.current?.click();
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      handleChooseFile();
+    }
+  };
+
   const isUploading = uploadMutation.isPending;
 
   return (
     <div className="w-full">
       <div
-        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${
           dragActive && !disabled && !isUploading
-            ? "border-primary-500 bg-primary-50" 
+            ? "border-primary-500 bg-primary-50"
             : disabled || isUploading
             ? "border-gray-200 bg-gray-50 cursor-not-allowed"
             : "border-gray-300 hover:border-primary-400 hover:bg-primary-50 cursor-pointer"
@@ -165,6 +172,10 @@ export default function FileUpload({
         onDragOver={handleDrag}
         onDrop={handleDrop}
         onClick={handleChooseFile}
+        onKeyDown={handleKeyDown}
+        role="button"
+        tabIndex={0}
+        aria-label="File upload area. Press Enter or Space to browse for files"
       >
         <input
           ref={fileInputRef}
