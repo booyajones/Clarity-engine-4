@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { validateFile } from "@/lib/validateUpload";
 
 interface FileUploadProps {
   onUploadSuccess?: (result: any) => void;
@@ -80,26 +81,14 @@ export default function FileUpload({
     },
   });
 
-  const validateFile = (file: File): string | null => {
-    // Check file type
-    const allowedExtensions = accept.split(",").map(ext => ext.trim().toLowerCase());
-    const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf("."));
-    
-    if (!allowedExtensions.includes(fileExtension)) {
-      return `Invalid file type. Allowed types: ${allowedExtensions.join(", ")}`;
-    }
-
-    // Check file size
-    if (file.size > maxSize) {
-      const maxSizeMB = Math.round(maxSize / (1024 * 1024));
-      return `File too large. Maximum size: ${maxSizeMB}MB`;
-    }
-
-    return null;
-  };
-
   const handleFileUpload = (file: File) => {
-    const validationError = validateFile(file);
+    const allowedExtensions = accept
+      .split(",")
+      .map((ext) => ext.trim().toLowerCase());
+    const validationError = validateFile(file, {
+      allowedExtensions,
+      maxSize,
+    });
     if (validationError) {
       toast({
         title: "Invalid file",
