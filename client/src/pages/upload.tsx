@@ -10,6 +10,7 @@ import type { UploadBatch, ClassificationStats } from "@/lib/types";
 import ProgressTracker from "@/components/ui/progress-tracker";
 import { Badge } from "@/components/ui/badge";
 import { Trash2 } from "lucide-react";
+import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 
 interface FilePreview {
   filename: string;
@@ -24,6 +25,9 @@ export default function Upload() {
   const [dragActive, setDragActive] = useState(false);
   const [filePreview, setFilePreview] = useState<FilePreview | null>(null);
   const [selectedColumn, setSelectedColumn] = useState<string>("");
+  const [deleteFailedOpen, setDeleteFailedOpen] = useState(false);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const [batchToDelete, setBatchToDelete] = useState<UploadBatch | null>(null);
 
   const { data: batches = [] } = useQuery<UploadBatch[]>({
     queryKey: ["/api/upload/batches"],
@@ -296,16 +300,7 @@ export default function Upload() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => {
-                          if (confirm('Are you sure you want to delete all failed/cancelled jobs?')) {
-                            const failedBatches = batches.filter(batch => batch.status === 'cancelled' || batch.status === 'failed');
-                            Promise.all(failedBatches.map(batch => 
-                              fetch(`/api/upload/batches/${batch.id}`, { method: 'DELETE' })
-                            )).then(() => {
-                              queryClient.invalidateQueries({ queryKey: ["/api/upload/batches"] });
-                            });
-                          }
-                        }}
+                        onClick={() => setDeleteFailedOpen(true)}
                         className="text-red-600 hover:text-red-700"
                       >
                         <Trash2 className="h-4 w-4 mr-2" />
@@ -316,27 +311,7 @@ export default function Upload() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => {
-                          if (confirm(`Are you sure you want to delete all ${batches.length} jobs? This cannot be undone.`)) {
-                            fetch("/api/upload/batches", { method: "DELETE" })
-                              .then(res => res.json())
-                              .then(() => {
-                                queryClient.invalidateQueries({ queryKey: ["/api/upload/batches"] });
-                                queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
-                                toast({
-                                  title: "All jobs deleted",
-                                  description: "All jobs and their data have been removed.",
-                                });
-                              })
-                              .catch(() => {
-                                toast({
-                                  title: "Delete failed",
-                                  description: "Could not delete all jobs. Please try again.",
-                                  variant: "destructive",
-                                });
-                              });
-                          }
-                        }}
+                        onClick={() => setDeleteAllOpen(true)}
                         className="text-red-600 hover:text-red-700"
                       >
                         <Trash2 className="h-4 w-4 mr-2" />
@@ -390,15 +365,10 @@ export default function Upload() {
                               >
                                 Download
                               </Button>
-                              <Button 
-                                variant="outline" 
+                              <Button
+                                variant="outline"
                                 size="sm"
-                                onClick={() => {
-                                  if (confirm('Are you sure you want to delete this job?')) {
-                                    fetch(`/api/upload/batches/${batch.id}`, { method: 'DELETE' })
-                                      .then(() => queryClient.invalidateQueries({ queryKey: ["/api/upload/batches"] }));
-                                  }
-                                }}
+                                onClick={() => setBatchToDelete(batch)}
                               >
                                 Delete
                               </Button>
@@ -411,15 +381,10 @@ export default function Upload() {
                             <p>Status: {batch.status === 'cancelled' ? 'Cancelled by user' : 'Processing failed'}</p>
                             <p>Progress: {batch.processedRecords}/{batch.totalRecords}</p>
                             <div className="flex space-x-2 mt-2">
-                              <Button 
-                                variant="outline" 
+                              <Button
+                                variant="outline"
                                 size="sm"
-                                onClick={() => {
-                                  if (confirm('Are you sure you want to delete this job?')) {
-                                    fetch(`/api/upload/batches/${batch.id}`, { method: 'DELETE' })
-                                      .then(() => queryClient.invalidateQueries({ queryKey: ["/api/upload/batches"] }));
-                                  }
-                                }}
+                                onClick={() => setBatchToDelete(batch)}
                               >
                                 Delete
                               </Button>
@@ -437,6 +402,66 @@ export default function Upload() {
           </div>
         </div>
       </main>
+      <ConfirmationModal
+        open={deleteFailedOpen}
+        onOpenChange={setDeleteFailedOpen}
+        title="Delete failed jobs?"
+        description="Are you sure you want to delete all failed or cancelled jobs? This action cannot be undone."
+        onConfirm={() => {
+          const failedBatches = batches.filter(batch => batch.status === 'cancelled' || batch.status === 'failed')
+          Promise.all(
+            failedBatches.map(batch =>
+              fetch(`/api/upload/batches/${batch.id}`, { method: 'DELETE' })
+            )
+          ).then(() => {
+            queryClient.invalidateQueries({ queryKey: ["/api/upload/batches"] })
+          })
+        }}
+      />
+      <ConfirmationModal
+        open={deleteAllOpen}
+        onOpenChange={setDeleteAllOpen}
+        title="Delete all jobs?"
+        description={`Are you sure you want to delete all ${batches.length} jobs? This cannot be undone.`}
+        onConfirm={() => {
+          fetch("/api/upload/batches", { method: "DELETE" })
+            .then(res => res.json())
+            .then(() => {
+              queryClient.invalidateQueries({ queryKey: ["/api/upload/batches"] })
+              queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] })
+              toast({
+                title: "All jobs deleted",
+                description: "All jobs and their data have been removed.",
+              })
+            })
+            .catch(() => {
+              toast({
+                title: "Delete failed",
+                description: "Could not delete all jobs. Please try again.",
+                variant: "destructive",
+              })
+            })
+        }}
+      />
+      <ConfirmationModal
+        open={batchToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setBatchToDelete(null)
+        }}
+        title="Delete job?"
+        description={
+          batchToDelete
+            ? `Are you sure you want to delete job "${batchToDelete.originalFilename}"? This cannot be undone.`
+            : ""
+        }
+        onConfirm={() => {
+          if (batchToDelete) {
+            fetch(`/api/upload/batches/${batchToDelete.id}`, { method: 'DELETE' })
+              .then(() => queryClient.invalidateQueries({ queryKey: ["/api/upload/batches"] }))
+            setBatchToDelete(null)
+          }
+        }}
+      />
     </div>
   );
 }
